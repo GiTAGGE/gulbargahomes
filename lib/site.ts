@@ -24,9 +24,9 @@ export const site = {
     "gulbarga homes",
     "kalaburagi real estate",
   ],
-  phone: "+918884481177",
-  phoneDisplay: "+91 88844 81177",
-  whatsapp: "918884481177",
+  phone: "+918123450725",
+  phoneDisplay: "+91 81234 50725",
+  whatsapp: "918123450725",
   email: "hello@gulbargahomes.com",
   geo: {
     latitude: 17.3297,
