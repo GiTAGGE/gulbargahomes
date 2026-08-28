@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>GulbargaHomes Admin</title>
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    <script src="/identity-guard.js"></script>
+    <script src="/admin/admin-resilience.js"></script>
+    <style>
+      /*
+        Decap CMS git-gateway fallback login form uses margin-top: -80px on AuthForm,
+        which makes validation errors overlap the logo when Login is clicked empty.
+      */
+      form:has(input[name="email"]) {
+        margin-top: 0 !important;
+      }
+
+      form:has(input[name="email"]) p {
+        margin: 0 0 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Decap CMS: git-based content editor. No database required. -->
+    <script src="https://unpkg.com/decap-cms@3.6.3/dist/decap-cms.js"></script>
+  </body>
+</html>

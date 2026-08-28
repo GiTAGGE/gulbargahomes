@@ -1,0 +1,1 @@
+export const heroBlurDataUrl = "data:image/webp;base64,UklGRr4AAABXRUJQVlA4ILIAAADwBACdASoYAA4APm0ukkYkIqGhMAgAgA2JQBYja5Lg7mABpar5/id5QNnDm4z3reAA/ubSxidSZvAblXkqMccZFvVPCkHXx4pF+h/r5zVaLpA1s2Gs4rUrvwr7CpaeWiIxJpN8e9nQjxzN3nv/QqJspNgokY4/sRuSpAolCybvXiA/4IMeQ7R756To4i/+dEPEwjx5fz4wRXO9F60J6geS+1HSK7Zn0Lk1ZHVClAlCAAAA";

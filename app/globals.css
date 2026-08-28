@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 250 248 245;
+  --foreground: 44 40 37;
+}
+
+@layer base {
+  body {
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl bg-white/80 border-b border-brand-100/80;
+  }
+
+  .card {
+    @apply rounded-2xl border border-brand-100/60 bg-white shadow-soft hover:shadow-lift transition-all duration-300;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:bg-brand-700 transition-colors;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 px-5 py-3 text-sm font-semibold text-ink hover:bg-brand-50 transition-colors;
+  }
+
+  .sheet {
+    @apply rounded-t-3xl border border-brand-100 bg-white shadow-lift;
+  }
+
+  .prose-property {
+    @apply leading-relaxed text-ink-muted break-words;
+  }
+
+  .prose-property p + p {
+    @apply mt-3;
+  }
+
+  .prose-property ul {
+    @apply mt-3 list-disc space-y-1.5 pl-5;
+  }
+
+  .prose-property strong {
+    @apply font-semibold text-ink;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(124, 144, 112, 0.06) 25%,
+    rgba(124, 144, 112, 0.12) 37%,
+    rgba(124, 144, 112, 0.06) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.fade-up {
+  animation: fadeUp 0.5s ease both;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out both;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Safe area for mobile bottom nav */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

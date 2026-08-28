@@ -1,0 +1,112 @@
+# Decap CMS configuration — commits property files straight to GitHub.
+# Production uses Netlify Identity + Git Gateway (no server, no database).
+# Local development: set `local_backend: true` and run `npx decap-server`.
+
+backend:
+  name: git-gateway
+  branch: main
+
+local_backend: true
+
+media_folder: "public/images/properties"
+public_folder: "/images/properties"
+
+collections:
+  - name: "properties"
+    label: "Properties"
+    label_singular: "Property"
+    folder: "content/properties"
+    create: true
+    slug: "{{slug}}"
+    extension: "mdx"
+    format: "frontmatter"
+    summary: "{{title}} — {{locality}} · {{status}}"
+    fields:
+      - { name: "slug", label: "Slug", widget: "string", hint: "URL path, e.g. 2bhk-flat-rent-sedam-road" }
+      - { name: "title", label: "Title", widget: "string" }
+      - { name: "listing", label: "Listing", widget: "select", options: ["Rent", "Sale"] }
+      - {
+          name: "status",
+          label: "Availability",
+          widget: "select",
+          default: "Available",
+          options: ["Available", "Rented", "Sold"],
+          hint: "Set to Rented or Sold when taken. The listing stays on the website for Google — it is hidden only when visitors filter by availability.",
+        }
+      - {
+          name: "propertyType",
+          label: "Property Type",
+          widget: "select",
+          options: ["House", "Flat", "Villa", "Plot", "Commercial", "PG"],
+        }
+      - { name: "bhk", label: "BHK", widget: "number", required: false, value_type: "int" }
+      - { name: "price", label: "Price (INR)", widget: "number", value_type: "int" }
+      - { name: "priceSuffix", label: "Price Suffix", widget: "string", required: false, default: "" }
+      - { name: "area", label: "Area (sqft)", widget: "number", value_type: "int" }
+      - {
+          name: "locality",
+          label: "Locality",
+          widget: "string",
+          hint: "Main Gulbarga / Kalaburagi area — e.g. Sedam Road, Azadpur, Biddapur Colony, Kusnoor. You can type any new area; it appears in site filters after publish.",
+        }
+      - { name: "city", label: "City", widget: "string", default: "Gulbarga" }
+      - { name: "facing", label: "Facing", widget: "select", options: ["East", "West", "North", "South"] }
+      - { name: "vastu", label: "Vastu Compliant", widget: "boolean", default: false }
+      - { name: "vegetarian", label: "Vegetarian", widget: "select", options: ["Yes", "Preferred", "Not Required"] }
+      - { name: "bachelors", label: "Bachelors", widget: "select", options: ["Allowed", "Not Allowed"] }
+      - { name: "family", label: "Family", widget: "select", options: ["Preferred", "Allowed"] }
+      - { name: "parking", label: "Parking", widget: "string" }
+      - { name: "bathrooms", label: "Bathrooms", widget: "number", value_type: "int", default: 0 }
+      - {
+          name: "furnished",
+          label: "Furnishing",
+          widget: "select",
+          options: ["Fully Furnished", "Semi Furnished", "Unfurnished"],
+        }
+      - { name: "featured", label: "Featured", widget: "boolean", default: false }
+      - { name: "isNew", label: "New Listing", widget: "boolean", default: true }
+      - { name: "coverImage", label: "Cover Image", widget: "image" }
+      - { name: "gallery", label: "Gallery Images", widget: "list", field: { name: "image", label: "Image", widget: "image" } }
+      - name: "videos"
+        label: "Videos"
+        widget: "list"
+        required: false
+        hint: "Upload a short MP4 (keep under 8 MB on Netlify free) and/or paste a YouTube URL. Videos appear in the property gallery."
+        fields:
+          - { name: "title", label: "Title", widget: "string", required: false, default: "Property video" }
+          - {
+              name: "src",
+              label: "Video file (MP4)",
+              widget: "file",
+              required: false,
+              media_folder: "public/videos/properties",
+              public_folder: "/videos/properties",
+            }
+          - {
+              name: "youtubeUrl",
+              label: "YouTube URL",
+              widget: "string",
+              required: false,
+              hint: "Optional if you uploaded a file. Example: https://www.youtube.com/watch?v=…",
+            }
+          - { name: "thumbnail", label: "Thumbnail", widget: "image", required: false }
+      - { name: "body", label: "Description", widget: "markdown" }
+      - { name: "amenities", label: "Amenities", widget: "list", field: { name: "a", label: "Amenity", widget: "string" } }
+      - { name: "rules", label: "Rules", widget: "list", field: { name: "r", label: "Rule", widget: "string" } }
+      - name: "nearby"
+        label: "Nearby"
+        widget: "object"
+        fields:
+          - { name: "schools", label: "Schools", widget: "list", field: { name: "s", label: "School", widget: "string" } }
+          - { name: "hospitals", label: "Hospitals", widget: "list", field: { name: "h", label: "Hospital", widget: "string" } }
+          - { name: "busStop", label: "Bus Stop", widget: "string" }
+          - { name: "railway", label: "Railway", widget: "string" }
+      - name: "faq"
+        label: "FAQ"
+        widget: "list"
+        required: false
+        default: []
+        fields:
+          - { name: "question", label: "Question", widget: "string" }
+          - { name: "answer", label: "Answer", widget: "text" }
+      - { name: "mapQuery", label: "Map Query", widget: "string", hint: "e.g. Sedam Road, Kalaburagi, Karnataka" }

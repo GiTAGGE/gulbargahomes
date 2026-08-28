@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Netlify sets NODE_ENV=production before install, which omits devDependencies
+  # (tailwindcss, typescript, etc.) and breaks `next build`.
+  NPM_CONFIG_PRODUCTION = "false"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
