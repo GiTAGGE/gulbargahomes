@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "About GulbargaHomes — Real Estate in Gulbarga (Kalaburagi)",
   description: metaDescription(
-    "GulbargaHomes is a city-focused real estate platform for Gulbarga / Kalaburagi. We list rental houses, flats, independent homes and residential plots with photos, videos and verified local details.",
+    "GulbargaHomes lists houses for rent, flats, independent homes and residential plots in Gulbarga / Kalaburagi — with photos, video walkthroughs and verified local details.",
   ),
   alternates: { canonical: "/about" },
 };
@@ -28,10 +28,11 @@ export default function AboutPage() {
         neighbourhoods people actually search.
       </p>
       <p className="mt-4 text-base leading-relaxed text-ink-muted">
-        There is no database and no slow server behind the public site. Each
-        property is a file with photos and optional walkthrough videos, so pages
-        load quickly on Netlify&apos;s CDN — important for search ranking and for
-        buyers browsing on mobile data.
+        Every home comes with clear photos, and many include a short video
+        walkthrough, so you can shortlist from your phone before you travel across
+        town. We publish the details that matter in Kalaburagi — Vastu, parking,
+        water supply, furnishing, and family or bachelor rules — then help you
+        book a visit on WhatsApp.
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-brand-100 bg-white p-5">
@@ -46,8 +47,9 @@ export default function AboutPage() {
         <div className="rounded-2xl border border-brand-100 bg-white p-5">
           <h2 className="font-bold text-ink">How to reach us</h2>
           <p className="mt-2 text-sm text-ink-muted">
-            Call or WhatsApp {site.phoneDisplay}. Owners in Kalaburagi can add
-            photos and videos from the admin dashboard after login.
+            Call or WhatsApp {site.phoneDisplay}. Owners in Gulbarga can list a
+            house, flat or plot with photos and a video — we will show it to
+            buyers and tenants in the city.
           </p>
           <Link href="/contact" className="mt-3 inline-block text-sm font-semibold text-brand-700">
             Contact page →
