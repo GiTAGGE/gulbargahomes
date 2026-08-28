@@ -7,6 +7,7 @@ import { MicrosoftClarity } from "@/components/analytics/microsoft-clarity";
 import { AnalyticsPageView } from "@/components/analytics/page-view";
 import { FloatingContact } from "@/components/floating-contact";
 import { NetlifyIdentityWidget } from "@/components/netlify-identity";
+import { HideNetlifyBadge } from "@/components/hide-netlify-badge";
 import { JsonLd } from "@/components/jsonld";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -60,6 +61,13 @@ export default function RootLayout({
   return (
     <html lang="en-IN" className={sans.variable}>
       <body className="font-sans antialiased bg-surface text-ink">
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              '(function(){try{localStorage.setItem("nl-hud:public:v1","hidden");localStorage.setItem("nl-hud:owner-private:v1","hidden");}catch(e){}})();',
+          }}
+        />
+        <HideNetlifyBadge />
         <GoogleAnalytics />
         <MicrosoftClarity />
         <Suspense fallback={null}>
