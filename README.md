@@ -58,7 +58,7 @@ The site is already connected to Netlify. After this build is live on `gulbarga.
 3. Enable Netlify Identity **Invite only** + Git Gateway so only you can open `/admin/index.html`
 4. Optional: set `NEXT_PUBLIC_GA4_ID` and `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars
 
-Update the public phone / WhatsApp in `lib/site.ts` if it should differ from the HubliHomes number.
+Public phone and WhatsApp are `+91 81234 50725` (`lib/site.ts`).
 
 ## SEO notes
 
