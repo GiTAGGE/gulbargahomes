@@ -1,0 +1,28 @@
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+/images/*
+  Cache-Control: public, max-age=2592000, stale-while-revalidate=86400
+
+/videos/*
+  Cache-Control: public, max-age=2592000, stale-while-revalidate=86400
+
+/admin/*
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+
+/admin/index.html
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+
+/api/*
+  X-Robots-Tag: noindex, nofollow
+  X-Frame-Options: DENY
+
+/pagefind/*
+  X-Robots-Tag: noindex, nofollow
