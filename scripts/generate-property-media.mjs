@@ -134,7 +134,7 @@ async function main() {
     const names = ["cover.webp", "1.webp", "2.webp"];
 
     for (let i = 0; i < names.length; i++) {
-      const sourceName = sources[(i + (salt % sources.length)) % sources.length];
+      const sourceName = sources[i % sources.length];
       await makeVariant(
         path.join(SOURCE, sourceName),
         path.join(dir, names[i]),
