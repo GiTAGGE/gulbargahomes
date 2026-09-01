@@ -16,8 +16,16 @@ import { ShareButton } from "@/components/share-button";
 import { bhkLabel, formatPrice } from "@/lib/format";
 import { getProperty, getPropertySlugs, getSimilarProperties } from "@/lib/properties";
 import { statusBannerMessage, statusLabel } from "@/lib/property-status";
-import { breadcrumbSchema, faqSchema, metaDescription, residenceSchema } from "@/lib/seo";
+import {
+  breadcrumbSchema,
+  faqSchema,
+  listingSchema,
+  metaDescription,
+  videoObjectSchemas,
+} from "@/lib/seo";
 import { site } from "@/lib/site";
+import { propertyHasVideo } from "@/lib/types";
+import { absoluteUrl, propertyUrl } from "@/lib/url";
 
 export const dynamicParams = false;
 
@@ -43,6 +51,9 @@ export function generateMetadata({
   const description = metaDescription(
     `${formatPrice(property)} · ${bhkLabel(property)} · ${property.area} sqft · ${property.facing} facing in ${property.locality}, Gulbarga (Kalaburagi). ${property.description}`,
   );
+  const url = propertyUrl(property.slug);
+  const cover = absoluteUrl(property.coverImage);
+  const hasVideo = propertyHasVideo(property);
 
   return {
     title,
@@ -51,9 +62,25 @@ export function generateMetadata({
     openGraph: {
       title,
       description,
-      url: `${site.url}/properties/${property.slug}`,
-      type: "website",
-      images: [{ url: property.coverImage }],
+      url,
+      type: hasVideo ? "video.other" : "website",
+      images: [{ url: cover, alt: property.title }],
+      ...(hasVideo
+        ? {
+            videos: property.videos
+              .filter((video) => video.src)
+              .map((video) => ({
+                url: absoluteUrl(video.src),
+                type: "video/mp4" as const,
+              })),
+          }
+        : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [cover],
     },
   };
 }
@@ -99,7 +126,10 @@ export default function PropertyPage({ params }: { params: { slug: string } }) {
     <div className="mx-auto max-w-7xl overflow-x-clip px-4 py-5 pb-28 sm:px-6 sm:py-8 lg:pb-8">
       <PropertyViewTracker property={property} />
       <RecordView slug={property.slug} />
-      <JsonLd data={residenceSchema(property)} />
+      <JsonLd data={listingSchema(property)} />
+      {videoObjectSchemas(property).map((schema) => (
+        <JsonLd key={String(schema["@id"])} data={schema} />
+      ))}
       <JsonLd data={breadcrumbSchema(breadcrumb)} />
       {property.faq.length > 0 && <JsonLd data={faqSchema(property.faq)} />}
 

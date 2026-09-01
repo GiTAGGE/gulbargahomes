@@ -9,3 +9,34 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Canonical host: Netlify subdomain → custom domain.
+[[redirects]]
+  from = "https://gulbarga.netlify.app/*"
+  to = "https://gulbargahomes.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://gulbarga.netlify.app/*"
+  to = "https://gulbargahomes.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.gulbargahomes.com/*"
+  to = "https://gulbargahomes.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://www.gulbargahomes.com/*"
+  to = "https://gulbargahomes.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://gulbargahomes.com/*"
+  to = "https://gulbargahomes.com/:splat"
+  status = 301
+  force = true

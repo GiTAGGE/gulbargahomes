@@ -1,11 +1,11 @@
 /**
  * GulbargaHomes admin resilience: offline awareness, session recovery, and
- * clearer handling when Netlify Identity tokens expire after disconnects.
+ * clearer handling when Netlify Identity tokens expire after long editing.
  */
 (function () {
   var BANNER_ID = "gulbargahomes-admin-banner";
   var TOKEN_ERROR = /ACCESS_TOKEN_ERROR|failed getting jwt access token/i;
-  var REFRESH_INTERVAL_MS = 8 * 60 * 1000;
+  var REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 
   function getIdentity() {
     return window.netlifyIdentity || null;
@@ -17,12 +17,16 @@
     return identity.gotrue.currentUser();
   }
 
-  function refreshSession() {
+  function isEditingEntry() {
+    return /#\/collections\/.+\/(new|entries)\//.test(window.location.hash || "");
+  }
+
+  function refreshSession(force) {
     var user = getCurrentUser();
-    if (!user) return Promise.resolve(false);
+    if (!user || typeof user.jwt !== "function") return Promise.resolve(false);
 
     return user
-      .jwt()
+      .jwt(!!force)
       .then(function () {
         return true;
       })
@@ -60,7 +64,7 @@
     } else if (kind === "error") {
       banner.style.background = "#b91c1c";
     } else {
-      banner.style.background = "#516249";
+      banner.style.background = "#1a5142";
     }
 
     var text = document.createElement("span");
@@ -79,7 +83,7 @@
         "font-weight:700",
         "cursor:pointer",
         "background:#fff",
-        "color:#2c2825",
+        "color:#0f2a24",
       ].join(";");
       button.addEventListener("click", action.onClick);
       banner.appendChild(button);
@@ -102,11 +106,11 @@
   function handleSessionExpired() {
     showBanner(
       "error",
-      "Your login session expired (often after going offline). Your draft is saved in this browser — refresh your session to publish.",
+      "Your login session expired. Your draft is saved in this browser — refresh the session to publish without losing edits.",
       {
         label: "Refresh session",
         onClick: function () {
-          refreshSession().then(function (ok) {
+          refreshSession(true).then(function (ok) {
             if (ok) {
               hideBanner();
               showBanner("info", "Session restored. You can publish now.", null);
@@ -123,14 +127,14 @@
   function handleOffline() {
     showBanner(
       "offline",
-      "You are offline. Keep editing — Decap CMS saves a local draft in your browser. Publish after you reconnect.",
+      "You are offline. Keep editing — Decap CMS saves a local draft in this browser. Publish after you reconnect.",
       null,
     );
   }
 
   function handleOnline() {
     hideBanner();
-    refreshSession().then(function (ok) {
+    refreshSession(true).then(function (ok) {
       if (!ok && getCurrentUser()) {
         handleSessionExpired();
         return;
@@ -182,11 +186,11 @@
         return Promise.reject(new Error("Offline — draft saved locally. Reconnect to publish."));
       }
 
-      return refreshSession().then(function (ok) {
+      return refreshSession(true).then(function (ok) {
         if (ok) return;
         handleSessionExpired();
         return Promise.reject(
-          new Error("Session expired — use Refresh session or log in again."),
+          new Error("Session expired — use Refresh session or log in again. Your draft is still in this browser."),
         );
       });
     }
@@ -205,12 +209,26 @@
   function startTokenRefreshLoop() {
     window.setInterval(function () {
       if (!navigator.onLine) return;
-      refreshSession().then(function (ok) {
+      refreshSession(true).then(function (ok) {
         if (!ok && getCurrentUser()) {
           handleSessionExpired();
         }
       });
     }, REFRESH_INTERVAL_MS);
+  }
+
+  function onTabVisible() {
+    if (document.visibilityState !== "visible") return;
+    if (!navigator.onLine) return;
+    refreshSession(true).then(function (ok) {
+      if (!ok && getCurrentUser()) handleSessionExpired();
+    });
+  }
+
+  function warnBeforeUnload(event) {
+    if (!isEditingEntry()) return;
+    event.preventDefault();
+    event.returnValue = "";
   }
 
   function init() {
@@ -224,12 +242,15 @@
 
     window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
+    window.addEventListener("focus", onTabVisible);
+    document.addEventListener("visibilitychange", onTabVisible);
+    window.addEventListener("beforeunload", warnBeforeUnload);
 
     var identity = getIdentity();
     if (identity) {
       identity.on("login", function () {
         hideBanner();
-        refreshSession();
+        refreshSession(true);
       });
       identity.on("logout", hideBanner);
     }

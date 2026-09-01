@@ -38,7 +38,7 @@ export function MobileBottomNav() {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex flex-col items-center gap-0.5 px-2 py-2.5 text-[11px] font-medium transition-colors ${
+              className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[11px] font-medium transition-colors touch-manipulation ${
                 active ? "text-brand-700" : "text-ink-faint"
               }`}
             >
@@ -49,7 +49,7 @@ export function MobileBottomNav() {
         })}
         <a
           href={`tel:${site.phone}`}
-          className="flex flex-col items-center gap-0.5 px-2 py-2.5 text-[11px] font-medium text-ink-faint"
+          className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[11px] font-medium text-ink-faint touch-manipulation"
           onClick={() => trackPhoneClick("mobile_nav")}
         >
           <PhoneIcon className="h-5 w-5" />

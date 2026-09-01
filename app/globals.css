@@ -3,14 +3,29 @@
 @tailwind utilities;
 
 :root {
-  --background: 250 248 245;
-  --foreground: 44 40 37;
+  --background: 246 243 236;
+  --foreground: 26 31 28;
 }
 
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     background-color: rgb(var(--background));
     color: rgb(var(--foreground));
+  }
+
+  ::selection {
+    background-color: #b8dcc9;
+    color: #0f2a24;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 
@@ -28,11 +43,11 @@
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:bg-brand-700 transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:bg-brand-700 transition-colors touch-manipulation;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 px-5 py-3 text-sm font-semibold text-ink hover:bg-brand-50 transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-brand-200 px-5 py-3 text-sm font-semibold text-ink hover:bg-brand-50 transition-colors touch-manipulation;
   }
 
   .sheet {
@@ -59,9 +74,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(124, 144, 112, 0.06) 25%,
-    rgba(124, 144, 112, 0.12) 37%,
-    rgba(124, 144, 112, 0.06) 63%
+    rgba(31, 101, 80, 0.06) 25%,
+    rgba(31, 101, 80, 0.12) 37%,
+    rgba(31, 101, 80, 0.06) 63%
   );
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
@@ -72,7 +87,7 @@
     background-position: 100% 50%;
   }
   100% {
-    background-position: 0 50%;
+    background-position: 0% 50%;
   }
 }
 

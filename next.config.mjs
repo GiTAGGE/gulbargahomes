@@ -2,6 +2,7 @@
 const nextConfig = {
   poweredByHeader: false,
   compress: true,
+  trailingSlash: false,
   images: {
     formats: ["image/avif", "image/webp"],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
@@ -12,6 +13,23 @@ const nextConfig = {
     return [
       { source: "/admin", destination: "/admin/index.html", permanent: false },
       { source: "/admin/", destination: "/admin/index.html", permanent: false },
+      {
+        source: "/:path+/",
+        destination: "/:path+",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.gulbargahomes.com" }],
+        destination: "https://gulbargahomes.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "gulbarga.netlify.app" }],
+        destination: "https://gulbargahomes.com/:path*",
+        permanent: true,
+      },
     ];
   },
 };
