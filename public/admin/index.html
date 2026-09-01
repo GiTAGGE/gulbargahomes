@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <title>GulbargaHomes Admin</title>
+    <!-- Netlify Identity widget — required for git-gateway JWTs. -->
     <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <script src="/identity-guard.js"></script>
     <script src="/admin/admin-resilience.js"></script>
@@ -32,7 +33,43 @@
     </style>
   </head>
   <body>
-    <!-- Decap CMS: git-based content editor. No database required. -->
-    <script src="https://unpkg.com/decap-cms@3.6.3/dist/decap-cms.js"></script>
+    <!--
+      Load Decap only after Identity has initialized so git-gateway
+      /.netlify/git/settings is requested with a Bearer token when a
+      session already exists. After a fresh login we reload this page
+      so the CMS boots with the new JWT.
+    -->
+    <script>
+      (function () {
+        var IDENTITY_API = "https://gulbargahomes.com/.netlify/identity";
+        var cmsLoaded = false;
+
+        function loadCms() {
+          if (cmsLoaded) return;
+          cmsLoaded = true;
+          var script = document.createElement("script");
+          script.src = "https://unpkg.com/decap-cms@3.6.3/dist/decap-cms.js";
+          document.body.appendChild(script);
+        }
+
+        var identity = window.netlifyIdentity;
+        if (!identity) {
+          loadCms();
+          return;
+        }
+
+        try {
+          identity.init({ APIUrl: IDENTITY_API });
+        } catch (error) {
+          /* Widget may already have initialized on this page. */
+        }
+
+        identity.on("init", loadCms);
+        identity.on("login", function () {
+          window.location.replace("/admin/index.html");
+        });
+        window.setTimeout(loadCms, 2500);
+      })();
+    </script>
   </body>
 </html>

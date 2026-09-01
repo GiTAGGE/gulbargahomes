@@ -5,6 +5,10 @@
 backend:
   name: git-gateway
   branch: main
+  # Absolute Identity + Git Gateway URLs so a www/netlify.app hop cannot
+  # strip the Bearer token on /.netlify/git/settings.
+  identity_url: https://gulbargahomes.com/.netlify/identity
+  gateway_url: https://gulbargahomes.com/.netlify/git
   # Keep the git-gateway JWT fresh; the admin script also refreshes every 3 minutes.
   commit_messages:
     create: "Create {{collection}} “{{slug}}”"
