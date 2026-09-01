@@ -1,12 +1,37 @@
 /**
  * Netlify Identity defaults to open registration. Force the login tab unless
  * the URL contains an invite/recovery token from a Netlify email link.
+ *
+ * After login, always reload /admin/index.html so Decap CMS retries Git
+ * Gateway /settings with the new JWT. Skipping that reload is what left the
+ * "backend is not returning valid settings" toast on screen.
  */
 (function () {
   var INVITE_HASH = /invite_token|confirmation_token|recovery_token|email_change_token/;
+  var IDENTITY_API = "https://gulbargahomes.com/.netlify/identity";
+  var ADMIN_HREF = "/admin/index.html";
+
+  function getIdentity() {
+    return window.netlifyIdentity || null;
+  }
+
+  function ensureInit() {
+    var identity = getIdentity();
+    if (!identity || identity.__gulbargaHomesInited) return;
+    try {
+      identity.init({ APIUrl: IDENTITY_API });
+    } catch (error) {
+      /* Already initialized. */
+    }
+    identity.__gulbargaHomesInited = true;
+  }
+
+  function goToAdmin() {
+    window.location.replace(ADMIN_HREF);
+  }
 
   function guardIdentity() {
-    var identity = window.netlifyIdentity;
+    var identity = getIdentity();
     if (!identity || identity.__gulbargaHomesGuarded) return;
 
     var originalOpen = identity.open.bind(identity);
@@ -22,20 +47,15 @@
   }
 
   function bindAdminRedirect() {
-    var identity = window.netlifyIdentity;
-    if (!identity) return;
+    var identity = getIdentity();
+    if (!identity || identity.__gulbargaHomesLoginBound) return;
 
-    identity.on("init", function (user) {
-      if (!user) {
-        identity.on("login", function () {
-          if (window.location.pathname.indexOf("/admin/") === 0) return;
-          window.location.href = "/admin/index.html";
-        });
-      }
-    });
+    identity.on("login", goToAdmin);
+    identity.__gulbargaHomesLoginBound = true;
   }
 
   function init() {
+    ensureInit();
     guardIdentity();
     bindAdminRedirect();
   }
