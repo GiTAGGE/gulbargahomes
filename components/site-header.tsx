@@ -60,7 +60,7 @@ export function SiteHeader() {
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="grid h-10 w-10 place-items-center rounded-full border border-brand-200 text-ink md:hidden"
+              className="grid h-11 w-11 place-items-center rounded-full border border-brand-200 text-ink md:hidden touch-manipulation"
               aria-label="Open menu"
             >
               <MenuIcon className="h-5 w-5" />

@@ -17,6 +17,7 @@ export default function robots(): MetadataRoute.Robots {
         "/server/",
       ],
     },
-    sitemap: `${site.url}/sitemap.xml`,
+    sitemap: [`${site.url}/sitemap.xml`, `${site.url}/video-sitemap.xml`],
+    host: site.url,
   };
 }

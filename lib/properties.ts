@@ -48,11 +48,29 @@ function normalizeVideos(raw: unknown): PropertyVideo[] {
     .filter((video): video is PropertyVideo => Boolean(video?.src || video?.youtubeUrl));
 }
 
+function publishedTimestamp(
+  data: Record<string, unknown>,
+  fallbackIso: string,
+): string {
+  const raw = data.publishedAt ?? data.date ?? data.updatedAt;
+  if (typeof raw === "string" && raw.trim()) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return raw.toISOString();
+  }
+  return fallbackIso;
+}
+
 function normalizeProperty(
   data: Partial<Omit<Property, "description" | "body">> & {
     videos?: unknown;
+    publishedAt?: unknown;
+    date?: unknown;
   },
   description: string,
+  fallbackPublishedAt: string,
 ): Property {
   const listing = data.listing ?? "Rent";
   const status: PropertyStatus =
@@ -86,6 +104,10 @@ function normalizeProperty(
     coverImage: data.coverImage ?? "",
     gallery: data.gallery ?? [],
     videos: normalizeVideos(data.videos),
+    publishedAt: publishedTimestamp(
+      data as Record<string, unknown>,
+      fallbackPublishedAt,
+    ),
     amenities: data.amenities ?? [],
     rules: data.rules ?? [],
     nearby: {
@@ -103,13 +125,16 @@ function normalizeProperty(
 }
 
 function parseProperty(file: string): Property {
-  const raw = fs.readFileSync(path.join(CONTENT_DIR, file), "utf8");
+  const filePath = path.join(CONTENT_DIR, file);
+  const raw = fs.readFileSync(filePath, "utf8");
   const { data, content } = matter(raw);
   const description = content.trim();
+  const fallbackPublishedAt = fs.statSync(filePath).mtime.toISOString();
 
   return normalizeProperty(
     data as Partial<Omit<Property, "description" | "body">>,
     description,
+    fallbackPublishedAt,
   );
 }
 

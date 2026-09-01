@@ -58,6 +58,7 @@ export interface Property {
   coverImage: string;
   gallery: string[];
   videos: PropertyVideo[];
+  publishedAt: string;
   description: string;
   body: string;
   amenities: string[];

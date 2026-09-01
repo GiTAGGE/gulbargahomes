@@ -12,7 +12,7 @@ import { JsonLd } from "@/components/jsonld";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { localBusinessSchema, metaDescription } from "@/lib/seo";
+import { localBusinessSchema, metaDescription, websiteSchema } from "@/lib/seo";
 import { site } from "@/lib/site";
 
 import "./globals.css";
@@ -74,6 +74,7 @@ export default function RootLayout({
           <AnalyticsPageView />
         </Suspense>
         <JsonLd data={localBusinessSchema()} />
+        <JsonLd data={websiteSchema()} />
         <SiteHeader />
         <main className="min-h-screen overflow-x-clip pb-20 md:pb-0">{children}</main>
         <SiteFooter />

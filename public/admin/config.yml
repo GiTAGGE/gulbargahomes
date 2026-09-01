@@ -1,12 +1,26 @@
 # Decap CMS configuration — commits property files straight to GitHub.
 # Production uses Netlify Identity + Git Gateway (no server, no database).
-# Local development: set `local_backend: true` and run `npx decap-server`.
+# Local development: `local_backend` only activates on localhost with `npx decap-server`.
 
 backend:
   name: git-gateway
   branch: main
+  # Keep the git-gateway JWT fresh; the admin script also refreshes every 3 minutes.
+  commit_messages:
+    create: "Create {{collection}} “{{slug}}”"
+    update: "Update {{collection}} “{{slug}}”"
+    delete: "Delete {{collection}} “{{slug}}”"
+    uploadMedia: "Upload “{{path}}”"
+    deleteMedia: "Delete “{{path}}”"
 
 local_backend: true
+
+site_url: https://gulbargahomes.com
+display_url: https://gulbargahomes.com
+logo_url: /icon.svg
+
+editor:
+  preview: false
 
 media_folder: "public/images/properties"
 public_folder: "/images/properties"
@@ -65,6 +79,13 @@ collections:
         }
       - { name: "featured", label: "Featured", widget: "boolean", default: false }
       - { name: "isNew", label: "New Listing", widget: "boolean", default: true }
+      - {
+          name: "publishedAt",
+          label: "Published date",
+          widget: "datetime",
+          required: false,
+          hint: "Used as Google video uploadDate and sitemap lastmod. Leave blank to use the file date. Set it once and keep it stable so video snippets stay valid.",
+        }
       - { name: "coverImage", label: "Cover Image", widget: "image" }
       - { name: "gallery", label: "Gallery Images", widget: "list", field: { name: "image", label: "Image", widget: "image" } }
       - name: "videos"

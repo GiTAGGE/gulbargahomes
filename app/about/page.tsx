@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { metaDescription } from "@/lib/seo";
+import { JsonLd } from "@/components/jsonld";
+import { breadcrumbSchema, metaDescription } from "@/lib/seo";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -15,6 +16,12 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16" data-pagefind-body>
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: "Home", url: site.url },
+          { name: "About", url: `${site.url}/about` },
+        ])}
+      />
       <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">
         About
       </p>

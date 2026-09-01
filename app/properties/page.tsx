@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { PropertyExplorer } from "@/components/property-explorer";
-import { metaDescription } from "@/lib/seo";
+import { JsonLd } from "@/components/jsonld";
+import { breadcrumbSchema, metaDescription } from "@/lib/seo";
 import {
   getExplorerCanonicalPath,
   getExplorerPageCopy,
@@ -65,6 +66,12 @@ export default function PropertiesPage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10" data-pagefind-body>
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: "Home", url: site.url },
+          { name: heading, url: `${site.url}${getExplorerCanonicalPath(initial)}` },
+        ])}
+      />
       <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
         {heading}
       </h1>

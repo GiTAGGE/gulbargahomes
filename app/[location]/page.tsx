@@ -9,7 +9,8 @@ import {
   getLocationPageProperties,
   getLocationPages,
 } from "@/lib/locations";
-import { breadcrumbSchema, metaDescription } from "@/lib/seo";
+import { breadcrumbSchema, itemListSchema, metaDescription } from "@/lib/seo";
+import { absoluteUrl } from "@/lib/url";
 import { site } from "@/lib/site";
 
 export const dynamicParams = true;
@@ -40,7 +41,7 @@ export function generateMetadata({
       url: `${site.url}/${page.slug}`,
       ...(heroProperty
         ? {
-            images: [{ url: heroProperty.coverImage, alt: heroProperty.title }],
+            images: [{ url: absoluteUrl(heroProperty.coverImage), alt: heroProperty.title }],
           }
         : {}),
     },
@@ -65,6 +66,9 @@ export default function LocationPage({
           { name: page.heading, url: `${site.url}/${page.slug}` },
         ])}
       />
+      {properties.length > 0 && (
+        <JsonLd data={itemListSchema(page.heading, properties)} />
+      )}
       <nav className="mb-3 text-sm text-ink-faint">
         <Link href="/" className="hover:text-brand-600">Home</Link>
         <span className="px-1.5">/</span>

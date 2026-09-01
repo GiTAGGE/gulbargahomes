@@ -41,7 +41,7 @@ export function SearchBar({ localities }: SearchBarProps) {
             key={option}
             type="button"
             onClick={() => setListing(option)}
-            className={`chip ${
+            className={`chip min-h-11 ${
               listing === option
                 ? "bg-brand-600 text-white"
                 : "bg-brand-50 text-ink-muted"
@@ -58,7 +58,7 @@ export function SearchBar({ localities }: SearchBarProps) {
           <select
             value={locality}
             onChange={(event) => setLocality(event.target.value)}
-            className="w-full bg-transparent py-3 text-sm text-ink outline-none"
+            className="min-h-11 w-full bg-transparent py-3 text-base text-ink outline-none"
             aria-label="Locality"
           >
             <option value="">Any locality</option>
@@ -74,7 +74,7 @@ export function SearchBar({ localities }: SearchBarProps) {
           <select
             value={type}
             onChange={(event) => setType(event.target.value)}
-            className="w-full bg-transparent py-3 text-sm text-ink outline-none"
+            className="min-h-11 w-full bg-transparent py-3 text-base text-ink outline-none"
             aria-label="Property type"
           >
             {types.map((option) => (
