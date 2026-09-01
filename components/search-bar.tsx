@@ -56,6 +56,8 @@ export function SearchBar({ localities }: SearchBarProps) {
         <div className="flex flex-1 items-center gap-2 rounded-xl border border-brand-200 bg-white px-3 sm:rounded-2xl">
           <PinIcon className="h-5 w-5 shrink-0 text-ink-faint" />
           <select
+            id="hero-locality"
+            name="locality"
             value={locality}
             onChange={(event) => setLocality(event.target.value)}
             className="min-h-11 w-full bg-transparent py-3 text-base text-ink outline-none"
@@ -72,6 +74,8 @@ export function SearchBar({ localities }: SearchBarProps) {
 
         <div className="flex flex-1 items-center gap-2 rounded-xl border border-brand-200 bg-white px-3 sm:rounded-2xl">
           <select
+            id="hero-property-type"
+            name="type"
             value={type}
             onChange={(event) => setType(event.target.value)}
             className="min-h-11 w-full bg-transparent py-3 text-base text-ink outline-none"
