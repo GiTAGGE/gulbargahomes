@@ -36,7 +36,13 @@
   force = true
 
 [[redirects]]
+  from = "/properties/2bhk-house-rent-biddapur-colony"
+  to = "/properties/1bhk-house-rent-biddapur-colony"
+  status = 301
+
+[[redirects]]
   from = "http://gulbargahomes.com/*"
   to = "https://gulbargahomes.com/:splat"
   status = 301
   force = true
+

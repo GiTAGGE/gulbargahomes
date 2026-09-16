@@ -36,7 +36,12 @@ function pageFor(
 ): LocationPage {
   const canonical = canonicalLocalityName(locality);
   const verb = listing === "Rent" ? "for Rent" : "for Sale";
-  const typeLabel = propertyType === "PG" ? "PG" : `${propertyType}s`;
+  const typeLabel =
+    propertyType === "PG"
+      ? "PG"
+      : propertyType === "Commercial"
+        ? "Commercial Spaces"
+        : `${propertyType}s`;
   return {
     slug: buildSlug(listing, propertyType, canonical),
     listing,
@@ -59,7 +64,7 @@ export function getCitySeoPages(): LocationPage[] {
       cityWide: true,
       title: `Houses for Rent in Gulbarga (Kalaburagi)`,
       heading: "Houses for Rent in Gulbarga",
-      description: `Independent houses for rent in ${city} — family homes and bachelor-friendly rentals across Sedam Road, Azadpur, Biddapur Colony, Jewargi Road and Shahbazar.`,
+      description: `Independent houses for rent in ${city} — family homes, 1 RK and 1 BHK rentals across Sedam Road, Azadpur, Biddapur Colony, Jewargi Road, Shahbazar and High Court.`,
     },
     {
       slug: "flats-for-rent-in-kalaburagi",
@@ -79,7 +84,7 @@ export function getCitySeoPages(): LocationPage[] {
       cityWide: true,
       title: `Plots for Sale in Gulbarga (Kalaburagi)`,
       heading: "Residential Plots for Sale in Gulbarga",
-      description: `Residential plots for sale in ${city} — Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road layouts with area, facing and connectivity details.`,
+      description: `Residential plots for sale in ${city} — 30x40 sites near High Court plus Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road layouts with area, facing and connectivity details.`,
     },
     {
       slug: "houses-for-sale-in-kalaburagi",
@@ -89,7 +94,7 @@ export function getCitySeoPages(): LocationPage[] {
       cityWide: true,
       title: `Houses for Sale in Kalaburagi (Gulbarga)`,
       heading: "Houses for Sale in Kalaburagi",
-      description: `Independent houses and family homes for sale in Kalaburagi / Gulbarga. Ready-to-move listings in Azadpur, Biddapur Colony, Sedam Road and Court Road.`,
+      description: `Independent houses and family homes for sale in Kalaburagi / Gulbarga. Ready-to-move listings near High Court, Azadpur, Biddapur Colony, Sedam Road and Court Road.`,
     },
     {
       slug: "villas-for-sale-in-gulbarga",
@@ -100,6 +105,16 @@ export function getCitySeoPages(): LocationPage[] {
       title: `Villas for Sale in Gulbarga (Kalaburagi)`,
       heading: "Villas for Sale in Gulbarga",
       description: `Premium villas for sale in ${city}. Gated homes with parking, garden space and Vastu-compliant layouts on Sedam Road and Ring Road corridors.`,
+    },
+    {
+      slug: "commercial-for-rent-in-gulbarga",
+      listing: "Rent",
+      propertyType: "Commercial",
+      locality: "",
+      cityWide: true,
+      title: `Commercial Space for Rent in Gulbarga (Kalaburagi)`,
+      heading: "Commercial Spaces for Rent in Gulbarga",
+      description: `Shops, bank floors and 2000 sqft commercial halls for rent in ${city} — Biddapur Colony road-facing shops, ground-floor bank space, play school rooms and upper-floor offices.`,
     },
   ];
 }

@@ -27,6 +27,7 @@ export function SiteFooter() {
             <li><Link href="/flats-for-rent-in-kalaburagi" className="text-ink-muted hover:text-brand-600">Flats for Rent</Link></li>
             <li><Link href="/plots-for-sale-in-gulbarga" className="text-ink-muted hover:text-brand-600">Plots for Sale</Link></li>
             <li><Link href="/houses-for-sale-in-kalaburagi" className="text-ink-muted hover:text-brand-600">Houses for Sale</Link></li>
+            <li><Link href="/commercial-for-rent-in-gulbarga" className="text-ink-muted hover:text-brand-600">Commercial for Rent</Link></li>
             <li><Link href="/about" className="text-ink-muted hover:text-brand-600">About</Link></li>
             <li><Link href="/contact" className="text-ink-muted hover:text-brand-600">Contact</Link></li>
             <li><Link href="/favorites" className="text-ink-muted hover:text-brand-600">Saved Favorites</Link></li>

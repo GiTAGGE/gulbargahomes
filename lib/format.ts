@@ -22,6 +22,9 @@ export function formatPrice(property: Property): string {
 
 export function bhkLabel(property: Property): string {
   if (property.propertyType === "Plot") return "Plot";
+  if (property.propertyType === "Commercial") return "Commercial";
+  if (property.propertyType === "PG") return "Room";
   if (property.bhk === null) return property.propertyType;
+  if (property.bhk === 1 && /1\s*RK/i.test(property.title)) return "1 RK";
   return `${property.bhk} BHK`;
 }

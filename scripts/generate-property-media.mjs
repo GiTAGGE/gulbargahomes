@@ -19,6 +19,8 @@ const SETS = {
   Commercial: ["prop-apartment-exterior.webp", "prop-kitchen.webp", "prop-living-2bhk.webp"],
 };
 
+const ORIGINAL_EXT = /\.(webp|jpe?g|png)$/i;
+
 function hash(value) {
   let total = 0;
   for (const char of value) total += char.charCodeAt(0);
@@ -53,6 +55,25 @@ async function writeHero() {
     path.join(ROOT, "lib", "hero-blur.ts"),
     `export const heroBlurDataUrl = ${JSON.stringify(dataUrl)};\n`,
   );
+}
+
+async function writeOriginal(inputPath, outputPath) {
+  await sharp(inputPath)
+    .rotate()
+    .resize(1600, 1200, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toFile(outputPath);
+}
+
+function listingOriginals(slug) {
+  const dir = path.join(SOURCE, "properties", slug);
+  if (!fs.existsSync(dir)) return [];
+
+  return fs
+    .readdirSync(dir)
+    .filter((file) => ORIGINAL_EXT.test(file))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((file) => path.join(dir, file));
 }
 
 async function makeVariant(inputPath, outputPath, index, salt) {
@@ -127,20 +148,28 @@ async function main() {
     const wantsVideo = /src:\s*\/videos\/properties\//.test(raw);
     if (!slug) continue;
 
-    const sources = SETS[type] ?? SETS.House;
+    const originals = listingOriginals(slug);
     const dir = path.join(PROP_ROOT, slug);
     fs.mkdirSync(dir, { recursive: true });
-    const salt = hash(slug);
     const names = ["cover.webp", "1.webp", "2.webp"];
 
-    for (let i = 0; i < names.length; i++) {
-      const sourceName = sources[i % sources.length];
-      await makeVariant(
-        path.join(SOURCE, sourceName),
-        path.join(dir, names[i]),
-        i,
-        salt,
-      );
+    if (originals.length > 0) {
+      for (let i = 0; i < names.length; i++) {
+        await writeOriginal(originals[i % originals.length], path.join(dir, names[i]));
+      }
+    } else {
+      const sources = SETS[type] ?? SETS.House;
+      const salt = hash(slug);
+
+      for (let i = 0; i < names.length; i++) {
+        const sourceName = sources[i % sources.length];
+        await makeVariant(
+          path.join(SOURCE, sourceName),
+          path.join(dir, names[i]),
+          i,
+          salt,
+        );
+      }
     }
 
     const blur = await sharp(path.join(dir, "cover.webp"))
