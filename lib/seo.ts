@@ -297,7 +297,7 @@ export const homeFaqs = [
   {
     question: "Where can I find houses for rent in Gulbarga?",
     answer:
-      "GulbargaHomes lists verified rental houses and independent homes across Sedam Road, Azadpur, Biddapur Colony, Jewargi Road, Shahbazar, Station Area and other Kalaburagi localities. Filter by BHK, budget, Vastu and family or bachelor preferences.",
+      "GulbargaHomes lists verified rental houses and independent homes across High Court, Sedam Road, Azadpur, Biddapur Colony, Jewargi Road, Shahbazar, Station Area and other Kalaburagi localities. Filter by BHK, budget, Vastu and family or bachelor preferences.",
   },
   {
     question: "Are Gulbarga and Kalaburagi the same city?",
@@ -307,7 +307,7 @@ export const homeFaqs = [
   {
     question: "Which areas are best for plots for sale in Gulbarga?",
     answer:
-      "Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road are among the most searched residential plot locations in Kalaburagi. We list NA / layout plots with area, facing and nearby schools and hospitals.",
+      "High Court, Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road are among the most searched residential plot locations in Kalaburagi. We list NA / layout plots with area, facing and nearby schools and hospitals.",
   },
   {
     question: "Do you list 2 BHK and 3 BHK flats for rent in Kalaburagi?",

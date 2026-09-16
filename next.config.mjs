@@ -14,6 +14,11 @@ const nextConfig = {
       { source: "/admin", destination: "/admin/index.html", permanent: false },
       { source: "/admin/", destination: "/admin/index.html", permanent: false },
       {
+        source: "/properties/2bhk-house-rent-biddapur-colony",
+        destination: "/properties/1bhk-house-rent-biddapur-colony",
+        permanent: true,
+      },
+      {
         source: "/:path+/",
         destination: "/:path+",
         permanent: true,

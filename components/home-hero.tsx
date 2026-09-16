@@ -48,7 +48,7 @@ export function HomeHero() {
           {site.tagline}
         </h1>
         <p className="fade-up mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg [animation-delay:140ms]">
-          Rent · Buy · Houses · Flats · Plots in Gulbarga (Kalaburagi) — with Vastu, parking, water supply and video tours.
+          Rent · Buy · Houses · Flats · Plots · Commercial in Gulbarga (Kalaburagi) — with Vastu, parking, water supply and video tours.
         </p>
         <div className="fade-up mt-8 sm:mt-10 [animation-delay:200ms]">
           <SearchBar localities={localities} />

@@ -11,7 +11,7 @@ export const site = {
   homeSeoTitle:
     "Houses, Flats & Plots for Rent and Sale in Gulbarga (Kalaburagi)",
   description:
-    "GulbargaHomes is the curated real estate platform for Gulbarga (Kalaburagi) — rental houses, 1/2/3 BHK flats, independent homes, villas and residential plots for sale across Sedam Road, Azadpur, Biddapur Colony, Kusnoor, Jewargi Road and more. Verified details on Vastu, parking, water supply, bachelor and family preferences.",
+    "GulbargaHomes is the curated real estate platform for Gulbarga (Kalaburagi) — rental houses, 1/2/3 BHK flats, independent homes, villas, commercial space and residential plots for sale across High Court, Sedam Road, Azadpur, Biddapur Colony, Kusnoor, Jewargi Road and more. Verified details on Vastu, parking, water supply, bachelor and family preferences.",
   keywords: [
     "houses for rent in gulbarga",
     "flats for rent in kalaburagi",
@@ -47,6 +47,7 @@ export const site = {
     "University Area",
     "Timmapuri",
     "Court Road",
+    "High Court",
     "Ring Road",
     "Aland Road",
     "Humnabad Road",

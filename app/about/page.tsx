@@ -29,8 +29,8 @@ export default function AboutPage() {
         Real estate, built only for Gulbarga
       </h1>
       <p className="mt-4 text-base leading-relaxed text-ink-muted">
-        GulbargaHomes is a curated portal for houses, flats and plots in Gulbarga
-        (officially Kalaburagi). Listings stay on this city — Sedam Road, Azadpur,
+        GulbargaHomes is a curated portal for houses, flats, commercial space and plots in Gulbarga
+        (officially Kalaburagi). Listings stay on this city — High Court, Sedam Road, Azadpur,
         Biddapur Colony, Kusnoor, Jewargi Road, Shahbazar, Station Area and the
         neighbourhoods people actually search.
       </p>
@@ -48,6 +48,7 @@ export default function AboutPage() {
             <li>Houses and flats for rent</li>
             <li>Independent houses for sale</li>
             <li>Residential plots and layouts</li>
+            <li>Shops, bank floors and commercial halls</li>
             <li>Villas and PG stays near the university</li>
           </ul>
         </div>

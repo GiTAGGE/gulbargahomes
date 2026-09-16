@@ -31,13 +31,14 @@ const categories = [
   { label: "Family Homes", href: "/properties?listing=Rent&family=Preferred" },
   { label: "Bachelor Friendly", href: "/properties?listing=Rent&bachelors=Allowed" },
   { label: "Villas", href: "/villas-for-sale-in-gulbarga" },
+  { label: "Commercial Rent", href: "/commercial-for-rent-in-gulbarga" },
   { label: "PG / Hostels", href: "/properties?type=PG" },
 ];
 
 const reasons = [
   {
     title: "Gulbarga-only inventory",
-    body: "Every listing is in Kalaburagi — Sedam Road, Azadpur, Biddapur, Kusnoor and more. No Bangalore spam, no pan-India dumps.",
+    body: "Every listing is in Kalaburagi — High Court, Sedam Road, Azadpur, Biddapur, Kusnoor and more. No Bangalore spam, no pan-India dumps.",
   },
   {
     title: "Photos and video tours",
