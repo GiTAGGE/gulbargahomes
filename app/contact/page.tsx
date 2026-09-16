@@ -38,17 +38,26 @@ export default function ContactPage() {
       </p>
 
       <div className="mt-8 grid gap-3">
-        <a href={`tel:${site.phone}`} className="btn-primary justify-center">
-          Call {site.phoneDisplay}
-        </a>
-        <a
-          href={`https://wa.me/${site.whatsapp}?text=${waText}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft"
-        >
-          WhatsApp GulbargaHomes
-        </a>
+        {site.contacts.map((contact) => (
+          <a
+            key={contact.phone}
+            href={`tel:${contact.phone}`}
+            className="btn-primary justify-center"
+          >
+            Call {contact.phoneDisplay}
+          </a>
+        ))}
+        {site.contacts.map((contact) => (
+          <a
+            key={`wa-${contact.whatsapp}`}
+            href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft"
+          >
+            WhatsApp {contact.phoneDisplay}
+          </a>
+        ))}
         <a href={`mailto:${site.email}`} className="btn-ghost justify-center">
           {site.email}
         </a>

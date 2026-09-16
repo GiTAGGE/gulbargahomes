@@ -54,19 +54,25 @@ export function SiteFooter() {
             Contact
           </h4>
           <ul className="mt-4 space-y-2 text-sm text-ink-muted">
-            <li>
-              <a href={`tel:${site.phone}`} className="hover:text-brand-600">{site.phoneDisplay}</a>
-            </li>
-            <li>
-              <a
-                href={`https://wa.me/${site.whatsapp}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-brand-600"
-              >
-                WhatsApp {site.phoneDisplay}
-              </a>
-            </li>
+            {site.contacts.map((contact) => (
+              <li key={contact.phone}>
+                <a href={`tel:${contact.phone}`} className="hover:text-brand-600">
+                  {contact.phoneDisplay}
+                </a>
+              </li>
+            ))}
+            {site.contacts.map((contact) => (
+              <li key={`wa-${contact.whatsapp}`}>
+                <a
+                  href={`https://wa.me/${contact.whatsapp}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-brand-600"
+                >
+                  WhatsApp {contact.phoneDisplay}
+                </a>
+              </li>
+            ))}
             <li>
               <a href={`mailto:${site.email}`} className="hover:text-brand-600">{site.email}</a>
             </li>

@@ -34,22 +34,30 @@ export function PropertyContactCard({ property }: { property: Property }) {
       <p className="text-2xl font-bold text-brand-700 sm:text-3xl">{formatPrice(property)}</p>
       <p className="mt-1 text-sm text-ink-muted">Listed by GulbargaHomes</p>
 
-      <a
-        href={`tel:${site.phone}`}
-        className="btn-primary mt-5 w-full justify-center"
-        onClick={() => trackPhoneClick("property_card", context)}
-      >
-        <PhoneIcon className="h-5 w-5" /> Call Us
-      </a>
-      <a
-        href={`https://wa.me/${site.whatsapp}?text=${waText}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft transition-colors hover:brightness-95"
-        onClick={() => trackWhatsAppClick("property_card", context)}
-      >
-        <WhatsAppIcon className="h-5 w-5" /> WhatsApp Us
-      </a>
+      <div className="mt-5 grid gap-2">
+        {site.contacts.map((contact) => (
+          <a
+            key={contact.phone}
+            href={`tel:${contact.phone}`}
+            className="btn-primary w-full justify-center"
+            onClick={() => trackPhoneClick("property_card", context)}
+          >
+            <PhoneIcon className="h-5 w-5" /> Call {contact.phoneDisplay}
+          </a>
+        ))}
+        {site.contacts.map((contact) => (
+          <a
+            key={`wa-${contact.whatsapp}`}
+            href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft transition-colors hover:brightness-95"
+            onClick={() => trackWhatsAppClick("property_card", context)}
+          >
+            <WhatsAppIcon className="h-5 w-5" /> WhatsApp {contact.phoneDisplay}
+          </a>
+        ))}
+      </div>
 
       <p className="mt-4 text-center text-xs text-ink-faint">
         Curated listing — reach out to us for details and visits.
@@ -72,23 +80,33 @@ export function PropertyStickyContactBar({ property }: { property: Property }) {
           <p className="text-xs text-ink-faint">{property.listing === "Rent" ? "Rent" : "Price"}</p>
           <p className="truncate text-lg font-bold text-brand-700">{formatPrice(property)}</p>
         </div>
-        <a
-          href={`tel:${site.phone}`}
-          className="btn-primary shrink-0 px-4 py-2.5 text-sm"
-          onClick={() => trackPhoneClick("property_sticky", context)}
-        >
-          <PhoneIcon className="h-4 w-4" /> Call Us
-        </a>
-        <a
-          href={`https://wa.me/${site.whatsapp}?text=${waText}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#25D366] text-white"
-          aria-label="WhatsApp us"
-          onClick={() => trackWhatsAppClick("property_sticky", context)}
-        >
-          <WhatsAppIcon className="h-5 w-5" />
-        </a>
+        <div className="flex shrink-0 flex-col gap-1.5">
+          {site.contacts.map((contact) => (
+            <a
+              key={contact.phone}
+              href={`tel:${contact.phone}`}
+              className="btn-primary px-3 py-1.5 text-xs"
+              onClick={() => trackPhoneClick("property_sticky", context)}
+            >
+              <PhoneIcon className="h-3.5 w-3.5" /> {contact.phoneDisplay.replace("+91 ", "")}
+            </a>
+          ))}
+        </div>
+        <div className="flex shrink-0 flex-col gap-1.5">
+          {site.contacts.map((contact) => (
+            <a
+              key={`wa-${contact.whatsapp}`}
+              href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="grid h-8 w-8 place-items-center rounded-full bg-[#25D366] text-white"
+              aria-label={`WhatsApp ${contact.phoneDisplay}`}
+              onClick={() => trackWhatsAppClick("property_sticky", context)}
+            >
+              <WhatsAppIcon className="h-4 w-4" />
+            </a>
+          ))}
+        </div>
       </div>
     </div>
   );

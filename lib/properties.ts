@@ -193,11 +193,6 @@ export function getSimilarProperties(property: Property, limit = 3): Property[] 
 export function getLocalities(): string[] {
   const seen = new Map<string, string>();
 
-  for (const entry of site.localities) {
-    const label = canonicalLocalityName(entry);
-    seen.set(localitySlug(label), label);
-  }
-
   for (const property of getAllProperties()) {
     const label = canonicalLocalityName(property.locality);
     const slug = localitySlug(label);
