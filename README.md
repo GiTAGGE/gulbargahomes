@@ -58,7 +58,7 @@ The site is already connected to Netlify. After this build is live on `gulbarga.
 3. Enable Netlify Identity **Invite only** + Git Gateway so only you can open `/admin/index.html`
 4. Optional: set `NEXT_PUBLIC_GA4_ID` and `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars
 
-Public phone and WhatsApp are `+91 81234 50725` (`lib/site.ts`).
+Public phone and WhatsApp are `+91 81234 50725` and `+91 84313 95255` (`lib/site.ts`).
 
 ## SEO notes
 

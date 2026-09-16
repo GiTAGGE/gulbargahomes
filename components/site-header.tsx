@@ -50,13 +50,18 @@ export function SiteHeader() {
             <div className="hidden sm:block">
               <SiteSearch />
             </div>
-            <a
-              href={`tel:${site.phone}`}
-              className="btn-primary hidden sm:inline-flex text-sm py-2.5"
-              onClick={() => trackPhoneClick("header")}
-            >
-              <PhoneIcon className="h-4 w-4" /> Call Us
-            </a>
+            <div className="hidden items-center gap-1.5 sm:flex">
+              {site.contacts.map((contact) => (
+                <a
+                  key={contact.phone}
+                  href={`tel:${contact.phone}`}
+                  className="btn-primary text-xs py-2 px-3"
+                  onClick={() => trackPhoneClick("header")}
+                >
+                  <PhoneIcon className="h-4 w-4" /> {contact.phoneDisplay}
+                </a>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
@@ -101,13 +106,16 @@ export function SiteHeader() {
               <div className="mt-2 border-t border-brand-100 pt-3 px-1">
                 <SiteSearch />
               </div>
-              <a
-                href={`tel:${site.phone}`}
-                className="btn-primary mt-3 justify-center"
-                onClick={() => trackPhoneClick("mobile_menu")}
-              >
-                <PhoneIcon className="h-5 w-5" /> Call Us
-              </a>
+              {site.contacts.map((contact) => (
+                <a
+                  key={contact.phone}
+                  href={`tel:${contact.phone}`}
+                  className="btn-primary mt-3 justify-center"
+                  onClick={() => trackPhoneClick("mobile_menu")}
+                >
+                  <PhoneIcon className="h-5 w-5" /> Call {contact.phoneDisplay}
+                </a>
+              ))}
             </nav>
           </div>
         </div>

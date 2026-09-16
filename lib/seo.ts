@@ -55,7 +55,7 @@ function organizationRef() {
     "@id": `${site.url}/#business`,
     name: site.name,
     url: site.url,
-    telephone: site.phone,
+    telephone: [...site.contacts.map((contact) => contact.phone)],
     logo: {
       "@type": "ImageObject",
       url: LOGO_URL,
@@ -233,7 +233,7 @@ export function localBusinessSchema() {
     alternateName: ["Gulbarga Homes", "Kalaburagi Homes"],
     description: site.description,
     url: site.url,
-    telephone: site.phone,
+    telephone: [...site.contacts.map((contact) => contact.phone)],
     email: site.email,
     image: LOGO_URL,
     logo: {
@@ -265,13 +265,13 @@ export function localBusinessSchema() {
       "Residential plots for sale in Gulbarga",
       "Independent houses for sale in Kalaburagi",
     ],
-    contactPoint: {
+    contactPoint: site.contacts.map((contact) => ({
       "@type": "ContactPoint",
-      telephone: site.phone,
+      telephone: contact.phone,
       contactType: "sales",
       areaServed: "IN",
       availableLanguage: ["English", "Kannada", "Hindi"],
-    },
+    })),
   };
 }
 

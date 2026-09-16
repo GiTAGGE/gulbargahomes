@@ -1,3 +1,16 @@
+export const siteContacts = [
+  {
+    phone: "+918123450725",
+    phoneDisplay: "+91 81234 50725",
+    whatsapp: "918123450725",
+  },
+  {
+    phone: "+918431395255",
+    phoneDisplay: "+91 84313 95255",
+    whatsapp: "918431395255",
+  },
+] as const;
+
 export const site = {
   name: "GulbargaHomes",
   shortName: "Gulbarga Homes",
@@ -24,9 +37,11 @@ export const site = {
     "gulbarga homes",
     "kalaburagi real estate",
   ],
-  phone: "+918123450725",
-  phoneDisplay: "+91 81234 50725",
-  whatsapp: "918123450725",
+  phone: siteContacts[0].phone,
+  phoneDisplay: siteContacts[0].phoneDisplay,
+  whatsapp: siteContacts[0].whatsapp,
+  contacts: siteContacts,
+  phonesDisplay: siteContacts.map((contact) => contact.phoneDisplay).join(" · "),
   email: "hello@gulbargahomes.com",
   geo: {
     latitude: 17.3297,

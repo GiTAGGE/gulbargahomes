@@ -55,7 +55,7 @@ export default function AboutPage() {
         <div className="rounded-2xl border border-brand-100 bg-white p-5">
           <h2 className="font-bold text-ink">How to reach us</h2>
           <p className="mt-2 text-sm text-ink-muted">
-            Call or WhatsApp {site.phoneDisplay}. Owners in Gulbarga can list a
+            Call or WhatsApp {site.phonesDisplay}. Owners in Gulbarga can list a
             house, flat or plot with photos and a video — we will show it to
             buyers and tenants in the city.
           </p>
