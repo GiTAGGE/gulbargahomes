@@ -7,7 +7,7 @@ import { PropertyCard } from "@/components/property-card";
 import { RecentlyViewed } from "@/components/recently-viewed";
 import { ArrowIcon, CheckIcon, PinIcon } from "@/components/icons";
 import { faqSchema, homeFaqs, itemListSchema, metaDescription } from "@/lib/seo";
-import { getAllProperties, getFeaturedProperties, getLocalities } from "@/lib/properties";
+import { getAllProperties } from "@/lib/properties";
 import { site } from "@/lib/site";
 
 export const revalidate = 60;
@@ -51,24 +51,26 @@ const reasons = [
 ];
 
 export default function HomePage() {
-  const featured = getFeaturedProperties(6);
-  const allProperties = getAllProperties();
-  const localities = getLocalities();
+  const featured = getAllProperties();
+  const allProperties = featured;
+  const listingLocalities = Array.from(
+    new Set(allProperties.map((property) => property.locality)),
+  ).sort();
   const rentCount = allProperties.filter((item) => item.listing === "Rent").length;
   const saleCount = allProperties.filter((item) => item.listing === "Sale").length;
   const plotCount = allProperties.filter((item) => item.propertyType === "Plot").length;
 
   return (
     <div data-pagefind-body>
-      <JsonLd data={itemListSchema("Featured properties in Gulbarga", featured)} />
+      <JsonLd data={itemListSchema("Current listings in Gulbarga", featured)} />
       <JsonLd data={faqSchema(homeFaqs)} />
       <HomeHero />
 
       <section className="border-b border-brand-100 bg-white">
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px bg-brand-100 sm:grid-cols-4">
           {[
-            { value: `${allProperties.length}+`, label: "Live listings" },
-            { value: `${localities.length}`, label: "Kalaburagi areas" },
+            { value: `${allProperties.length}`, label: "Live listings" },
+            { value: `${listingLocalities.length}`, label: "Kalaburagi areas" },
             { value: `${rentCount}`, label: "Homes for rent" },
             { value: `${plotCount || saleCount}`, label: "Plots & sales" },
           ].map((stat) => (
@@ -106,9 +108,9 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="text-xl font-bold text-ink sm:text-2xl">Featured properties</h2>
+            <h2 className="text-xl font-bold text-ink sm:text-2xl">Current listings</h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Handpicked homes and plots across Gulbarga&apos;s most-searched localities.
+              Houses, plots and commercial space now on GulbargaHomes — High Court and Biddapur Colony.
             </p>
           </div>
           <Link
@@ -135,7 +137,7 @@ export default function HomePage() {
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-          {localities.map((locality) => (
+          {listingLocalities.map((locality) => (
             <Link
               key={locality}
               href={`/properties?locality=${encodeURIComponent(locality)}`}
