@@ -99,8 +99,11 @@ async function makeVariant(inputPath, outputPath, index, salt) {
 }
 
 function makeVideo(slug, dir) {
-  const files = ["cover.webp", "1.webp", "2.webp"].map((name) => path.join(dir, name));
-  if (!files.every((file) => fs.existsSync(file))) return;
+  const files = ["cover.webp", "1.webp", "2.webp"]
+    .map((name) => path.join(dir, name))
+    .filter((file) => fs.existsSync(file));
+  if (files.length === 0) return;
+  while (files.length < 3) files.push(files[files.length - 1]);
 
   const output = path.join(VIDEO_ROOT, `${slug}.mp4`);
   const filters = files
@@ -151,15 +154,21 @@ async function main() {
     const originals = listingOriginals(slug);
     const dir = path.join(PROP_ROOT, slug);
     fs.mkdirSync(dir, { recursive: true });
-    const names = ["cover.webp", "1.webp", "2.webp"];
 
     if (originals.length > 0) {
-      for (let i = 0; i < names.length; i++) {
-        await writeOriginal(originals[i % originals.length], path.join(dir, names[i]));
+      await sharp(originals[0])
+        .rotate()
+        .resize(1600, 1067, { fit: "cover", position: "centre" })
+        .webp({ quality: 82 })
+        .toFile(path.join(dir, "cover.webp"));
+
+      for (let i = 0; i < originals.length; i++) {
+        await writeOriginal(originals[i], path.join(dir, `${i + 1}.webp`));
       }
     } else {
       const sources = SETS[type] ?? SETS.House;
       const salt = hash(slug);
+      const names = ["cover.webp", "1.webp", "2.webp"];
 
       for (let i = 0; i < names.length; i++) {
         const sourceName = sources[i % sources.length];
