@@ -307,7 +307,7 @@ export const homeFaqs = [
   {
     question: "Which areas are best for plots for sale in Gulbarga?",
     answer:
-      "High Court, Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road are among the most searched residential plot locations in Kalaburagi. We list NA / layout plots with area, facing and nearby schools and hospitals.",
+      "Sai Nagar at Bankur Cross on Shahabad Road, High Court, Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road are among the most searched residential plot locations in Kalaburagi. We list NA / layout plots with area, facing and nearby schools and hospitals.",
   },
   {
     question: "Do you list 2 BHK and 3 BHK flats for rent in Kalaburagi?",

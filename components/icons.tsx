@@ -141,6 +141,35 @@ export function HomeIcon(props: IconProps) {
   );
 }
 
+export function HandshakeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 18 8.5 14.5a2.1 2.1 0 0 1 0-3L12 8l3.5 3.5a2.1 2.1 0 0 1 0 3L12 18Z" />
+      <path d="M8.5 11.5 5 8a2 2 0 0 1 0-3l2-2 4 4" />
+      <path d="m15.5 11.5 3.5-3.5a2 2 0 0 0 0-3l-2-2-4 4" />
+    </svg>
+  );
+}
+
+export function BuildingIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="4" y="3" width="10" height="18" rx="1" />
+      <path d="M14 10h6v11H14M7 7h4M7 11h4M7 15h4" />
+    </svg>
+  );
+}
+
+export function PlotIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 20h16" />
+      <path d="M6 20 9 9l3 4 3-7 3 14" />
+      <circle cx="9" cy="9" r="1.2" />
+    </svg>
+  );
+}
+
 export function MenuIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
