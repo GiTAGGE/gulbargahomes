@@ -41,7 +41,7 @@ export function SearchBar({ localities, variant = "default" }: SearchBarProps) {
           : "mx-auto w-full max-w-4xl rounded-2xl border border-white/30 bg-white/95 p-3 shadow-lift backdrop-blur-xl sm:rounded-3xl sm:p-4"
       }
     >
-      <div className={overlay ? "flex flex-col gap-2 lg:flex-row lg:items-center" : undefined}>
+      <div className={overlay ? "flex flex-col gap-1.5 sm:gap-2 lg:flex-row lg:items-center" : undefined}>
         <div className={overlay ? "flex shrink-0 gap-1 rounded-full bg-brand-50 p-1" : "mb-3 flex gap-2"}>
           {["Rent", "Sale"].map((option) => (
             <button
@@ -66,10 +66,11 @@ export function SearchBar({ localities, variant = "default" }: SearchBarProps) {
         <div
           className={
             overlay
-              ? "flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-2"
+              ? "flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2"
               : "flex flex-col gap-2.5 sm:flex-row sm:gap-3"
           }
         >
+          <div className={overlay ? "flex min-w-0 flex-1 gap-1.5 sm:gap-2" : "contents"}>
           <label
             className={
               overlay
@@ -117,10 +118,11 @@ export function SearchBar({ localities, variant = "default" }: SearchBarProps) {
               ))}
             </select>
           </label>
+          </div>
 
           <button
             type="submit"
-            className={`btn-primary justify-center ${overlay ? "px-6 sm:min-w-[8.5rem] sm:px-7" : "px-6 sm:px-8"}`}
+            className={`btn-primary justify-center ${overlay ? "w-full px-4 sm:w-auto sm:min-w-[8.5rem] sm:px-7" : "px-6 sm:px-8"}`}
           >
             <SearchIcon className="h-5 w-5" />
             Search
