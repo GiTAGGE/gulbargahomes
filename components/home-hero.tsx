@@ -6,26 +6,44 @@ import { heroBlurDataUrl } from "@/lib/hero-blur";
 import { site } from "@/lib/site";
 
 import { SearchBar } from "@/components/search-bar";
+import {
+  BuildingIcon,
+  HandshakeIcon,
+  HomeIcon,
+  PinIcon,
+  PlotIcon,
+} from "@/components/icons";
+
+const heroCategories = [
+  { label: "Rent", href: "/properties?listing=Rent", Icon: HomeIcon },
+  { label: "Buy", href: "/properties?listing=Sale", Icon: HandshakeIcon },
+  { label: "Houses", href: "/houses-for-rent-in-gulbarga", Icon: PinIcon },
+  { label: "Flats", href: "/flats-for-rent-in-kalaburagi", Icon: BuildingIcon },
+  { label: "Plots", href: "/plots-for-sale-in-gulbarga", Icon: PlotIcon },
+];
 
 export function HomeHero() {
   const localities = getLocalities();
   const popularLocalities = localities.slice(0, 5);
+
   return (
-    <section className="relative isolate min-h-[88svh] overflow-hidden sm:min-h-[78vh]">
-      <div className="absolute inset-0 -z-20">
+    <section className="relative isolate overflow-hidden bg-[#123d32]">
+      <h1 className="sr-only">{site.tagline}</h1>
+
+      <div className="relative aspect-[4/5] min-h-[52svh] w-full sm:aspect-[960/357] sm:min-h-0">
         <Image
           src="/images/hero/hero-mobile.webp"
-          alt=""
+          alt="Find your perfect home in Gulbarga (Kalaburagi) — rent, buy, houses, flats and plots."
           fill
           priority
           sizes="100vw"
           placeholder="blur"
           blurDataURL={heroBlurDataUrl}
-          className="object-cover object-[center_30%] sm:hidden"
+          className="object-cover object-[left_12%] sm:hidden"
         />
         <Image
           src="/images/hero/hero-desktop.webp"
-          alt=""
+          alt="Find your perfect home in Gulbarga (Kalaburagi) — rent, buy, houses, flats and plots."
           fill
           priority
           sizes="100vw"
@@ -35,35 +53,44 @@ export function HomeHero() {
         />
       </div>
 
-      <div className="absolute inset-0 -z-10 bg-brand-900/45 mix-blend-multiply" />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-brand-900/75 via-brand-800/55 to-brand-900/85" />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-brand-900/70 via-transparent to-brand-900/25" />
-      <div className="absolute inset-0 -z-10 [background-image:radial-gradient(circle_at_20%_15%,rgba(255,255,255,0.14),transparent_42%),radial-gradient(circle_at_85%_10%,rgba(255,255,255,0.08),transparent_35%)]" />
+      <div className="relative bg-[#123d32] px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-5 grid grid-cols-5 gap-1 sm:hidden">
+            {heroCategories.map(({ label, href, Icon }) => (
+              <Link
+                key={label}
+                href={href}
+                className="flex flex-col items-center gap-1.5 text-white"
+              >
+                <span className="grid h-11 w-11 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="text-[11px] font-semibold">{label}</span>
+              </Link>
+            ))}
+          </div>
 
-      <div className="mx-auto flex min-h-[88svh] max-w-7xl flex-col justify-center px-4 py-20 text-center text-white sm:min-h-[78vh] sm:px-6 sm:py-24">
-        <span className="fade-up inline-block rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-sm font-medium backdrop-blur-md">
-          Curated · Verified · Gulbarga &amp; Kalaburagi only
-        </span>
-        <h1 className="fade-up mx-auto mt-5 max-w-3xl text-[2rem] font-bold leading-[1.15] tracking-tight [animation-delay:80ms] sm:mt-6 sm:text-5xl lg:text-6xl">
-          {site.tagline}
-        </h1>
-        <p className="fade-up mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg [animation-delay:140ms]">
-          Rent · Buy · Houses · Flats · Plots · Commercial in Gulbarga (Kalaburagi) — with Vastu, parking, water supply and video tours.
-        </p>
-        <div className="fade-up mt-8 sm:mt-10 [animation-delay:200ms]">
-          <SearchBar localities={localities} />
-        </div>
-        <div className="fade-up mt-6 flex flex-wrap justify-center gap-2 sm:mt-8 [animation-delay:260ms]">
-          <span className="text-sm text-white/75">Popular:</span>
-          {popularLocalities.map((locality) => (
-            <Link
-              key={locality}
-              href={`/properties?locality=${encodeURIComponent(locality)}`}
-              className="chip border border-white/15 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-            >
-              {locality}
-            </Link>
-          ))}
+          <div className="mx-auto w-full max-w-4xl">
+            <SearchBar localities={localities} />
+          </div>
+
+          <div className="mx-auto mt-4 flex max-w-4xl flex-wrap items-center justify-center gap-2 text-sm text-white/85">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5">
+              <PinIcon className="h-3.5 w-3.5" />
+              Gulbarga · Kalaburagi
+              <span className="hidden text-white/60 sm:inline">| Places People Call Home</span>
+            </span>
+            <span className="hidden text-white/70 sm:inline">Popular:</span>
+            {popularLocalities.map((locality) => (
+              <Link
+                key={locality}
+                href={`/properties?locality=${encodeURIComponent(locality)}`}
+                className="hidden rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white hover:bg-white/20 sm:inline-flex"
+              >
+                {locality}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </section>

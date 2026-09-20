@@ -30,18 +30,24 @@ function hash(value) {
 async function writeHero() {
   fs.mkdirSync(HERO_DIR, { recursive: true });
   const desktopSrc = path.join(SOURCE, "gulbarga-hero-desktop.webp");
-  const mobileSrc = path.join(SOURCE, "gulbarga-hero-mobile.webp");
+
+  // Keep the designed banner's wide aspect instead of cropping to 16:9.
+  await sharp(desktopSrc)
+    .rotate()
+    .resize({ width: 1920, withoutEnlargement: false })
+    .webp({ quality: 82 })
+    .toFile(path.join(HERO_DIR, "hero-desktop.webp"));
+
+  const desktopMeta = await sharp(desktopSrc).metadata();
+  const srcWidth = desktopMeta.width ?? 1920;
+  const srcHeight = desktopMeta.height ?? 714;
+  const scenicWidth = Math.max(1, Math.round(srcWidth * 0.58));
 
   await sharp(desktopSrc)
     .rotate()
-    .resize(1920, 1080, { fit: "cover", position: "centre" })
-    .webp({ quality: 72 })
-    .toFile(path.join(HERO_DIR, "hero-desktop.webp"));
-
-  await sharp(mobileSrc)
-    .rotate()
-    .resize(1080, 1350, { fit: "cover", position: "centre" })
-    .webp({ quality: 70 })
+    .extract({ left: 0, top: 0, width: scenicWidth, height: srcHeight })
+    .resize(1080, 1350, { fit: "cover", position: "top" })
+    .webp({ quality: 78 })
     .toFile(path.join(HERO_DIR, "hero-mobile.webp"));
 
   await sharp(path.join(HERO_DIR, "hero-desktop.webp"))
