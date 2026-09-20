@@ -55,12 +55,12 @@ export function HomeHero() {
 
       <div className="relative bg-[#123d32] px-4 py-6 sm:px-6 sm:py-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-5 flex gap-3 overflow-x-auto pb-1 sm:hidden">
+          <div className="mb-5 grid grid-cols-5 gap-1 sm:hidden">
             {heroCategories.map(({ label, href, Icon }) => (
               <Link
                 key={label}
                 href={href}
-                className="flex min-w-[4.25rem] flex-col items-center gap-1.5 text-white"
+                className="flex flex-col items-center gap-1.5 text-white"
               >
                 <span className="grid h-11 w-11 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
                   <Icon className="h-5 w-5" />
