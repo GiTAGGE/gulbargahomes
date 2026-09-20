@@ -39,12 +39,14 @@ async function writeHero() {
     .resize({ width: 1920, withoutEnlargement: false })
     .webp({ quality: 86 })
     .toFile(path.join(HERO_DIR, "hero-desktop.webp"));
+  fs.copyFileSync(path.join(HERO_DIR, "hero-desktop.webp"), path.join(HERO_DIR, "scene-desktop.webp"));
 
   await sharp(desktopSrc)
     .rotate()
     .resize(1080, 1350, { fit: "cover", position: "left" })
     .webp({ quality: 80 })
     .toFile(path.join(HERO_DIR, "hero-mobile.webp"));
+  fs.copyFileSync(path.join(HERO_DIR, "hero-mobile.webp"), path.join(HERO_DIR, "scene-mobile.webp"));
 
   await sharp(path.join(HERO_DIR, "hero-desktop.webp"))
     .resize(32, 12, { fit: "cover" })
