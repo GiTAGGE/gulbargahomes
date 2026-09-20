@@ -63,6 +63,8 @@ export const site = {
     "Timmapuri",
     "Court Road",
     "High Court",
+    "Sai Nagar",
+    "Shahabad Road",
     "Ring Road",
     "Aland Road",
     "Humnabad Road",

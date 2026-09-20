@@ -84,7 +84,7 @@ export function getCitySeoPages(): LocationPage[] {
       cityWide: true,
       title: `Plots for Sale in Gulbarga (Kalaburagi)`,
       heading: "Residential Plots for Sale in Gulbarga",
-      description: `Residential plots for sale in ${city} — 30x40 sites near High Court plus Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road layouts with area, facing and connectivity details.`,
+      description: `Residential plots for sale in ${city} — 30x40 and 30x50 sites in Sai Nagar at Bankur Cross on Shahabad Road, plus High Court, Sedam Road, Kusnoor, Ring Road, Kalnoor, Jewargi Road and Aland Road layouts with area, facing and connectivity details.`,
     },
     {
       slug: "houses-for-sale-in-kalaburagi",

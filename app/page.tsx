@@ -38,7 +38,7 @@ const categories = [
 const reasons = [
   {
     title: "Gulbarga-only inventory",
-    body: "Every listing is in Kalaburagi — High Court, Sedam Road, Azadpur, Biddapur, Kusnoor and more. No Bangalore spam, no pan-India dumps.",
+    body: "Every listing is in Kalaburagi — High Court, Sai Nagar, Sedam Road, Azadpur, Biddapur, Kusnoor and more. No Bangalore spam, no pan-India dumps.",
   },
   {
     title: "Photos and video tours",
@@ -110,7 +110,7 @@ export default function HomePage() {
           <div>
             <h2 className="text-xl font-bold text-ink sm:text-2xl">Current listings</h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Houses, plots and commercial space now on GulbargaHomes — High Court and Biddapur Colony.
+              Houses, plots and commercial space now on GulbargaHomes — High Court, Biddapur Colony and Sai Nagar on Shahabad Road.
             </p>
           </div>
           <Link
