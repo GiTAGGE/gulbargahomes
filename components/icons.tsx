@@ -165,9 +165,8 @@ export function BuildingIcon(props: IconProps) {
 export function PlotIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
-      <path d="M4 20h16" />
-      <path d="M6 20 9 9l3 4 3-7 3 14" />
-      <circle cx="9" cy="9" r="1.2" />
+      <path d="M3 6.5 9 4l6 2.5L21 4v15.5L15 22l-6-2.5L3 22Z" />
+      <path d="M9 4v15.5M15 6.5V22" />
     </svg>
   );
 }
