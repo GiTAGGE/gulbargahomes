@@ -144,9 +144,11 @@ export function HomeIcon(props: IconProps) {
 export function HandshakeIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
-      <path d="M12 18 8.5 14.5a2.1 2.1 0 0 1 0-3L12 8l3.5 3.5a2.1 2.1 0 0 1 0 3L12 18Z" />
-      <path d="M8.5 11.5 5 8a2 2 0 0 1 0-3l2-2 4 4" />
-      <path d="m15.5 11.5 3.5-3.5a2 2 0 0 0 0-3l-2-2-4 4" />
+      <path d="m11 17 2 2a1 1 0 1 0 3-3" />
+      <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" />
+      <path d="m21 3 1 11h-2" />
+      <path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" />
+      <path d="M3 4h8" />
     </svg>
   );
 }
@@ -163,9 +165,8 @@ export function BuildingIcon(props: IconProps) {
 export function PlotIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
-      <path d="M4 20h16" />
-      <path d="M6 20 9 9l3 4 3-7 3 14" />
-      <circle cx="9" cy="9" r="1.2" />
+      <path d="M3 6.5 9 4l6 2.5L21 4v15.5L15 22l-6-2.5L3 22Z" />
+      <path d="M9 4v15.5M15 6.5V22" />
     </svg>
   );
 }
