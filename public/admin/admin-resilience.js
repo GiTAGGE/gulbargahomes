@@ -5,7 +5,7 @@
 (function () {
   var BANNER_ID = "gulbargahomes-admin-banner";
   var TOKEN_ERROR = /ACCESS_TOKEN_ERROR|failed getting jwt access token/i;
-  var REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+  var REFRESH_INTERVAL_MS = 60 * 1000;
 
   function getIdentity() {
     return window.netlifyIdentity || null;
@@ -252,7 +252,15 @@
         hideBanner();
         refreshSession(true);
       });
-      identity.on("logout", hideBanner);
+      identity.on("logout", function () {
+        hideBanner();
+        try {
+          localStorage.removeItem("netlify-cms-user");
+          localStorage.removeItem("gotrue.user");
+        } catch (error) {
+          /* Ignore. */
+        }
+      });
     }
   }
 
