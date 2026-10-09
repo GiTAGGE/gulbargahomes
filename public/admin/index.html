@@ -38,23 +38,37 @@
       /.netlify/git/settings is requested with a Bearer token when a
       session already exists. After a fresh login we reload this page
       so the CMS boots with the new JWT.
+
+      Never load Decap while a recovery/invite hash is pending — Decap's
+      hash router would erase #recovery_token before Identity can open.
     -->
     <script>
       (function () {
         var IDENTITY_API = "https://gulbargahomes.com/.netlify/identity";
         var cmsLoaded = false;
 
+        function identityEmailPending() {
+          if (typeof window.gulbargaHomesIdentityEmailPending === "function") {
+            return window.gulbargaHomesIdentityEmailPending();
+          }
+          return /recovery_token|invite_token|confirmation_token|email_change_token/.test(
+            window.location.hash || "",
+          );
+        }
+
         function loadCms() {
-          if (cmsLoaded) return;
+          if (cmsLoaded || identityEmailPending()) return;
           cmsLoaded = true;
           var script = document.createElement("script");
           script.src = "https://unpkg.com/decap-cms@3.6.3/dist/decap-cms.js";
           document.body.appendChild(script);
         }
 
+        window.addEventListener("gulbarga-identity-email-flow-done", loadCms);
+
         var identity = window.netlifyIdentity;
         if (!identity) {
-          loadCms();
+          if (!identityEmailPending()) loadCms();
           return;
         }
 
@@ -64,11 +78,16 @@
           /* Widget may already have initialized on this page. */
         }
 
-        identity.on("init", loadCms);
+        identity.on("init", function () {
+          if (!identityEmailPending()) loadCms();
+        });
         identity.on("login", function () {
           window.location.replace("/admin/index.html");
         });
-        window.setTimeout(loadCms, 2500);
+
+        window.setTimeout(function () {
+          if (!identityEmailPending()) loadCms();
+        }, 2500);
       })();
     </script>
   </body>
