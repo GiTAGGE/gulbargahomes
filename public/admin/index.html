@@ -51,7 +51,7 @@
           if (typeof window.gulbargaHomesIdentityEmailPending === "function") {
             return window.gulbargaHomesIdentityEmailPending();
           }
-          return /recovery_token|invite_token|confirmation_token|email_change_token/.test(
+          return /invite_token|confirmation_token|email_change_token/.test(
             window.location.hash || "",
           );
         }
