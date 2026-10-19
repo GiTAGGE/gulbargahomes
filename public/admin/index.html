@@ -34,18 +34,16 @@
   </head>
   <body>
     <!--
-      Load Decap only after Identity has initialized so git-gateway
-      /.netlify/git/settings is requested with a Bearer token when a
-      session already exists. After a fresh login we reload this page
-      so the CMS boots with the new JWT.
-
-      Never load Decap while a recovery/invite hash is pending — Decap's
-      hash router would erase #recovery_token before Identity can open.
+      Load Decap only after Identity has initialized and (when logged in) refreshed
+      its JWT. Loading CMS too early makes Git Gateway think you are logged out even
+      when gotrue.user is still in localStorage.
     -->
     <script>
       (function () {
         var IDENTITY_API = "https://gulbargahomes.com/.netlify/identity";
+        var DEFAULT_ROUTE = "#/collections/properties";
         var cmsLoaded = false;
+        var identityInitFired = false;
 
         function identityEmailPending() {
           if (typeof window.gulbargaHomesIdentityEmailPending === "function") {
@@ -56,6 +54,12 @@
           );
         }
 
+        function decapRouteHash() {
+          var hash = window.location.hash || "";
+          if (/^#\/collections\//.test(hash)) return hash;
+          return DEFAULT_ROUTE;
+        }
+
         function loadCms() {
           if (cmsLoaded || identityEmailPending()) return;
           cmsLoaded = true;
@@ -64,11 +68,43 @@
           document.body.appendChild(script);
         }
 
-        window.addEventListener("gulbarga-identity-email-flow-done", loadCms);
+        function loadCmsAfterIdentityReady() {
+          if (cmsLoaded || identityEmailPending()) return;
+
+          var identity = window.netlifyIdentity;
+          if (!identity) {
+            loadCms();
+            return;
+          }
+
+          var user = identity.currentUser && identity.currentUser();
+          if (!user || typeof user.jwt !== "function") {
+            loadCms();
+            return;
+          }
+
+          user
+            .jwt(true)
+            .catch(function () {
+              /* Still load CMS so the user can log in again. */
+            })
+            .then(function () {
+              loadCms();
+            });
+        }
+
+        window.addEventListener("gulbarga-identity-email-flow-done", loadCmsAfterIdentityReady);
+
+        window.gulbargaHomesReloadAdminAfterLogin = function () {
+          var target = "/admin/index.html" + decapRouteHash();
+          window.location.replace(target);
+        };
 
         var identity = window.netlifyIdentity;
         if (!identity) {
-          if (!identityEmailPending()) loadCms();
+          window.setTimeout(function () {
+            if (!identityEmailPending()) loadCms();
+          }, 1500);
           return;
         }
 
@@ -79,15 +115,26 @@
         }
 
         identity.on("init", function () {
-          if (!identityEmailPending()) loadCms();
+          identityInitFired = true;
+          if (!identityEmailPending()) loadCmsAfterIdentityReady();
         });
+
         identity.on("login", function () {
-          window.location.replace("/admin/index.html");
+          if (typeof window.gulbargaHomesReloadAdminAfterLogin === "function") {
+            window.gulbargaHomesReloadAdminAfterLogin();
+          } else {
+            window.location.replace("/admin/index.html" + DEFAULT_ROUTE);
+          }
         });
 
         window.setTimeout(function () {
-          if (!identityEmailPending()) loadCms();
-        }, 2500);
+          if (cmsLoaded || identityEmailPending()) return;
+          if (!identityInitFired) {
+            loadCms();
+            return;
+          }
+          loadCmsAfterIdentityReady();
+        }, 8000);
       })();
     </script>
   </body>
