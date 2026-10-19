@@ -1,20 +1,56 @@
 /**
- * Netlify Identity defaults to open registration. Force the login tab unless
- * the URL contains an invite/recovery token from a Netlify email link.
+ * Netlify Identity: login-only guard, logout cleanup, and email-link routing.
  *
- * Email links land on the site root with a hash (#recovery_token=…). The
- * widget modal is easy to miss on the public homepage, so we send those links
- * to /admin/index.html first. After login, always reload admin so Decap CMS
- * retries Git Gateway /settings with a fresh JWT.
+ * Password recovery uses /admin/recover.html (direct GoTrue API) because the
+ * Identity widget + Decap CMS both fight over the URL hash.
  */
 (function () {
   var INVITE_HASH = /invite_token|confirmation_token|recovery_token|email_change_token/;
   var IDENTITY_API = "https://gulbargahomes.com/.netlify/identity";
   var ADMIN_HREF = "/admin/index.html";
+  var RECOVER_HREF = "/admin/recover.html";
+
+  function parseHashParams(hash) {
+    var out = {};
+    var h = (hash || "").replace(/^#/, "");
+    if (!h) return out;
+    h.split("&").forEach(function (part) {
+      var i = part.indexOf("=");
+      if (i === -1) return;
+      out[decodeURIComponent(part.slice(0, i))] = decodeURIComponent(part.slice(i + 1));
+    });
+    return out;
+  }
+
+  function redirectRecoveryToRecoverPage() {
+    var path = window.location.pathname || "";
+    if (path.indexOf("/admin/recover.html") !== -1) return false;
+
+    var hash = window.location.hash || "";
+    var token = parseHashParams(hash).recovery_token;
+    if (!token && /recovery_token=/.test(window.location.search || "")) {
+      token = new URLSearchParams(window.location.search).get("recovery_token");
+    }
+    if (!token) return false;
+
+    window.location.replace(
+      RECOVER_HREF +
+        "?recovery_token=" +
+        encodeURIComponent(token) +
+        "&type=recovery",
+    );
+    return true;
+  }
+
+  if (redirectRecoveryToRecoverPage()) return;
 
   var hash = window.location.hash || "";
   var path = window.location.pathname || "";
-  if (INVITE_HASH.test(hash) && path.indexOf("/admin/") === -1) {
+  if (
+    INVITE_HASH.test(hash) &&
+    !/recovery_token=/.test(hash) &&
+    path.indexOf("/admin/") === -1
+  ) {
     window.location.replace(ADMIN_HREF + hash);
     return;
   }
@@ -66,7 +102,6 @@
     };
 
     identity.__gulbargaHomesGuarded = true;
-    identity.__gulbargaHomesOriginalOpen = originalOpen;
   }
 
   function bindAdminRedirect() {
