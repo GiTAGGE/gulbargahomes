@@ -139,7 +139,16 @@
   }
 
   function goToAdmin() {
-    window.location.replace(ADMIN_HREF);
+    if (typeof window.gulbargaHomesReloadAdminAfterLogin === "function") {
+      window.gulbargaHomesReloadAdminAfterLogin();
+      return;
+    }
+    var hash = window.location.hash || "";
+    if (/^#\/collections\//.test(hash)) {
+      window.location.replace(ADMIN_HREF + hash);
+      return;
+    }
+    window.location.replace(ADMIN_HREF + "#/collections/properties");
   }
 
   function applyStashedHashToLocation() {

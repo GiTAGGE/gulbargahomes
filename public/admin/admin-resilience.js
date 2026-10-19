@@ -4,8 +4,12 @@
  */
 (function () {
   var BANNER_ID = "gulbargahomes-admin-banner";
-  var TOKEN_ERROR = /ACCESS_TOKEN_ERROR|failed getting jwt access token/i;
-  var REFRESH_INTERVAL_MS = 60 * 1000;
+  var TOKEN_ERROR =
+    /ACCESS_TOKEN_ERROR|failed getting jwt access token|jwt expired|invalid token|401|403/i;
+  var TIMEOUT_ERROR =
+    /timeout|timed out|ETIMEDOUT|504|408|502|503|network error|failed to fetch/i;
+  var REFRESH_INTERVAL_MS = 45 * 1000;
+  var REFRESH_RETRIES = 3;
 
   function getIdentity() {
     return window.netlifyIdentity || null;
@@ -33,6 +37,18 @@
       .catch(function () {
         return false;
       });
+  }
+
+  function refreshSessionWithRetry(force, attemptsLeft) {
+    var tries = attemptsLeft == null ? REFRESH_RETRIES : attemptsLeft;
+    return refreshSession(force).then(function (ok) {
+      if (ok || tries <= 1) return ok;
+      return new Promise(function (resolve) {
+        window.setTimeout(resolve, 700);
+      }).then(function () {
+        return refreshSessionWithRetry(true, tries - 1);
+      });
+    });
   }
 
   function showBanner(kind, message, action) {
@@ -110,7 +126,7 @@
       {
         label: "Refresh session",
         onClick: function () {
-          refreshSession(true).then(function (ok) {
+          refreshSessionWithRetry(true).then(function (ok) {
             if (ok) {
               hideBanner();
               showBanner("info", "Session restored. You can publish now.", null);
@@ -134,7 +150,7 @@
 
   function handleOnline() {
     hideBanner();
-    refreshSession(true).then(function (ok) {
+    refreshSessionWithRetry(true).then(function (ok) {
       if (!ok && getCurrentUser()) {
         handleSessionExpired();
         return;
@@ -146,17 +162,25 @@
     });
   }
 
-  function isTokenError(value) {
+  function isRecoverableError(value) {
     if (!value) return false;
-    if (typeof value === "string") return TOKEN_ERROR.test(value);
-    if (value.message && TOKEN_ERROR.test(value.message)) return true;
-    if (value.toString && TOKEN_ERROR.test(value.toString())) return true;
+    if (typeof value === "string") {
+      return TOKEN_ERROR.test(value) || TIMEOUT_ERROR.test(value);
+    }
+    if (value.message) {
+      if (TOKEN_ERROR.test(value.message) || TIMEOUT_ERROR.test(value.message)) {
+        return true;
+      }
+    }
+    if (value.toString && (TOKEN_ERROR.test(value.toString()) || TIMEOUT_ERROR.test(value.toString()))) {
+      return true;
+    }
     return false;
   }
 
   function watchErrors() {
     window.addEventListener("unhandledrejection", function (event) {
-      if (isTokenError(event.reason)) {
+      if (isRecoverableError(event.reason)) {
         event.preventDefault();
         handleSessionExpired();
       }
@@ -165,7 +189,7 @@
     var originalError = console.error;
     console.error = function () {
       for (var i = 0; i < arguments.length; i++) {
-        if (isTokenError(arguments[i])) {
+        if (isRecoverableError(arguments[i])) {
           handleSessionExpired();
           break;
         }
@@ -186,11 +210,13 @@
         return Promise.reject(new Error("Offline — draft saved locally. Reconnect to publish."));
       }
 
-      return refreshSession(true).then(function (ok) {
+      return refreshSessionWithRetry(true).then(function (ok) {
         if (ok) return;
         handleSessionExpired();
         return Promise.reject(
-          new Error("Session expired — use Refresh session or log in again. Your draft is still in this browser."),
+          new Error(
+            "Session expired or Git Gateway timed out — tap Refresh session, then publish again. Your draft is still in this browser.",
+          ),
         );
       });
     }
@@ -209,7 +235,7 @@
   function startTokenRefreshLoop() {
     window.setInterval(function () {
       if (!navigator.onLine) return;
-      refreshSession(true).then(function (ok) {
+      refreshSessionWithRetry(true).then(function (ok) {
         if (!ok && getCurrentUser()) {
           handleSessionExpired();
         }
@@ -220,7 +246,7 @@
   function onTabVisible() {
     if (document.visibilityState !== "visible") return;
     if (!navigator.onLine) return;
-    refreshSession(true).then(function (ok) {
+    refreshSessionWithRetry(true).then(function (ok) {
       if (!ok && getCurrentUser()) handleSessionExpired();
     });
   }
@@ -250,16 +276,10 @@
     if (identity) {
       identity.on("login", function () {
         hideBanner();
-        refreshSession(true);
+        refreshSessionWithRetry(true);
       });
       identity.on("logout", function () {
         hideBanner();
-        try {
-          localStorage.removeItem("netlify-cms-user");
-          localStorage.removeItem("gotrue.user");
-        } catch (error) {
-          /* Ignore. */
-        }
       });
     }
   }
