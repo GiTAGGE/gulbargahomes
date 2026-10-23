@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { bhkLabel } from "@/lib/format";
+import { isCloudinaryUrl, normalizeMediaUrl } from "@/lib/media-url";
 import { getBlurDataURL } from "@/lib/images";
 import type { Property } from "@/lib/types";
 
@@ -17,12 +18,13 @@ export function PropertyImage({
   label?: boolean;
   priority?: boolean;
 }) {
-  const imageSrc = src ?? property.coverImage;
+  const imageSrc = normalizeMediaUrl(src ?? property.coverImage);
 
   return (
     <div className={`relative overflow-hidden bg-brand-100 ${className}`}>
       <Image
         src={imageSrc}
+        unoptimized={isCloudinaryUrl(imageSrc)}
         alt={property.title}
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"

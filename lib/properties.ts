@@ -5,6 +5,7 @@ import path from "node:path";
 
 import matter from "gray-matter";
 
+import { normalizeMediaUrl } from "./media-url";
 import { canonicalLocalityName, localitiesMatch, localitySlug } from "./locality";
 import { site } from "./site";
 import type { Property, PropertyStatus, PropertyVideo } from "./types";
@@ -40,9 +41,9 @@ function normalizeVideos(raw: unknown): PropertyVideo[] {
       const video = entry as Record<string, unknown>;
       return {
         title: String(video.title ?? "Property video"),
-        src: String(video.src ?? video.file ?? ""),
+        src: normalizeMediaUrl(String(video.src ?? video.file ?? "")),
         youtubeUrl: String(video.youtubeUrl ?? video.url ?? ""),
-        thumbnail: String(video.thumbnail ?? ""),
+        thumbnail: normalizeMediaUrl(String(video.thumbnail ?? "")),
       };
     })
     .filter((video): video is PropertyVideo => Boolean(video?.src || video?.youtubeUrl));
@@ -101,8 +102,10 @@ function normalizeProperty(
     furnished: data.furnished ?? "Unfurnished",
     featured: data.featured ?? false,
     isNew: data.isNew ?? true,
-    coverImage: data.coverImage ?? "",
-    gallery: data.gallery ?? [],
+    coverImage: normalizeMediaUrl(String(data.coverImage ?? "")),
+    gallery: Array.isArray(data.gallery)
+      ? data.gallery.map((item) => normalizeMediaUrl(String(item)))
+      : [],
     videos: normalizeVideos(data.videos),
     publishedAt: publishedTimestamp(
       data as Record<string, unknown>,
@@ -130,12 +133,18 @@ function parseProperty(file: string): Property {
   const { data, content } = matter(raw);
   const description = content.trim();
   const fallbackPublishedAt = fs.statSync(filePath).mtime.toISOString();
+  const fileSlug = file.replace(/\.mdx$/i, "");
+  const frontmatter = data as Partial<Omit<Property, "description" | "body">> & {
+    slug?: string;
+  };
 
-  return normalizeProperty(
-    data as Partial<Omit<Property, "description" | "body">>,
-    description,
-    fallbackPublishedAt,
-  );
+  if (!frontmatter.slug?.trim()) {
+    frontmatter.slug = fileSlug;
+  } else if (frontmatter.slug !== fileSlug) {
+    frontmatter.slug = fileSlug;
+  }
+
+  return normalizeProperty(frontmatter, description, fallbackPublishedAt);
 }
 
 export function getAllProperties(): Property[] {

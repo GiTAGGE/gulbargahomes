@@ -26,6 +26,8 @@ logo_url: /icon.svg
 editor:
   preview: false
 
+# Image uploads: Git repo under public/images/properties, or Cloudinary when
+# NEXT_PUBLIC_CLOUDINARY_* Netlify env vars are set (see README).
 media_folder: "public/images/properties"
 public_folder: "/images/properties"
 
@@ -96,7 +98,7 @@ collections:
         label: "Videos"
         widget: "list"
         required: false
-        hint: "Upload a short MP4 (keep under 8 MB on Netlify free) and/or paste a YouTube URL. Videos appear in the property gallery."
+        hint: "Upload MP4 (Cloudinary when configured) and/or paste a YouTube URL. Videos appear in the property gallery."
         fields:
           - { name: "title", label: "Title", widget: "string", required: false, default: "Property video" }
           - {
@@ -104,7 +106,7 @@ collections:
               label: "Video file (MP4)",
               widget: "file",
               required: false,
-              media_folder: "public/videos/properties",
+              media_folder: "../../public/videos/properties",
               public_folder: "/videos/properties",
             }
           - {

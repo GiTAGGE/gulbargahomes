@@ -9,6 +9,9 @@
     <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <script src="/identity-guard.js"></script>
     <script src="/admin/admin-resilience.js"></script>
+    <script src="/admin/cloudinary-config.js"></script>
+    <script src="https://unpkg.com/decap-cms-media-library-cloudinary@3.1.0/dist/decap-cms-media-library-cloudinary.js"></script>
+    <script src="/admin/cloudinary-init.js"></script>
     <style>
       /*
         Decap CMS git-gateway fallback login form uses margin-top: -80px on AuthForm,
@@ -65,6 +68,17 @@
           cmsLoaded = true;
           var script = document.createElement("script");
           script.src = "https://unpkg.com/decap-cms@3.6.3/dist/decap-cms.js";
+          script.onload = function () {
+            if (
+              window.__GULBARGA_CLOUDINARY_CONFIG &&
+              window.decapCmsMediaLibraryCloudinary &&
+              window.CMS
+            ) {
+              window.decapCmsMediaLibraryCloudinary.init({
+                config: window.__GULBARGA_CLOUDINARY_CONFIG,
+              });
+            }
+          };
           document.body.appendChild(script);
         }
 
