@@ -47,6 +47,23 @@ In **Properties → Videos** you can:
 
 Videos appear in the property gallery next to stills.
 
+Listings are **MDX files in Git** (`content/properties/`) — there is no separate database. After you publish in admin, Netlify must **finish a deploy** before new properties appear on the live site.
+
+## Cloudinary uploads (optional)
+
+To upload images/videos to **Cloudinary** instead of committing large files to Git:
+
+1. In [Cloudinary Console](https://console.cloudinary.com/) → top-left cloud name (e.g. `jzsi7rvy`).
+2. **Settings → Upload → Upload presets** → **Add upload preset** → **Signing mode: Unsigned** → save the preset name.
+3. **Settings → Access keys** → copy **API Key** (not the secret).
+4. In **Netlify → Site → Environment variables**, add:
+   - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` = your cloud name  
+   - `NEXT_PUBLIC_CLOUDINARY_API_KEY` = API key  
+   - `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` = unsigned preset name  
+5. Trigger a **new deploy**. Admin will upload to Cloudinary; the site stores `https://res.cloudinary.com/...` URLs in the property file.
+
+Do **not** put the API **secret** in Netlify public env vars or in `config.yml`.
+
 ## Netlify + custom domain
 
 The site is already connected to Netlify. After this build is live on `gulbarga.netlify.app`:
@@ -57,7 +74,7 @@ The site is already connected to Netlify. After this build is live on `gulbarga.
    - `CNAME` `www` → `gulbarga.netlify.app`
 3. Enable Netlify Identity **Invite only** + Git Gateway so only you can open `/admin/index.html`
 4. **Identity → Configuration**: set **Site URL** to `https://gulbargahomes.com` (no `www`). Password-reset emails open `/admin/recover.html` automatically after deploy (or paste the full email link — it is converted from `#recovery_token` to a dedicated reset page).
-4. Optional: set `NEXT_PUBLIC_GA4_ID` and `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars
+5. Optional: set `NEXT_PUBLIC_GA4_ID` and `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars
 
 Public phone and WhatsApp are `+91 81234 50725` and `+91 84313 95255` (`lib/site.ts`).
 

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/generate-cloudinary-admin-config.mjs && next build",
     "postbuild": "pagefind --site .next/server/app --output-path public/pagefind || true",
     "images": "node scripts/generate-property-media.mjs",
     "start": "next start",
