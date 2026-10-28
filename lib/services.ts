@@ -20,8 +20,8 @@ export const homeServices: HomeService[] = [
     href: "/house-construction",
     summary: "New homes, turnkey builds and structural work across Kalaburagi.",
     bullets: ["Independent houses & villas", "RCC structure & finishing", "Plot-to-home coordination"],
-    image: "/images/properties/house-sale-high-court/cover.webp",
-    imageAlt: "Independent house in a Gulbarga locality — example of residential construction.",
+    image: "/images/projects/house-construction-living.webp",
+    imageAlt: "Premium living room interior — reference finish for turnkey home construction.",
   },
   {
     slug: "modular-kitchens",
@@ -29,8 +29,8 @@ export const homeServices: HomeService[] = [
     href: "/modular-kitchens",
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
-    image: "/images/properties/1bhk-house-rent-biddapur-colony/2.webp",
-    imageAlt: "Kitchen and dining area in a Kalaburagi home — layout reference photo.",
+    image: "/images/projects/modular-kitchen-main.webp",
+    imageAlt: "Modern modular kitchen with marble counters and integrated lighting.",
   },
   {
     slug: "interior-design",
@@ -38,8 +38,8 @@ export const homeServices: HomeService[] = [
     href: "/interior-design",
     summary: "Living rooms, bedrooms, wardrobes and complete home interiors.",
     bullets: ["Room-wise design", "Wardrobes & TV units", "Lighting & finishes"],
-    image: "/images/properties/1bhk-house-rent-biddapur-colony/3.webp",
-    imageAlt: "Furnished living space in Gulbarga — interior styling reference.",
+    image: "/images/projects/interior-design-bedroom.webp",
+    imageAlt: "Designer bedroom with custom wardrobes and feature lighting.",
   },
   {
     slug: "home-renovation",
@@ -47,8 +47,8 @@ export const homeServices: HomeService[] = [
     href: "/home-renovation",
     summary: "Bathrooms, painting, flooring and full-home upgrades.",
     bullets: ["Bathroom & kitchen refresh", "Painting & flooring", "Structural tweaks"],
-    image: "/images/properties/2bhk-house-sale-high-court/1.webp",
-    imageAlt: "Renovated rooms in a Kalaburagi house — upgrade reference photo.",
+    image: "/images/projects/home-renovation-hallway.webp",
+    imageAlt: "Renovated hallway with premium flooring, mouldings and feature lighting.",
   },
 ];
 
