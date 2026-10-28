@@ -31,7 +31,6 @@ export type ProjectPortfolioCardModel = Pick<
   | "statusLabel"
   | "summary"
   | "coverImage"
-  | "isExample"
   | "category"
   | "locality"
 >;
@@ -44,7 +43,6 @@ function toCardModel(project: PortfolioProject): ProjectPortfolioCardModel {
     statusLabel: project.statusLabel,
     summary: project.summary,
     coverImage: project.coverImage,
-    isExample: project.isExample,
     category: project.category,
     locality: project.locality,
   };
@@ -79,11 +77,7 @@ export function ProjectPortfolioShowcase({
   if (!models.length) {
     return (
       <div className="rounded-3xl border border-brand-100 bg-white p-8 text-center text-sm text-ink-muted">
-        No projects published yet. Add your first project in{" "}
-        <Link href="/admin/index.html" className="font-semibold text-brand-600">
-          admin
-        </Link>
-        .
+        No projects published yet.
       </div>
     );
   }

@@ -8,7 +8,7 @@ export type HomeService = {
   href: string;
   summary: string;
   bullets: string[];
-  /** Representative photo from GulbargaHomes listings or site media — not a project guarantee. */
+  /** Project photograph from GulbargaHomes portfolio. */
   image: string;
   imageAlt: string;
 };
@@ -20,8 +20,8 @@ export const homeServices: HomeService[] = [
     href: "/house-construction",
     summary: "New homes, turnkey builds and structural work across Kalaburagi.",
     bullets: ["Independent houses & villas", "RCC structure & finishing", "Plot-to-home coordination"],
-    image: "/images/properties/house-sale-high-court/cover.webp",
-    imageAlt: "Independent house in a Gulbarga locality — example of residential construction.",
+    image: "/images/projects/real/house-construction-scaffold-workers.webp",
+    imageAlt: "Multi-storey home under construction with scaffolding — Kalaburagi site work.",
   },
   {
     slug: "modular-kitchens",
@@ -29,8 +29,8 @@ export const homeServices: HomeService[] = [
     href: "/modular-kitchens",
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
-    image: "/images/properties/1bhk-house-rent-biddapur-colony/2.webp",
-    imageAlt: "Kitchen and dining area in a Kalaburagi home — layout reference photo.",
+    image: "/images/projects/real/renovation-built-in-shelves.webp",
+    imageAlt: "Built-in shelving and storage — GulbargaHomes project photo.",
   },
   {
     slug: "interior-design",
@@ -38,8 +38,8 @@ export const homeServices: HomeService[] = [
     href: "/interior-design",
     summary: "Living rooms, bedrooms, wardrobes and complete home interiors.",
     bullets: ["Room-wise design", "Wardrobes & TV units", "Lighting & finishes"],
-    image: "/images/properties/1bhk-house-rent-biddapur-colony/3.webp",
-    imageAlt: "Furnished living space in Gulbarga — interior styling reference.",
+    image: "/images/projects/real/renovation-wardrobe-detail.webp",
+    imageAlt: "Custom wardrobe and interior carpentry — GulbargaHomes project photo.",
   },
   {
     slug: "home-renovation",
@@ -47,8 +47,8 @@ export const homeServices: HomeService[] = [
     href: "/home-renovation",
     summary: "Bathrooms, painting, flooring and full-home upgrades.",
     bullets: ["Bathroom & kitchen refresh", "Painting & flooring", "Structural tweaks"],
-    image: "/images/properties/2bhk-house-sale-high-court/1.webp",
-    imageAlt: "Renovated rooms in a Kalaburagi house — upgrade reference photo.",
+    image: "/images/projects/real/renovation-cabinet-install.webp",
+    imageAlt: "Built-in cabinetry and shelving installation on site in Kalaburagi.",
   },
 ];
 

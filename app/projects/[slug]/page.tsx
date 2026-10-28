@@ -58,12 +58,6 @@ export default function ProjectDetailPage({ params }: Props) {
         ) : null}
       </div>
 
-      {project.isExample && (
-        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          {project.disclaimer}
-        </p>
-      )}
-
       {project.summary && (
         <p className="mt-6 text-lg leading-relaxed text-ink">{project.summary}</p>
       )}

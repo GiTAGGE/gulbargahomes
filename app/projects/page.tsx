@@ -23,12 +23,8 @@ export default function ProjectsIndexPage() {
       </Link>
       <h1 className="mt-6 text-3xl font-bold text-ink sm:text-4xl">Project portfolio</h1>
       <p className="mt-3 max-w-2xl text-ink-muted">
-        Browse completed homes, ongoing construction and upcoming renovation work across Kalaburagi.
-        Add or edit projects in{" "}
-        <Link href="/admin/index.html" className="font-semibold text-brand-600">
-          admin
-        </Link>
-        .
+        Browse completed homes, ongoing construction and renovation work across Gulbarga and
+        Kalaburagi — real site photographs and clear project status on every story.
       </p>
 
       <div className="mt-10">
