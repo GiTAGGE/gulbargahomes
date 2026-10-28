@@ -3,201 +3,202 @@ import Link from "next/link";
 
 import { getLocalities } from "@/lib/properties";
 import { heroBlurDataUrl } from "@/lib/hero-blur";
+import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
 
 import { SearchBar } from "@/components/search-bar";
 import {
+  ArrowIcon,
   BuildingIcon,
   HandshakeIcon,
   HomeIcon,
-  PinIcon,
   PlotIcon,
+  WhatsAppIcon,
 } from "@/components/icons";
 
-const heroCategories = [
+const quickLinks = [
   { label: "Rent", href: "/properties?listing=Rent", Icon: HomeIcon },
   { label: "Buy", href: "/properties?listing=Sale", Icon: HandshakeIcon },
-  { label: "Houses", href: "/houses-for-rent-in-gulbarga", Icon: PinIcon },
-  { label: "Flats", href: "/flats-for-rent-in-kalaburagi", Icon: BuildingIcon },
   { label: "Plots", href: "/plots-for-sale-in-gulbarga", Icon: PlotIcon },
+  { label: "Build", href: "/#build-renovate", Icon: BuildingIcon },
 ];
+
+const heroFindImage = {
+  src: "/images/properties/house-sale-high-court/cover.webp",
+  alt: "Independent home for sale near High Court, Gulbarga (Kalaburagi).",
+};
+
+const heroBuildImage = {
+  src: "/images/properties/30x50-plot-sale-sai-nagar/cover.webp",
+  alt: "Residential plot in Sai Nagar, Kalaburagi — starting point for a new build.",
+};
 
 export function HomeHero() {
   const localities = getLocalities();
-  const popularLocalities = localities.slice(0, 4);
+  const popularLocalities = localities.slice(0, 3);
+  const buildWa = whatsAppHref(serviceWhatsAppMessage("home construction or renovation"));
 
   return (
-    <section className="relative isolate overflow-hidden bg-[#123d32]">
-      <div className="relative flex h-[calc(100svh-3.5rem)] flex-col sm:h-[calc(100svh-4rem)] lg:h-auto lg:min-h-[36rem] xl:min-h-[38rem]">
-        <Image
-          src="/images/hero/scene-mobile.webp"
-          alt="Residential street and the historic fort in Gulbarga (Kalaburagi)."
-          fill
-          priority
-          sizes="100vw"
-          placeholder="blur"
-          blurDataURL={heroBlurDataUrl}
-          className="object-cover object-[left_center] sm:hidden"
-        />
-        <Image
-          src="/images/hero/scene-desktop.webp"
-          alt="Residential street and the historic fort in Gulbarga (Kalaburagi)."
-          fill
-          priority
-          sizes="100vw"
-          placeholder="blur"
-          blurDataURL={heroBlurDataUrl}
-          className="hidden object-cover object-[28%_center] sm:block"
-        />
+    <section className="relative isolate overflow-hidden bg-[#081f1a]">
+      <div className="relative min-h-[calc(100svh-3.5rem)] sm:min-h-[calc(100svh-4rem)] lg:min-h-[44rem]">
+        {/* Meaningful dual imagery: listings (home) + plot-to-build */}
+        <div className="absolute inset-0 grid grid-cols-1 lg:grid-cols-2">
+          <div className="relative min-h-[38vh] lg:min-h-0">
+            <Image
+              src={heroFindImage.src}
+              alt={heroFindImage.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              placeholder="blur"
+              blurDataURL={heroBlurDataUrl}
+              className="object-cover object-center"
+            />
+            <span className="absolute left-4 top-4 rounded-full bg-ink/55 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white backdrop-blur-sm sm:left-6 sm:top-6">
+              Find a home
+            </span>
+          </div>
+          <div className="relative min-h-[32vh] lg:min-h-0">
+            <Image
+              src={heroBuildImage.src}
+              alt={heroBuildImage.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              placeholder="blur"
+              blurDataURL={heroBlurDataUrl}
+              className="object-cover object-center"
+            />
+            <span className="absolute right-4 top-4 rounded-full bg-[#2a4a3e]/80 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#e8d5b5] backdrop-blur-sm sm:right-6 sm:top-6">
+              Build on your plot
+            </span>
+          </div>
+        </div>
 
-        {/* Mobile: green atmosphere over the photograph so type and form read on one screen. */}
-        <div className="absolute inset-0 bg-[#123d32]/55 lg:hidden" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0e3329]/30 via-[#123d32]/50 to-[#0c2b24]/90 lg:hidden" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a241e]/88 via-[#0c2b24]/82 to-[#081f1a]/94 lg:bg-gradient-to-r lg:from-[#0a241e]/92 lg:via-[#0c2b24]/78 lg:to-[#0a241e]/88" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(255,255,255,0.14),transparent_50%)]" />
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#c4a574]/50 to-transparent lg:block" />
+        <HeroPattern />
 
-        {/* Desktop: light wash only on the scenic side. */}
-        <div className="absolute inset-0 hidden bg-gradient-to-r from-white/94 via-white/55 to-transparent lg:block lg:w-[58%]" />
+        <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end gap-6 px-4 pb-24 pt-8 sm:px-6 sm:pb-28 lg:justify-center lg:pb-16 lg:pt-12">
+          <div className="max-w-3xl">
+            <p className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">
+              <span className="h-px w-8 bg-[#c4a574]/70" aria-hidden />
+              Gulbarga · Kalaburagi
+            </p>
+            <h1 className="mt-3 text-[2rem] font-semibold leading-[1.06] tracking-tight text-white sm:text-5xl lg:text-[3.35rem]">
+              Find It. Build It.{" "}
+              <span className="block font-extrabold text-[#d4efe4]">Make It Home.</span>
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
+              Your property and home-improvement platform for Kalaburagi — search live listings
+              or plan construction, interiors and renovation with one local team.
+            </p>
+          </div>
 
-        <HeroGreenSlash />
-        <HeroLeaves />
-        <HeroSkyline />
+          <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:max-w-4xl">
+            <Link
+              href="/properties"
+              className="group relative overflow-hidden rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-md transition hover:border-white/30 hover:bg-white/15 sm:p-6"
+            >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-500/20 blur-2xl" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#b8dcc9]">
+                Property
+              </p>
+              <p className="mt-2 text-xl font-bold text-white sm:text-2xl">Find a home or plot</p>
+              <p className="mt-2 text-sm text-white/75">
+                Rent, buy, plots and commercial space across Kalaburagi.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-white">
+                Browse listings{" "}
+                <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+              </span>
+            </Link>
 
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-7xl flex-1 flex-col justify-between gap-5 px-4 py-5 pb-[4.75rem] sm:px-6 sm:py-7 sm:pb-[4.75rem] lg:min-h-[36rem] lg:flex-row lg:items-stretch lg:gap-6 lg:py-10 lg:pb-10 xl:min-h-[38rem]">
-          <div className="flex min-h-0 flex-1 flex-col justify-between gap-5 lg:max-w-3xl">
-            <div className="lg:flex lg:items-start lg:justify-between lg:gap-6">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/80 lg:text-[11px] lg:text-brand-700">
-                  Gulbarga · Kalaburagi
-                </p>
-                <h1 className="mt-1.5 max-w-xl text-[1.85rem] font-semibold leading-[1.08] tracking-tight text-white sm:text-4xl lg:mt-2 lg:text-[3.15rem] lg:text-brand-800">
-                  Find Your{" "}
-                  <span className="font-extrabold">Perfect Home</span>
-                  <span className="mt-0.5 block font-medium lg:mt-1">in Gulbarga</span>
-                </h1>
-                <p className="mt-2 max-w-md text-sm font-medium text-white/75 lg:mt-3 lg:text-base lg:text-ink-muted">
-                  Better Homes · Stronger Communities
-                </p>
-              </div>
-
-              <nav
-                aria-label="Property categories"
-                className="mt-5 grid grid-cols-5 gap-1 lg:mt-3 lg:flex lg:shrink-0 lg:gap-3"
-              >
-                {heroCategories.map(({ label, href, Icon }) => (
-                  <Link
-                    key={label}
-                    href={href}
-                    className="group flex flex-col items-center gap-1 lg:rounded-full lg:bg-white/70 lg:px-3 lg:py-2.5 lg:backdrop-blur-sm"
-                  >
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white ring-1 ring-white/25 transition group-hover:bg-white group-hover:text-brand-700 lg:h-12 lg:w-12 lg:bg-white lg:text-brand-700 lg:shadow-soft lg:ring-brand-700/10 lg:group-hover:bg-brand-700 lg:group-hover:text-white">
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="text-[11px] font-semibold text-white lg:text-xs lg:text-brand-800">
-                      {label}
-                    </span>
-                  </Link>
-                ))}
-              </nav>
-            </div>
-
-            <div className="w-full max-w-3xl">
-              <SearchBar localities={localities} variant="overlay" />
-              <div className="mt-3 hidden flex-wrap items-center gap-2 text-xs text-brand-800/80 lg:flex">
-                <span className="font-medium text-brand-700">Popular</span>
-                {popularLocalities.map((locality) => (
-                  <Link
-                    key={locality}
-                    href={`/properties?locality=${encodeURIComponent(locality)}`}
-                    className="rounded-full bg-white/70 px-2.5 py-1 font-medium text-brand-800 ring-1 ring-brand-800/10 backdrop-blur-sm hover:bg-white"
-                  >
-                    {locality}
-                  </Link>
-                ))}
+            <div className="relative overflow-hidden rounded-2xl border border-[#c4a574]/40 bg-gradient-to-br from-[#2a4a3e] to-[#1a3329] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.5)] sm:p-6">
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(196,165,116,0.12),transparent_55%)]" />
+              <p className="relative text-xs font-semibold uppercase tracking-wider text-[#e8d5b5]">
+                Build & renovate
+              </p>
+              <p className="relative mt-2 text-xl font-bold text-white sm:text-2xl">
+                From plot to finished home
+              </p>
+              <p className="relative mt-2 text-sm text-white/75">
+                Construction, kitchens, interiors and full-home upgrades.
+              </p>
+              <div className="relative mt-4 flex flex-wrap gap-2">
+                <Link href="/#build-renovate" className="btn-primary text-xs sm:text-sm">
+                  Explore services
+                </Link>
+                <a
+                  href={buildWa}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/15"
+                >
+                  <WhatsAppIcon className="h-4 w-4" /> Discuss your project
+                </a>
               </div>
             </div>
           </div>
 
-          <aside className="relative hidden w-[min(22rem,34%)] shrink-0 flex-col items-center justify-center text-center text-white lg:flex">
-            <span className="grid h-[4.5rem] w-[4.5rem] place-items-center rounded-[1.35rem] bg-white/12 text-[2.05rem] font-bold tracking-tight ring-1 ring-white/30">
-              G
-            </span>
-            <p className="mt-5 text-[2rem] font-semibold tracking-tight">
-              Gulbarga<span className="font-medium">Homes</span>
+          <div className="flex flex-wrap gap-2">
+            {quickLinks.map(({ label, href, Icon }) => (
+              <Link
+                key={label}
+                href={href}
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-white/15 sm:text-sm"
+              >
+                <Icon className="h-4 w-4 text-[#b8dcc9]" />
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-black/20 p-4 backdrop-blur-md sm:p-5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">
+              Search listings
             </p>
-            <p className="mt-2.5 text-sm font-medium tracking-[0.12em] text-white/80">
-              Rent · Buy · Houses · Flats · Plots
-            </p>
-            <p className="mt-10 max-w-[9.5rem] text-right text-[10px] font-semibold uppercase leading-4 tracking-[0.2em] text-white/45 self-end pr-2">
-              Homes
-              <br />
-              People
-              <br />
-              Community
-              <br />
-              Tomorrow
-            </p>
-            <p className="mt-6 font-serif text-xl italic text-white/40">Gulbarga</p>
-          </aside>
+            <SearchBar localities={localities} variant="overlay" />
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
+              <span className="font-medium text-white/90">Popular</span>
+              {popularLocalities.map((locality) => (
+                <Link
+                  key={locality}
+                  href={`/properties?locality=${encodeURIComponent(locality)}`}
+                  className="rounded-full bg-white/10 px-2.5 py-1 font-medium ring-1 ring-white/10 hover:bg-white/15"
+                >
+                  {locality}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function HeroGreenSlash() {
+function HeroPattern() {
   return (
     <svg
       aria-hidden
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block"
+      className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-[0.07]"
+      viewBox="0 0 400 800"
+      preserveAspectRatio="xMaxYMid slice"
     >
-      {/* Traced from the shared banner: 75% at the top → ~51% at the bottom. */}
+      <defs>
+        <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+      <rect width="400" height="800" fill="url(#hero-grid)" />
       <path
-        d="M75 0 C 73.8 18 72 34 70 42 C 66.8 58 60.5 84 50.8 100 H 100 V 0 Z"
-        fill="#123d32"
+        d="M320 80 L380 200 L340 380 L400 520 L360 720"
+        fill="none"
+        stroke="white"
+        strokeWidth="2"
+        strokeDasharray="8 12"
       />
-      <path
-        d="M78 0 C 76.5 20 74 40 72 50 C 69 68 64 86 56 100 H 100 V 0 Z"
-        fill="#0e3329"
-        opacity="0.35"
-      />
-    </svg>
-  );
-}
-
-function HeroLeaves() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 220 260"
-      className="pointer-events-none absolute right-0 top-0 hidden h-[58%] w-[22%] text-white/[0.14] lg:block"
-    >
-      <g fill="currentColor">
-        <path d="M198 8c-32 22-48 58-38 98 26-10 54-4 74 22-12-46-8-84-36-120Z" />
-        <path d="M156 4c-26 24-30 60-16 94 18-12 40-10 58 8C184 66 178 32 156 4Z" />
-        <path d="M210 88c-34 10-52 40-48 74 22-6 44 8 60 28-2-38 6-70-12-102Z" />
-      </g>
-    </svg>
-  );
-}
-
-function HeroSkyline() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 280 80"
-      className="pointer-events-none absolute bottom-5 left-[52%] hidden w-[14rem] text-white/10 lg:block"
-    >
-      <g fill="currentColor">
-        <rect x="8" y="42" width="18" height="38" rx="1" />
-        <rect x="32" y="28" width="14" height="52" rx="1" />
-        <path d="M64 78V36l16-12 16 12v42Z" />
-        <rect x="118" y="48" width="22" height="32" rx="1" />
-        <path d="M160 78V40c8-18 24-18 32 0v38Z" />
-        <rect x="200" y="34" width="12" height="44" rx="1" />
-        <rect x="218" y="52" width="28" height="26" rx="1" />
-        <circle cx="72" cy="22" r="5" />
-        <rect x="70" y="8" width="4" height="12" />
-      </g>
     </svg>
   );
 }

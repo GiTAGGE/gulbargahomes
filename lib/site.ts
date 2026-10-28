@@ -20,7 +20,7 @@ export const site = {
   cityOfficial: "Kalaburagi",
   cityDisplay: "Gulbarga (Kalaburagi)",
   region: "Karnataka",
-  tagline: "Find Your Perfect Home in Gulbarga",
+  tagline: "Find It. Build It. Make It Home.",
   homeSeoTitle:
     "Houses, Flats & Plots for Rent and Sale in Gulbarga (Kalaburagi)",
   description:
