@@ -29,8 +29,8 @@ export const homeServices: HomeService[] = [
     href: "/modular-kitchens",
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
-    image: "/images/projects/modular-kitchen-main.webp",
-    imageAlt: "Modular kitchen completed by GulbargaHomes — Kalaburagi project photo.",
+    image: "/images/projects/real/renovation-built-in-shelves.webp",
+    imageAlt: "Built-in shelving and storage — GulbargaHomes project photo.",
   },
   {
     slug: "interior-design",

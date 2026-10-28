@@ -73,11 +73,8 @@ function normalizeGallery(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-function defaultDisclaimer(isExample: boolean): string {
-  if (!isExample) {
-    return "Project details and photographs published by GulbargaHomes for Gulbarga / Kalaburagi.";
-  }
-  return "Illustrative example for layout — replace with verified project photos and scope in the admin when ready.";
+function defaultDisclaimer(): string {
+  return "Project details and photographs published by GulbargaHomes for Gulbarga / Kalaburagi.";
 }
 
 function normalizeProject(
@@ -85,7 +82,7 @@ function normalizeProject(
   body: string,
 ): PortfolioProject {
   const status = (data.status as ProjectStatus) ?? "planning";
-  const isExample = data.isExample === true;
+  const isExample = false;
   const name = String(data.name ?? data.title ?? "Untitled project");
 
   return {
@@ -106,7 +103,7 @@ function normalizeProject(
     gallery: normalizeGallery(data.gallery),
     featured: Boolean(data.featured),
     isExample,
-    disclaimer: String(data.disclaimer ?? defaultDisclaimer(isExample)),
+    disclaimer: String(data.disclaimer ?? defaultDisclaimer()),
     body: body.trim(),
   };
 }
