@@ -137,3 +137,95 @@ collections:
           - { name: "question", label: "Question", widget: "string" }
           - { name: "answer", label: "Answer", widget: "text" }
       - { name: "mapQuery", label: "Map Query", widget: "string", hint: "e.g. Sedam Road, Kalaburagi, Karnataka" }
+
+  - name: "projects"
+    label: "Projects"
+    label_singular: "Project"
+    folder: "content/projects"
+    create: true
+    slug: "{{slug}}"
+    extension: "mdx"
+    format: "frontmatter"
+    summary: "{{name}} — {{status}} · {{locality}}"
+    media_folder: "public/images/projects"
+    public_folder: "/images/projects"
+    fields:
+      - { name: "slug", label: "Slug", widget: "string", hint: "URL: /projects/your-slug" }
+      - { name: "name", label: "Project name", widget: "string" }
+      - {
+          name: "category",
+          label: "Category",
+          widget: "select",
+          options:
+            [
+              "House construction",
+              "Residential construction",
+              "Modular kitchen",
+              "Interior design",
+              "Home renovation",
+              "Design & planning",
+              "Other",
+            ],
+        }
+      - {
+          name: "status",
+          label: "Status",
+          widget: "select",
+          default: "ongoing",
+          options: ["completed", "ongoing", "upcoming", "planning"],
+        }
+      - {
+          name: "statusLabel",
+          label: "Status label (optional)",
+          widget: "string",
+          required: false,
+          hint: "Leave blank to use Completed / Ongoing / etc. automatically.",
+        }
+      - {
+          name: "locality",
+          label: "Locality",
+          widget: "string",
+          hint: "Kalaburagi area — e.g. Sai Nagar, High Court, Biddapur Colony.",
+        }
+      - { name: "city", label: "City", widget: "string", default: "Gulbarga" }
+      - {
+          name: "summary",
+          label: "Short summary",
+          widget: "text",
+          hint: "Shown on homepage portfolio card and search.",
+        }
+      - {
+          name: "constructionStage",
+          label: "Construction stage",
+          widget: "string",
+          required: false,
+          hint: "For ongoing builds — e.g. Masonry, Slab, Finishing.",
+        }
+      - { name: "builtUpArea", label: "Built-up area", widget: "string", required: false }
+      - { name: "scope", label: "Scope", widget: "text", required: false }
+      - { name: "startedAt", label: "Start date", widget: "datetime", required: false }
+      - { name: "completedAt", label: "Completion date", widget: "datetime", required: false }
+      - { name: "featured", label: "Featured on homepage", widget: "boolean", default: false }
+      - {
+          name: "isExample",
+          label: "Illustrative example",
+          widget: "boolean",
+          default: false,
+          hint: "Show disclaimer banner until this is a verified GulbargaHomes project.",
+        }
+      - { name: "coverImage", label: "Cover image", widget: "image" }
+      - {
+          name: "gallery",
+          label: "Gallery",
+          widget: "list",
+          required: false,
+          field: { name: "image", label: "Image", widget: "image" },
+        }
+      - { name: "body", label: "Project story", widget: "markdown" }
+      - {
+          name: "disclaimer",
+          label: "Disclaimer (optional)",
+          widget: "text",
+          required: false,
+          hint: "Override the default example disclaimer when needed.",
+        }

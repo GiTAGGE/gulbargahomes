@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { getLocationPages } from "@/lib/locations";
 import { clearPropertyCache } from "@/lib/properties";
+import { clearProjectCache } from "@/lib/projects";
 
 function secretsMatch(provided: string | null, expected: string): boolean {
   if (!provided) return false;
@@ -29,8 +30,13 @@ export async function POST(request: Request) {
   }
 
   clearPropertyCache();
+  clearProjectCache();
 
   revalidatePath("/", "layout");
+  revalidatePath("/projects");
+  revalidatePath("/projects/[slug]", "page");
+  revalidatePath("/projects/completed");
+  revalidatePath("/projects/ongoing");
   revalidatePath("/properties");
   revalidatePath("/properties/[slug]", "page");
   revalidatePath("/[location]", "page");
