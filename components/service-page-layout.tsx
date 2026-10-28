@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
@@ -32,6 +33,17 @@ export function ServicePageLayout({ service }: { service: HomeService }) {
         {service.title}
       </h1>
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">{service.summary}</p>
+
+      <div className="relative mt-8 aspect-[16/10] overflow-hidden rounded-2xl bg-brand-50">
+        <Image
+          src={service.image}
+          alt={service.imageAlt}
+          fill
+          className="object-cover"
+          sizes="(max-width: 768px) 100vw, 768px"
+          priority
+        />
+      </div>
 
       <ul className="mt-8 space-y-3">
         {service.bullets.map((bullet) => (
