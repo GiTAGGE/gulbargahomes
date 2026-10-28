@@ -206,10 +206,10 @@ collections:
       - { name: "featured", label: "Featured on homepage", widget: "boolean", default: false }
       - {
           name: "isExample",
-          label: "Illustrative example",
+          label: "Layout placeholder only",
           widget: "boolean",
           default: false,
-          hint: "Show disclaimer banner until this is a verified GulbargaHomes project.",
+          hint: "Leave off for real GulbargaHomes projects. Turn on only for temporary demo entries.",
         }
       - { name: "coverImage", label: "Cover image", widget: "image" }
       - {

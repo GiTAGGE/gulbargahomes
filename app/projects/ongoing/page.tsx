@@ -5,14 +5,14 @@ import { ProjectListPage } from "@/components/project-list-page";
 export const metadata: Metadata = {
   title: "Ongoing projects",
   description:
-    "Example in-progress construction updates for GulbargaHomes — Kalaburagi site progress.",
+    "In-progress construction and renovation sites in Gulbarga (Kalaburagi) — dated updates and site photos.",
 };
 
 export default function OngoingProjectsPage() {
   return (
     <ProjectListPage
       title="Ongoing projects"
-      intro="Current construction stage, dated updates and recent site photos — replace examples with live projects."
+      intro="Current construction stage, dated updates and recent site photographs from active GulbargaHomes projects."
       status="ongoing"
     />
   );

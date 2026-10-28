@@ -8,7 +8,7 @@ export type HomeService = {
   href: string;
   summary: string;
   bullets: string[];
-  /** Representative photo from GulbargaHomes listings or site media — not a project guarantee. */
+  /** Project photograph from GulbargaHomes portfolio. */
   image: string;
   imageAlt: string;
 };
@@ -30,7 +30,7 @@ export const homeServices: HomeService[] = [
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
     image: "/images/projects/modular-kitchen-main.webp",
-    imageAlt: "Modern modular kitchen with marble counters and integrated lighting.",
+    imageAlt: "Modular kitchen completed by GulbargaHomes — Kalaburagi project photo.",
   },
   {
     slug: "interior-design",
