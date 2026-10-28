@@ -1,5 +1,4 @@
 export type ProjectMetaFields = {
-  isExample: boolean;
   locality: string;
   category: string;
 };
@@ -10,9 +9,6 @@ export function projectMetaLine(project: ProjectMetaFields): string {
     project.locality.toLowerCase().includes("gulbarga")
       ? project.locality
       : `${project.locality}, Kalaburagi`;
-  if (project.isExample) {
-    return `Example project · ${place} · ${project.category}`;
-  }
   return `${place} · ${project.category}`;
 }
 

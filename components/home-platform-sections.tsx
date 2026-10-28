@@ -106,12 +106,8 @@ export function HomeProjectsShowcase() {
               Real projects. Visible progress.
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted sm:text-base">
-              Finished homes, work in progress and renovations across Kalaburagi. Manage projects
-              in{" "}
-              <Link href="/admin/index.html" className="font-semibold text-brand-600">
-                admin
-              </Link>{" "}
-              — add photos, status and site updates anytime.
+              Finished homes, work in progress and renovations across Gulbarga and Kalaburagi — with
+              site photos and honest status on every story.
             </p>
           </div>
           <Link
