@@ -22,42 +22,67 @@ const quickLinks = [
   { label: "Build", href: "/#build-renovate", Icon: BuildingIcon },
 ];
 
+const heroFindImage = {
+  src: "/images/properties/house-sale-high-court/cover.webp",
+  alt: "Independent home for sale near High Court, Gulbarga (Kalaburagi).",
+};
+
+const heroBuildImage = {
+  src: "/images/properties/30x50-plot-sale-sai-nagar/cover.webp",
+  alt: "Residential plot in Sai Nagar, Kalaburagi — starting point for a new build.",
+};
+
 export function HomeHero() {
   const localities = getLocalities();
   const popularLocalities = localities.slice(0, 3);
   const buildWa = whatsAppHref(serviceWhatsAppMessage("home construction or renovation"));
 
   return (
-    <section className="relative isolate overflow-hidden bg-[#0c2b24]">
-      <div className="relative min-h-[calc(100svh-3.5rem)] sm:min-h-[calc(100svh-4rem)] lg:min-h-[42rem]">
-        <Image
-          src="/images/hero/scene-mobile.webp"
-          alt="Homes and neighbourhoods in Gulbarga (Kalaburagi)."
-          fill
-          priority
-          sizes="100vw"
-          placeholder="blur"
-          blurDataURL={heroBlurDataUrl}
-          className="object-cover object-[center_30%] sm:hidden"
-        />
-        <Image
-          src="/images/hero/scene-desktop.webp"
-          alt="Homes and neighbourhoods in Gulbarga (Kalaburagi)."
-          fill
-          priority
-          sizes="100vw"
-          placeholder="blur"
-          blurDataURL={heroBlurDataUrl}
-          className="hidden object-cover object-[30%_center] sm:block"
-        />
+    <section className="relative isolate overflow-hidden bg-[#081f1a]">
+      <div className="relative min-h-[calc(100svh-3.5rem)] sm:min-h-[calc(100svh-4rem)] lg:min-h-[44rem]">
+        {/* Meaningful dual imagery: listings (home) + plot-to-build */}
+        <div className="absolute inset-0 grid grid-cols-1 lg:grid-cols-2">
+          <div className="relative min-h-[38vh] lg:min-h-0">
+            <Image
+              src={heroFindImage.src}
+              alt={heroFindImage.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              placeholder="blur"
+              blurDataURL={heroBlurDataUrl}
+              className="object-cover object-center"
+            />
+            <span className="absolute left-4 top-4 rounded-full bg-ink/55 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white backdrop-blur-sm sm:left-6 sm:top-6">
+              Find a home
+            </span>
+          </div>
+          <div className="relative min-h-[32vh] lg:min-h-0">
+            <Image
+              src={heroBuildImage.src}
+              alt={heroBuildImage.alt}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              placeholder="blur"
+              blurDataURL={heroBlurDataUrl}
+              className="object-cover object-center"
+            />
+            <span className="absolute right-4 top-4 rounded-full bg-[#2a4a3e]/80 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#e8d5b5] backdrop-blur-sm sm:right-6 sm:top-6">
+              Build on your plot
+            </span>
+          </div>
+        </div>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a241e]/85 via-[#0c2b24]/78 to-[#081f1a]/92" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(255,255,255,0.12),transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a241e]/88 via-[#0c2b24]/82 to-[#081f1a]/94 lg:bg-gradient-to-r lg:from-[#0a241e]/92 lg:via-[#0c2b24]/78 lg:to-[#0a241e]/88" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(255,255,255,0.14),transparent_50%)]" />
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#c4a574]/50 to-transparent lg:block" />
         <HeroPattern />
 
         <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end gap-6 px-4 pb-24 pt-8 sm:px-6 sm:pb-28 lg:justify-center lg:pb-16 lg:pt-12">
           <div className="max-w-3xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">
+            <p className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">
+              <span className="h-px w-8 bg-[#c4a574]/70" aria-hidden />
               Gulbarga · Kalaburagi
             </p>
             <h1 className="mt-3 text-[2rem] font-semibold leading-[1.06] tracking-tight text-white sm:text-5xl lg:text-[3.35rem]">
@@ -65,8 +90,8 @@ export function HomeHero() {
               <span className="block font-extrabold text-[#d4efe4]">Make It Home.</span>
             </h1>
             <p className="mt-4 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-              Your property and home-improvement platform for Kalaburagi — search verified
-              listings or plan construction, interiors and renovation with one local team.
+              Your property and home-improvement platform for Kalaburagi — search live listings
+              or plan construction, interiors and renovation with one local team.
             </p>
           </div>
 
@@ -75,6 +100,7 @@ export function HomeHero() {
               href="/properties"
               className="group relative overflow-hidden rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-md transition hover:border-white/30 hover:bg-white/15 sm:p-6"
             >
+              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-500/20 blur-2xl" />
               <p className="text-xs font-semibold uppercase tracking-wider text-[#b8dcc9]">
                 Property
               </p>
@@ -83,21 +109,23 @@ export function HomeHero() {
                 Rent, buy, plots and commercial space across Kalaburagi.
               </p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-white">
-                Browse listings <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                Browse listings{" "}
+                <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
               </span>
             </Link>
 
-            <div className="relative overflow-hidden rounded-2xl border border-[#c4a574]/40 bg-gradient-to-br from-[#2a4a3e] to-[#1a3329] p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#e8d5b5]">
+            <div className="relative overflow-hidden rounded-2xl border border-[#c4a574]/40 bg-gradient-to-br from-[#2a4a3e] to-[#1a3329] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.5)] sm:p-6">
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(196,165,116,0.12),transparent_55%)]" />
+              <p className="relative text-xs font-semibold uppercase tracking-wider text-[#e8d5b5]">
                 Build & renovate
               </p>
-              <p className="mt-2 text-xl font-bold text-white sm:text-2xl">
+              <p className="relative mt-2 text-xl font-bold text-white sm:text-2xl">
                 From plot to finished home
               </p>
-              <p className="mt-2 text-sm text-white/75">
+              <p className="relative mt-2 text-sm text-white/75">
                 Construction, kitchens, interiors and full-home upgrades.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="relative mt-4 flex flex-wrap gap-2">
                 <Link href="/#build-renovate" className="btn-primary text-xs sm:text-sm">
                   Explore services
                 </Link>
@@ -126,7 +154,7 @@ export function HomeHero() {
             ))}
           </div>
 
-          <div className="w-full max-w-3xl">
+          <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-black/20 p-4 backdrop-blur-md sm:p-5">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">
               Search listings
             </p>

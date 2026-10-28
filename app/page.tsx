@@ -125,7 +125,7 @@ export default function HomePage() {
       <JsonLd data={faqSchema(homeFaqs)} />
       <HomeHero />
 
-      <section className="border-b border-brand-100 bg-white">
+      <section className="border-b border-brand-100 bg-gradient-to-b from-white to-surface/80">
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-px bg-brand-100 sm:grid-cols-4">
           {[
             { value: `${allProperties.length}`, label: "Live listings" },
@@ -146,10 +146,23 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
-        <h2 className="text-xl font-bold text-ink sm:text-2xl">Browse by category</h2>
-        <p className="mt-1 text-sm text-ink-muted">
-          Rentals, house sales and residential plots across Gulbarga and Kalaburagi.
-        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+              Property search
+            </p>
+            <h2 className="mt-1 text-xl font-bold text-ink sm:text-2xl">Browse by category</h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              Rentals, house sales and residential plots across Gulbarga and Kalaburagi.
+            </p>
+          </div>
+          <Link
+            href="/properties"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            All listings <ArrowIcon className="h-4 w-4" />
+          </Link>
+        </div>
         <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:grid-cols-4 sm:gap-3">
           {categories.map((category) => (
             <Link

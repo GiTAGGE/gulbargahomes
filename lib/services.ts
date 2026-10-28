@@ -8,6 +8,9 @@ export type HomeService = {
   href: string;
   summary: string;
   bullets: string[];
+  /** Representative photo from GulbargaHomes listings or site media — not a project guarantee. */
+  image: string;
+  imageAlt: string;
 };
 
 export type ShowcaseProject = {
@@ -29,6 +32,8 @@ export const homeServices: HomeService[] = [
     href: "/house-construction",
     summary: "New homes, turnkey builds and structural work across Kalaburagi.",
     bullets: ["Independent houses & villas", "RCC structure & finishing", "Plot-to-home coordination"],
+    image: "/images/properties/house-sale-high-court/cover.webp",
+    imageAlt: "Independent house in a Gulbarga locality — example of residential construction.",
   },
   {
     slug: "modular-kitchens",
@@ -36,6 +41,8 @@ export const homeServices: HomeService[] = [
     href: "/modular-kitchens",
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
+    image: "/images/properties/1bhk-house-rent-biddapur-colony/2.webp",
+    imageAlt: "Kitchen and dining area in a Kalaburagi home — layout reference photo.",
   },
   {
     slug: "interior-design",
@@ -43,6 +50,8 @@ export const homeServices: HomeService[] = [
     href: "/interior-design",
     summary: "Living rooms, bedrooms, wardrobes and complete home interiors.",
     bullets: ["Room-wise design", "Wardrobes & TV units", "Lighting & finishes"],
+    image: "/images/properties/1bhk-house-rent-biddapur-colony/3.webp",
+    imageAlt: "Furnished living space in Gulbarga — interior styling reference.",
   },
   {
     slug: "home-renovation",
@@ -50,6 +59,8 @@ export const homeServices: HomeService[] = [
     href: "/home-renovation",
     summary: "Bathrooms, painting, flooring and full-home upgrades.",
     bullets: ["Bathroom & kitchen refresh", "Painting & flooring", "Structural tweaks"],
+    image: "/images/properties/2bhk-house-sale-high-court/1.webp",
+    imageAlt: "Renovated rooms in a Kalaburagi house — upgrade reference photo.",
   },
 ];
 
