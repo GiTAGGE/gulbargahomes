@@ -85,7 +85,7 @@ function normalizeProject(
   body: string,
 ): PortfolioProject {
   const status = (data.status as ProjectStatus) ?? "planning";
-  const isExample = data.isExample !== false;
+  const isExample = data.isExample === true;
   const name = String(data.name ?? data.title ?? "Untitled project");
 
   return {
