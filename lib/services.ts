@@ -20,8 +20,8 @@ export const homeServices: HomeService[] = [
     href: "/house-construction",
     summary: "New homes, turnkey builds and structural work across Kalaburagi.",
     bullets: ["Independent houses & villas", "RCC structure & finishing", "Plot-to-home coordination"],
-    image: "/images/projects/house-construction-living.webp",
-    imageAlt: "Premium living room interior — reference finish for turnkey home construction.",
+    image: "/images/projects/real/house-construction-scaffold-workers.webp",
+    imageAlt: "Multi-storey home under construction with scaffolding — Kalaburagi site work.",
   },
   {
     slug: "modular-kitchens",
@@ -38,8 +38,8 @@ export const homeServices: HomeService[] = [
     href: "/interior-design",
     summary: "Living rooms, bedrooms, wardrobes and complete home interiors.",
     bullets: ["Room-wise design", "Wardrobes & TV units", "Lighting & finishes"],
-    image: "/images/projects/interior-design-bedroom.webp",
-    imageAlt: "Designer bedroom with custom wardrobes and feature lighting.",
+    image: "/images/projects/real/renovation-wardrobe-detail.webp",
+    imageAlt: "Custom wardrobe and interior carpentry — GulbargaHomes project photo.",
   },
   {
     slug: "home-renovation",
@@ -47,8 +47,8 @@ export const homeServices: HomeService[] = [
     href: "/home-renovation",
     summary: "Bathrooms, painting, flooring and full-home upgrades.",
     bullets: ["Bathroom & kitchen refresh", "Painting & flooring", "Structural tweaks"],
-    image: "/images/projects/home-renovation-hallway.webp",
-    imageAlt: "Renovated hallway with premium flooring, mouldings and feature lighting.",
+    image: "/images/projects/real/renovation-cabinet-install.webp",
+    imageAlt: "Built-in cabinetry and shelving installation on site in Kalaburagi.",
   },
 ];
 
