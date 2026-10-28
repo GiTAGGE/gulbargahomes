@@ -5,10 +5,11 @@ import {
   homeServices,
   processSteps,
   serviceWhatsAppMessage,
-  showcaseProjects,
   whatsAppHref,
 } from "@/lib/services";
+import { getAllProjects } from "@/lib/projects";
 
+import { ProjectPortfolioShowcase } from "./project-portfolio";
 import { ArrowIcon, WhatsAppIcon } from "./icons";
 
 export function HomeBuildRenovateSection() {
@@ -36,7 +37,7 @@ export function HomeBuildRenovateSection() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Link
-              href="/projects/completed"
+              href="/projects"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10"
             >
               View projects <ArrowIcon className="h-4 w-4" />
@@ -91,15 +92,12 @@ export function HomeBuildRenovateSection() {
 }
 
 export function HomeProjectsShowcase() {
-  const completed = showcaseProjects.filter((p) => p.status === "completed");
-  const ongoing = showcaseProjects.filter((p) => p.status === "ongoing");
-  const featured = showcaseProjects[0];
+  const projects = getAllProjects();
 
   return (
-    <section className="relative overflow-hidden bg-surface">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_80%_0%,rgba(31,101,80,0.08),transparent_55%)]" />
+    <section className="relative overflow-hidden bg-[#f6f3ec]">
       <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
               Project portfolio
@@ -108,152 +106,27 @@ export function HomeProjectsShowcase() {
               Real projects. Visible progress.
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted sm:text-base">
-              Explore finished homes, work in progress and transformations across Kalaburagi.
-              Replace example cards with verified stories, dates and site photos as your library
-              grows.
+              Finished homes, work in progress and renovations across Kalaburagi. Manage projects
+              in{" "}
+              <Link href="/admin/index.html" className="font-semibold text-brand-600">
+                admin
+              </Link>{" "}
+              — add photos, status and site updates anytime.
             </p>
           </div>
           <Link
-            href="/projects/completed"
+            href="/projects"
             className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
           >
-            All projects <ArrowIcon className="h-4 w-4" />
+            Full portfolio <ArrowIcon className="h-4 w-4" />
           </Link>
         </div>
 
-        {featured && (
-          <Link
-            href={`/projects/${featured.slug}`}
-            className="group mt-8 grid overflow-hidden rounded-3xl border border-brand-100 bg-white shadow-soft transition hover:shadow-lift lg:grid-cols-5"
-          >
-            <div className="relative min-h-[220px] lg:col-span-3 lg:min-h-[280px]">
-              <Image
-                src={featured.image}
-                alt=""
-                fill
-                className="object-cover transition duration-500 group-hover:scale-[1.02]"
-                sizes="(max-width: 1024px) 100vw, 60vw"
-                priority={false}
-              />
-              <span className="absolute left-4 top-4 rounded-full bg-brand-700 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-                Featured · {featured.statusLabel}
-              </span>
-            </div>
-            <div className="flex flex-col justify-center p-6 lg:col-span-2 lg:p-8">
-              <p className="text-xs font-semibold uppercase tracking-wider text-ink-faint">
-                {featured.category}
-              </p>
-              <p className="mt-2 text-xl font-bold text-ink sm:text-2xl">{featured.name}</p>
-              <p className="mt-2 text-sm text-ink-muted">{featured.locality}</p>
-              <p className="mt-4 text-sm leading-relaxed text-ink-muted">{featured.stageNote}</p>
-              <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
-                View project story{" "}
-                <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-              </span>
-            </div>
-          </Link>
-        )}
-
-        <div className="mt-8 grid gap-8 lg:grid-cols-2">
-          <ProjectColumn
-            title="Completed"
-            subtitle="Finished homes, interiors and renovations — before and after where available"
-            href="/projects/completed"
-            projects={completed.slice(1)}
-          />
-          <ProjectColumn
-            title="Ongoing"
-            subtitle="Current construction stage, dated updates and recent site photos"
-            href="/projects/ongoing"
-            projects={ongoing}
-          />
+        <div className="mt-8">
+          <ProjectPortfolioShowcase projects={projects} />
         </div>
-
-        <p className="mt-8 rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-950 sm:text-sm">
-          <strong>Note:</strong> Photos marked as examples illustrate layout only until your
-          verified project library is published. Status labels will reflect real project state.
-        </p>
       </div>
     </section>
-  );
-}
-
-function ProjectColumn({
-  title,
-  subtitle,
-  href,
-  projects,
-}: {
-  title: string;
-  subtitle: string;
-  href: string;
-  projects: typeof showcaseProjects;
-}) {
-  if (!projects.length) {
-    return (
-      <div>
-        <ColumnHeader title={title} subtitle={subtitle} href={href} />
-        <p className="mt-4 text-sm text-ink-muted">More projects coming soon.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ColumnHeader title={title} subtitle={subtitle} href={href} />
-      <ul className="mt-4 space-y-4">
-        {projects.map((project) => (
-          <li key={project.slug}>
-            <Link
-              href={`/projects/${project.slug}`}
-              className="card flex gap-4 overflow-hidden p-0 sm:gap-5"
-            >
-              <div className="relative h-28 w-32 shrink-0 sm:h-32 sm:w-40">
-                <Image
-                  src={project.image}
-                  alt=""
-                  fill
-                  className="object-cover"
-                  sizes="160px"
-                />
-                <span className="absolute left-2 top-2 rounded-full bg-ink/75 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                  {project.statusLabel}
-                </span>
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col justify-center py-3 pr-4">
-                <p className="font-bold text-ink">{project.name}</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {project.category} · {project.locality}
-                </p>
-                <p className="mt-2 line-clamp-2 text-sm text-ink-muted">{project.stageNote}</p>
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ColumnHeader({
-  title,
-  subtitle,
-  href,
-}: {
-  title: string;
-  subtitle: string;
-  href: string;
-}) {
-  return (
-    <div className="flex items-end justify-between gap-4">
-      <div>
-        <h3 className="text-lg font-bold text-ink">{title}</h3>
-        <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>
-      </div>
-      <Link href={href} className="text-sm font-semibold text-brand-600 hover:text-brand-700">
-        View all
-      </Link>
-    </div>
   );
 }
 

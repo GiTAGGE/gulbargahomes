@@ -24,6 +24,7 @@ const buildLinks = [
 ];
 
 const projectLinks = [
+  { href: "/projects", label: "Projects" },
   { href: "/projects/completed", label: "Completed" },
   { href: "/projects/ongoing", label: "Ongoing" },
 ];

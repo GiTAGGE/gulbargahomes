@@ -1,6 +1,6 @@
 import { site } from "./site";
 
-export type ProjectStatus = "completed" | "ongoing" | "planning";
+export type { ProjectStatus } from "./project-meta";
 
 export type HomeService = {
   slug: string;
@@ -11,18 +11,6 @@ export type HomeService = {
   /** Representative photo from GulbargaHomes listings or site media — not a project guarantee. */
   image: string;
   imageAlt: string;
-};
-
-export type ShowcaseProject = {
-  slug: string;
-  name: string;
-  category: string;
-  locality: string;
-  status: ProjectStatus;
-  statusLabel: string;
-  stageNote: string;
-  image: string;
-  disclaimer: string;
 };
 
 export const homeServices: HomeService[] = [
@@ -61,43 +49,6 @@ export const homeServices: HomeService[] = [
     bullets: ["Bathroom & kitchen refresh", "Painting & flooring", "Structural tweaks"],
     image: "/images/properties/2bhk-house-sale-high-court/1.webp",
     imageAlt: "Renovated rooms in a Kalaburagi house — upgrade reference photo.",
-  },
-];
-
-/** Illustrative portfolio entries — replace with verified project photos when available. */
-export const showcaseProjects: ShowcaseProject[] = [
-  {
-    slug: "contemporary-independent-home",
-    name: "Contemporary Independent Home",
-    category: "Residential construction",
-    locality: "Example · Kalaburagi",
-    status: "completed",
-    statusLabel: "Completed",
-    stageNote: "Design gallery, construction milestones and handover photos.",
-    image: "/images/properties/house-sale-high-court/cover.webp",
-    disclaimer: "Interactive design concept — illustrative example, not a verified GulbargaHomes project.",
-  },
-  {
-    slug: "independent-home-build",
-    name: "Independent Home Build",
-    category: "House construction",
-    locality: "Example · Kalaburagi",
-    status: "ongoing",
-    statusLabel: "Ongoing",
-    stageNote: "Current stage: masonry — dated site updates and next milestone.",
-    image: "/images/properties/2bhk-house-sale-high-court/cover.webp",
-    disclaimer: "Interactive design concept — illustrative example, not a verified GulbargaHomes project.",
-  },
-  {
-    slug: "modern-home-design",
-    name: "Modern Home Design",
-    category: "Design & planning",
-    locality: "Example · Kalaburagi",
-    status: "planning",
-    statusLabel: "Planning",
-    stageNote: "Proposed elevation and layout — renders are conceptual.",
-    image: "/images/properties/30x40-plot-sale-sai-nagar/cover.webp",
-    disclaimer: "Concept render — not completed work or a live GulbargaHomes commitment.",
   },
 ];
 
