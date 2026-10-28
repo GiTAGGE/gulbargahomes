@@ -35,7 +35,13 @@ export function HomeBuildRenovateSection() {
               GulbargaHomes — one enquiry line for Kalaburagi homeowners and plot owners.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+            <Link
+              href="/#design-gallery"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10"
+            >
+              Design gallery <ArrowIcon className="h-4 w-4" />
+            </Link>
             <Link
               href="/projects"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10"

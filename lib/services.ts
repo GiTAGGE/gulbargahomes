@@ -29,8 +29,8 @@ export const homeServices: HomeService[] = [
     href: "/modular-kitchens",
     summary: "Kitchen planning, cabinetry and remodelling for Gulbarga homes.",
     bullets: ["Layout & storage planning", "Modular & semi-modular options", "Countertops & fittings"],
-    image: "/images/projects/real/renovation-built-in-shelves.webp",
-    imageAlt: "Built-in shelving and storage — GulbargaHomes project photo.",
+    image: "/images/designs/u-shaped-modular-kitchen.webp",
+    imageAlt: "Finalized modular kitchen design preview — GulbargaHomes.",
   },
   {
     slug: "interior-design",
@@ -38,8 +38,8 @@ export const homeServices: HomeService[] = [
     href: "/interior-design",
     summary: "Living rooms, bedrooms, wardrobes and complete home interiors.",
     bullets: ["Room-wise design", "Wardrobes & TV units", "Lighting & finishes"],
-    image: "/images/projects/real/renovation-wardrobe-detail.webp",
-    imageAlt: "Custom wardrobe and interior carpentry — GulbargaHomes project photo.",
+    image: "/images/designs/master-bedroom-suite.webp",
+    imageAlt: "Finalized master bedroom interior design preview.",
   },
   {
     slug: "home-renovation",

@@ -17,6 +17,7 @@ const propertyLinks = [
 ];
 
 const buildLinks = [
+  { href: "/designs", label: "Design gallery" },
   { href: "/house-construction", label: "House construction" },
   { href: "/interior-design", label: "Interior design" },
   { href: "/modular-kitchens", label: "Modular kitchens" },
