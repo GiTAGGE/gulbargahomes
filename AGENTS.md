@@ -1,6 +1,6 @@
 # AGENTS.md
 
-GulbargaHomes is a Next.js 14 (App Router, TypeScript) + Tailwind CSS real estate site for Gulbarga (Kalaburagi). Listings are file-based (one MDX file per property in `content/properties/`) — there is **no database**. Build/renovation **projects** use `content/projects/` (same Decap CMS admin). The admin dashboard is Decap CMS (git-based) at `/admin/index.html`.
+GulbargaHomes is a Next.js 14 (App Router, TypeScript) + Tailwind CSS real estate site for Gulbarga (Kalaburagi). Listings are file-based (one MDX file per property in `content/properties/`) — there is **no database**. Build/renovation **projects** use `content/projects/`; **finalized interior design previews** use `content/designs/`. The admin dashboard is Decap CMS (git-based) at `/admin/index.html`.
 
 See `README.md` for structure, scripts, Netlify domain mapping, and video uploads.
 

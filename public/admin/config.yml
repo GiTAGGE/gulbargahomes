@@ -215,3 +215,38 @@ collections:
           field: { name: "image", label: "Image", widget: "image" },
         }
       - { name: "body", label: "Project story", widget: "markdown" }
+
+  - name: "designs"
+    label: "Design gallery"
+    label_singular: "Design"
+    folder: "content/designs"
+    create: true
+    slug: "{{slug}}"
+    extension: "mdx"
+    format: "frontmatter"
+    summary: "{{title}} — {{roomType}}"
+    media_folder: "public/images/designs"
+    public_folder: "/images/designs"
+    fields:
+      - { name: "slug", label: "Slug", widget: "string", hint: "URL: /designs/your-slug" }
+      - { name: "title", label: "Title", widget: "string" }
+      - {
+          name: "roomType",
+          label: "Room / type",
+          widget: "select",
+          options:
+            [
+              "Bedroom",
+              "Living room",
+              "Modular kitchen",
+              "Dining",
+              "Hallway",
+              "Ceiling design",
+              "Study",
+              "Other",
+            ],
+        }
+      - { name: "featured", label: "Featured on homepage", widget: "boolean", default: false }
+      - { name: "sortOrder", label: "Sort order", widget: "number", default: 0, value_type: "int" }
+      - { name: "image", label: "Design image", widget: "image" }
+      - { name: "body", label: "Description", widget: "markdown" }

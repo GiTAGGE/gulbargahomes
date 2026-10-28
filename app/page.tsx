@@ -7,6 +7,7 @@ import {
   HomeProjectsShowcase,
   HomeTrustSection,
 } from "@/components/home-platform-sections";
+import { HomeDesignGallerySection } from "@/components/design-gallery";
 import { JsonLd } from "@/components/jsonld";
 import { PropertyCard } from "@/components/property-card";
 import { RecentlyViewed } from "@/components/recently-viewed";
@@ -178,6 +179,7 @@ export default function HomePage() {
       </section>
 
       <HomeBuildRenovateSection />
+      <HomeDesignGallerySection />
       <HomeProjectsShowcase />
 
       <div className="border-t border-brand-100 bg-surface/50">
