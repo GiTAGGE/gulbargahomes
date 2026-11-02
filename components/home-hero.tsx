@@ -4,7 +4,9 @@ import Link from "next/link";
 import { getLocalities } from "@/lib/properties";
 import { heroBlurDataUrl } from "@/lib/hero-blur";
 import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
+import { site } from "@/lib/site";
 
+import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
 import { SearchBar } from "@/components/search-bar";
 import {
   ArrowIcon,
@@ -86,14 +88,18 @@ export function HomeHero() {
             ))}
           </div>
 
-          <a
+          <TrackedWhatsAppLink
             href={buildWa}
-            target="_blank"
-            rel="noopener noreferrer"
+            source="home_hero"
+            context={{
+              contact_phone: site.contacts[0].phoneDisplay,
+              content_name: "home construction or renovation",
+              page_type: "home",
+            }}
             className="mt-6 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-semibold text-white hover:bg-[#1fb855]"
           >
             <WhatsAppIcon className="h-4 w-4" /> Discuss your project
-          </a>
+          </TrackedWhatsAppLink>
         </div>
 
         {/* Photography column — no headline overlay */}

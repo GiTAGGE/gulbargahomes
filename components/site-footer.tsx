@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import {
+  TrackedPhoneLink,
+  TrackedWhatsAppLink,
+} from "@/components/analytics/tracked-contact";
 import { getLocationPages } from "@/lib/locations";
 import { site } from "@/lib/site";
 
@@ -56,21 +60,26 @@ export function SiteFooter() {
           <ul className="mt-4 space-y-2 text-sm text-ink-muted">
             {site.contacts.map((contact) => (
               <li key={contact.phone}>
-                <a href={`tel:${contact.phone}`} className="hover:text-brand-600">
+                <TrackedPhoneLink
+                  href={`tel:${contact.phone}`}
+                  source="footer"
+                  context={{ contact_phone: contact.phoneDisplay, page_type: "footer" }}
+                  className="hover:text-brand-600"
+                >
                   {contact.phoneDisplay}
-                </a>
+                </TrackedPhoneLink>
               </li>
             ))}
             {site.contacts.map((contact) => (
               <li key={`wa-${contact.whatsapp}`}>
-                <a
+                <TrackedWhatsAppLink
                   href={`https://wa.me/${contact.whatsapp}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  source="footer"
+                  context={{ contact_phone: contact.phoneDisplay, page_type: "footer" }}
                   className="hover:text-brand-600"
                 >
                   WhatsApp {contact.phoneDisplay}
-                </a>
+                </TrackedWhatsAppLink>
               </li>
             ))}
             <li>

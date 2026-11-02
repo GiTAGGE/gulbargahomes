@@ -40,7 +40,12 @@ export function PropertyContactCard({ property }: { property: Property }) {
             key={contact.phone}
             href={`tel:${contact.phone}`}
             className="btn-primary w-full justify-center"
-            onClick={() => trackPhoneClick("property_card", context)}
+            onClick={() =>
+              trackPhoneClick("property_card", {
+                ...context,
+                contact_phone: contact.phoneDisplay,
+              })
+            }
           >
             <PhoneIcon className="h-5 w-5" /> Call {contact.phoneDisplay}
           </a>
@@ -52,7 +57,12 @@ export function PropertyContactCard({ property }: { property: Property }) {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft transition-colors hover:brightness-95"
-            onClick={() => trackWhatsAppClick("property_card", context)}
+            onClick={() =>
+              trackWhatsAppClick("property_card", {
+                ...context,
+                contact_phone: contact.phoneDisplay,
+              })
+            }
           >
             <WhatsAppIcon className="h-5 w-5" /> WhatsApp {contact.phoneDisplay}
           </a>
@@ -86,7 +96,12 @@ export function PropertyStickyContactBar({ property }: { property: Property }) {
               key={contact.phone}
               href={`tel:${contact.phone}`}
               className="btn-primary px-3 py-1.5 text-xs"
-              onClick={() => trackPhoneClick("property_sticky", context)}
+              onClick={() =>
+                trackPhoneClick("property_sticky", {
+                  ...context,
+                  contact_phone: contact.phoneDisplay,
+                })
+              }
             >
               <PhoneIcon className="h-3.5 w-3.5" /> {contact.phoneDisplay.replace("+91 ", "")}
             </a>
@@ -101,7 +116,12 @@ export function PropertyStickyContactBar({ property }: { property: Property }) {
               rel="noopener noreferrer"
               className="grid h-8 w-8 place-items-center rounded-full bg-[#25D366] text-white"
               aria-label={`WhatsApp ${contact.phoneDisplay}`}
-              onClick={() => trackWhatsAppClick("property_sticky", context)}
+              onClick={() =>
+                trackWhatsAppClick("property_sticky", {
+                  ...context,
+                  contact_phone: contact.phoneDisplay,
+                })
+              }
             >
               <WhatsAppIcon className="h-4 w-4" />
             </a>

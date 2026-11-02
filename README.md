@@ -74,7 +74,7 @@ The site is already connected to Netlify. After this build is live on `gulbarga.
    - `CNAME` `www` → `gulbarga.netlify.app`
 3. Enable Netlify Identity **Invite only** + Git Gateway so only you can open `/admin/index.html`
 4. **Identity → Configuration**: set **Site URL** to `https://gulbargahomes.com` (no `www`). Password-reset emails open `/admin/recover.html` automatically after deploy (or paste the full email link — it is converted from `#recovery_token` to a dedicated reset page).
-5. Optional: set `NEXT_PUBLIC_GA4_ID` and `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars
+5. Google Analytics is installed with measurement ID `G-47GFXYGBTL` (`NEXT_PUBLIC_GA4_ID` in `netlify.toml`). WhatsApp and call clicks send `whatsapp_click` / `phone_click` and a `generate_lead` event. Mark `generate_lead` as a key event in GA4 Admin so those leads show as conversions. Optional: set `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars.
 
 Public phone and WhatsApp are `+91 81234 50725` and `+91 84313 95255` (`lib/site.ts`).
 

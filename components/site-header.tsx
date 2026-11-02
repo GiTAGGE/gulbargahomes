@@ -127,7 +127,9 @@ export function SiteHeader() {
                   key={contact.phone}
                   href={`tel:${contact.phone}`}
                   className="btn-primary text-xs py-2 px-3"
-                  onClick={() => trackPhoneClick("header")}
+                  onClick={() =>
+                    trackPhoneClick("header", { contact_phone: contact.phoneDisplay })
+                  }
                 >
                   <PhoneIcon className="h-4 w-4" /> {contact.phoneDisplay}
                 </a>
@@ -218,7 +220,9 @@ export function SiteHeader() {
                   key={contact.phone}
                   href={`tel:${contact.phone}`}
                   className="btn-primary mt-3 justify-center"
-                  onClick={() => trackPhoneClick("mobile_menu")}
+                  onClick={() =>
+                    trackPhoneClick("mobile_menu", { contact_phone: contact.phoneDisplay })
+                  }
                 >
                   <PhoneIcon className="h-5 w-5" /> Call {contact.phoneDisplay}
                 </a>

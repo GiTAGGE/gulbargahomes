@@ -21,7 +21,9 @@ export function FloatingContact() {
           aria-label={`Chat on WhatsApp ${contact.phoneDisplay}`}
           className="grid h-12 w-12 place-items-center rounded-full bg-[#25D366] text-white shadow-lift transition-transform hover:scale-105"
           title={`WhatsApp ${contact.phoneDisplay}`}
-          onClick={() => trackWhatsAppClick("floating")}
+          onClick={() =>
+            trackWhatsAppClick("floating", { contact_phone: contact.phoneDisplay })
+          }
         >
           <WhatsAppIcon className="h-6 w-6" />
         </a>
@@ -33,7 +35,9 @@ export function FloatingContact() {
           aria-label={`Call ${contact.phoneDisplay}`}
           className="grid h-12 w-12 place-items-center rounded-full bg-brand-600 text-white shadow-lift transition-transform hover:scale-105"
           title={`Call ${contact.phoneDisplay}`}
-          onClick={() => trackPhoneClick("floating")}
+          onClick={() =>
+            trackPhoneClick("floating", { contact_phone: contact.phoneDisplay })
+          }
         >
           <PhoneIcon className="h-5 w-5" />
         </a>
