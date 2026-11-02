@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Suspense } from "react";
 
+import { ConsentBanner } from "@/components/analytics/consent-banner";
 import { GoogleAnalytics } from "@/components/analytics/google-analytics";
 import { MicrosoftClarity } from "@/components/analytics/microsoft-clarity";
 import { AnalyticsPageView } from "@/components/analytics/page-view";
@@ -70,6 +71,7 @@ export default function RootLayout({
         <HideNetlifyBadge />
         <GoogleAnalytics />
         <MicrosoftClarity />
+        <ConsentBanner />
         <Suspense fallback={null}>
           <AnalyticsPageView />
         </Suspense>

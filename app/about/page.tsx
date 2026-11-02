@@ -55,9 +55,9 @@ export default function AboutPage() {
         <div className="rounded-2xl border border-brand-100 bg-white p-5">
           <h2 className="font-bold text-ink">How to reach us</h2>
           <p className="mt-2 text-sm text-ink-muted">
-            Call or WhatsApp {site.phonesDisplay}. Owners in Gulbarga can list a
-            house, flat or plot with photos and a video — we will show it to
-            buyers and tenants in the city.
+            Call or WhatsApp {site.phonesDisplay}. Owners in Gulbarga (Kalaburagi)
+            can ask us to show a house, flat or plot. We add a listing only after
+            we verify it. Visitors cannot upload a property themselves.
           </p>
           <Link href="/contact" className="mt-3 inline-block text-sm font-semibold text-brand-700">
             Contact page →

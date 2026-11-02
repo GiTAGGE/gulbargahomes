@@ -12,7 +12,9 @@ export type ContactSource =
   | "home_trust"
   | "service"
   | "design"
-  | "project";
+  | "project"
+  | "jv_form"
+  | "data_deletion";
 
 export interface PropertyAnalyticsContext {
   property_slug?: string;

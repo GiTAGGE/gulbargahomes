@@ -105,6 +105,10 @@ export function buildUrlSitemapXml(): string {
     { path: "/properties", changefreq: "weekly", priority: "0.8" },
     { path: "/about", changefreq: "monthly", priority: "0.6" },
     { path: "/contact", changefreq: "monthly", priority: "0.6" },
+    { path: "/agricultural-land-joint-venture", changefreq: "monthly", priority: "0.7" },
+    { path: "/privacy-policy", changefreq: "yearly", priority: "0.4" },
+    { path: "/terms-and-conditions", changefreq: "yearly", priority: "0.4" },
+    { path: "/data-deletion", changefreq: "yearly", priority: "0.4" },
   ];
 
   for (const page of staticPages) {

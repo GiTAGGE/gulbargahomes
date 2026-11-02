@@ -4,6 +4,7 @@ import {
   TrackedPhoneLink,
   TrackedWhatsAppLink,
 } from "@/components/analytics/tracked-contact";
+import { EnquiryPrivacyNote } from "@/components/enquiry-privacy-note";
 import { JsonLd } from "@/components/jsonld";
 import { breadcrumbSchema, metaDescription } from "@/lib/seo";
 import { site } from "@/lib/site";
@@ -68,6 +69,7 @@ export default function ContactPage() {
           {site.email}
         </a>
       </div>
+      <EnquiryPrivacyNote className="mt-4 text-center" />
 
       <p className="mt-8 text-sm text-ink-muted">
         GulbargaHomes · Kalaburagi, Karnataka 585101 · Serving Gulbarga city and nearby layouts.

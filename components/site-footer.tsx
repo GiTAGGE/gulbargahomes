@@ -34,6 +34,7 @@ export function SiteFooter() {
             <li><Link href="/commercial-for-rent-in-gulbarga" className="text-ink-muted hover:text-brand-600">Commercial for Rent</Link></li>
             <li><Link href="/about" className="text-ink-muted hover:text-brand-600">About</Link></li>
             <li><Link href="/contact" className="text-ink-muted hover:text-brand-600">Contact</Link></li>
+            <li><Link href="/agricultural-land-joint-venture" className="text-ink-muted hover:text-brand-600">Agricultural land JV</Link></li>
             <li><Link href="/favorites" className="text-ink-muted hover:text-brand-600">Saved Favorites</Link></li>
           </ul>
         </div>
@@ -90,8 +91,19 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-brand-100 py-5 text-center text-sm text-ink-faint">
-        © {new Date().getFullYear()} {site.name}. Curated real estate for Gulbarga &amp; Kalaburagi.
+      <div className="border-t border-brand-100 px-4 pb-24 pt-5 text-center text-sm text-ink-faint md:pb-5">
+        <p>© {new Date().getFullYear()} {site.name}. Curated real estate for Gulbarga &amp; Kalaburagi.</p>
+        <nav aria-label="Legal" className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          <Link href="/privacy-policy" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
+            Privacy Policy
+          </Link>
+          <Link href="/terms-and-conditions" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
+            Terms
+          </Link>
+          <Link href="/data-deletion" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
+            Data deletion
+          </Link>
+        </nav>
       </div>
     </footer>
   );
