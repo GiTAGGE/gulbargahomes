@@ -1,26 +1,34 @@
+"use client";
+
+import { useEffect } from "react";
+
 import { GA4_MEASUREMENT_ID, isAnalyticsEnabled } from "@/lib/analytics/config";
 
-export function GoogleAnalytics() {
-  if (!isAnalyticsEnabled() || !GA4_MEASUREMENT_ID) return null;
+import { useAnalyticsConsent } from "./use-analytics-consent";
 
-  return (
-    <>
-      <script
-        async
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA4_MEASUREMENT_ID}`}
-      />
-      <script
-        id="google-analytics"
-        dangerouslySetInnerHTML={{
-          __html: `
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            window.gtag = gtag;
-            gtag('js', new Date());
-            gtag('config', '${GA4_MEASUREMENT_ID}', { send_page_view: false });
-          `,
-        }}
-      />
-    </>
-  );
+export function GoogleAnalytics() {
+  const consent = useAnalyticsConsent();
+
+  useEffect(() => {
+    if (consent !== "granted") return;
+    if (!isAnalyticsEnabled() || !GA4_MEASUREMENT_ID) return;
+    if (document.getElementById("google-analytics-src")) return;
+
+    window.dataLayer = window.dataLayer || [];
+    if (typeof window.gtag !== "function") {
+      window.gtag = function gtag() {
+        window.dataLayer?.push(arguments);
+      };
+    }
+    window.gtag("js", new Date());
+    window.gtag("config", GA4_MEASUREMENT_ID, { send_page_view: false });
+
+    const script = document.createElement("script");
+    script.id = "google-analytics-src";
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA4_MEASUREMENT_ID)}`;
+    document.head.appendChild(script);
+  }, [consent]);
+
+  return null;
 }

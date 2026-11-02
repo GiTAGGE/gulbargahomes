@@ -6,6 +6,7 @@ import {
   TrackedPhoneLink,
   TrackedWhatsAppLink,
 } from "@/components/analytics/tracked-contact";
+import { EnquiryPrivacyNote } from "@/components/enquiry-privacy-note";
 import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
 import type { HomeService } from "@/lib/services";
 import { homeServices, serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
@@ -101,6 +102,7 @@ export function ServicePageLayout({ service }: { service: HomeService }) {
         or message on WhatsApp with your locality, plot size and rough budget — we will outline
         the next step for {service.title.toLowerCase()} in Gulbarga (Kalaburagi).
       </p>
+      <EnquiryPrivacyNote className="mt-3" />
     </div>
   );
 }

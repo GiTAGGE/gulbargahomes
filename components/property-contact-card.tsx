@@ -1,5 +1,6 @@
 "use client";
 
+import { EnquiryPrivacyNote } from "@/components/enquiry-privacy-note";
 import { PhoneIcon, WhatsAppIcon } from "@/components/icons";
 import { priceBand, trackPhoneClick, trackWhatsAppClick } from "@/lib/analytics/track";
 import { formatPrice } from "@/lib/format";
@@ -69,9 +70,7 @@ export function PropertyContactCard({ property }: { property: Property }) {
         ))}
       </div>
 
-      <p className="mt-4 text-center text-xs text-ink-faint">
-        Curated listing — reach out to us for details and visits.
-      </p>
+      <EnquiryPrivacyNote className="mt-4 text-center" />
     </div>
   );
 }

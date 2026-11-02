@@ -42,7 +42,7 @@ export const site = {
   whatsapp: siteContacts[0].whatsapp,
   contacts: siteContacts,
   phonesDisplay: siteContacts.map((contact) => contact.phoneDisplay).join(" · "),
-  email: "hello@gulbargahomes.com",
+  email: "gulbargasupport@gmail.com",
   geo: {
     latitude: 17.3297,
     longitude: 76.8343,

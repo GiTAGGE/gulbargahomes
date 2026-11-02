@@ -1,3 +1,4 @@
+import { readAnalyticsConsent } from "./consent";
 import { GA4_MEASUREMENT_ID, isAnalyticsEnabled } from "./config";
 import type { ContactSource, PropertyAnalyticsContext } from "./types";
 
@@ -31,10 +32,16 @@ function eventParams(
   );
 }
 
-export function pageview(url: string): void {
-  if (!isAnalyticsEnabled() || typeof window === "undefined" || !window.gtag) return;
+function analyticsAllowed(): boolean {
+  return isAnalyticsEnabled() && readAnalyticsConsent() === "granted";
+}
 
-  window.gtag("config", GA4_MEASUREMENT_ID, {
+export function pageview(url: string): void {
+  if (!analyticsAllowed()) return;
+  const gtag = ensureGtag();
+  if (!gtag) return;
+
+  gtag("config", GA4_MEASUREMENT_ID, {
     page_path: url,
   });
 }
@@ -44,11 +51,11 @@ function ensureGtag(): Gtag | null {
   if (typeof window.gtag === "function") return window.gtag;
 
   window.dataLayer = window.dataLayer || [];
-  const queued: Gtag = (...args) => {
-    window.dataLayer?.push(args);
-  };
-  window.gtag = queued;
-  return queued;
+  function gtag() {
+    window.dataLayer?.push(arguments);
+  }
+  window.gtag = gtag as Gtag;
+  return window.gtag;
 }
 
 export function trackEvent(
@@ -56,7 +63,7 @@ export function trackEvent(
   params?: Record<string, string | number | boolean | null | undefined>,
   beacon = false,
 ): void {
-  if (!isAnalyticsEnabled()) return;
+  if (!analyticsAllowed()) return;
   const gtag = ensureGtag();
   if (!gtag) return;
 
@@ -67,7 +74,7 @@ export function trackEvent(
 }
 
 function clarityTag(key: string, value: string): void {
-  if (!isAnalyticsEnabled() || typeof window === "undefined" || !window.clarity) return;
+  if (!analyticsAllowed() || typeof window === "undefined" || !window.clarity) return;
   window.clarity("set", key, value);
 }
 
