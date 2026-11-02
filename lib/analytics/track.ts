@@ -1,4 +1,4 @@
-import { readAnalyticsConsent } from "./consent";
+import { analyticsCollectionEnabled } from "./consent";
 import { GA4_MEASUREMENT_ID, isAnalyticsEnabled } from "./config";
 import type { ContactSource, PropertyAnalyticsContext } from "./types";
 
@@ -33,7 +33,7 @@ function eventParams(
 }
 
 function analyticsAllowed(): boolean {
-  return isAnalyticsEnabled() && readAnalyticsConsent() === "granted";
+  return isAnalyticsEnabled() && analyticsCollectionEnabled();
 }
 
 export function pageview(url: string): void {
