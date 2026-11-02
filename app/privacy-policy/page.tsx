@@ -101,8 +101,8 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           Search filters and the site search box send words you type to this website so results can
-          be shown. Those searches are not written into a customer database. If you allow analytics,
-          the search words can also be sent to Google Analytics.
+          be shown. Those searches are not written into a customer database. Unless you have turned
+          analytics off in this browser, the search words can also be sent to Google Analytics.
         </p>
         <p>
           Saved homes and recently viewed listing addresses are stored only in your browser. They
@@ -288,9 +288,9 @@ export default function PrivacyPolicyPage() {
           <li>search words, if you use search;</li>
           <li>property addresses you save or recently open, stored in this browser;</li>
           <li>
-            technical information such as IP address, browser and device type, which the host and,
-            if you allow it, Google Analytics can process. Our own pages do not read your IP
-            address into an account.
+            technical information such as IP address, browser and device type, which the host and
+            Google Analytics can process, unless you have turned analytics off in this browser. Our
+            own pages do not read your IP address into an account.
           </li>
         </ul>
         <p>
@@ -308,15 +308,20 @@ export default function PrivacyPolicyPage() {
           site data for {site.domain} removes those.
         </p>
         <p>
-          On the live site, Google Analytics 4 can load after you choose “Allow analytics”. The
-          measurement ID in this project is G-47GFXYGBTL, unless that ID is replaced in deployment
-          settings. The tag is the Google tag (gtag.js). It is not a Google Tag Manager container.
-          Until you allow it, the tag is not loaded. Declining, or not choosing, leaves it off.
-          Allowing it lets Google receive page addresses, approximate technical data, search words,
-          and events such as a call click, a WhatsApp click, a saved home or a shared listing.
-          Those events can include the listing name, locality and price, and which of our published
-          phone numbers you clicked. They do not include your name or mobile number, because the
-          site does not know them until you contact us.
+          On the live site, Google Analytics 4 loads without a banner. The measurement ID in this
+          project is G-47GFXYGBTL, unless that ID is replaced in deployment settings. The library
+          is the Google tag (gtag.js). It is not a Google Tag Manager container. There is no Meta
+          Pixel and no Google Ads tag, so those consent prompts are not used. Google’s extra
+          consent rule for advertising tags applies to visitors in the EEA, the UK and Switzerland.
+          The Digital Personal Data Protection Act, 2023 does not add a separate cookie-banner
+          rule of that kind. This page is the notice for the analytics tag, and the buttons below
+          are how you turn it off in this browser. A decline saved here stays off on later visits.
+          It is not switched back on by itself. Leaving the buttons unused leaves measurement on.
+          While measurement is on, Google can receive page addresses, approximate technical data,
+          search words, and events such as a call click, a WhatsApp click, a saved home or a shared
+          listing. Those events can include the listing name, locality and price, and which of our
+          published phone numbers you clicked. They do not include your name or mobile number,
+          because the site does not know them until you contact us.
         </p>
         <p>
           Microsoft Clarity code is present for a future project ID. No Clarity project ID is set
@@ -343,7 +348,7 @@ export default function PrivacyPolicyPage() {
           our own code to store Google click identifiers such as GCLID, GBRAID or WBRAID.
         </p>
         <p>
-          If you allow Google Analytics, the Google tag can read campaign parameters that are
+          While analytics is on, the Google tag can read campaign parameters that are
           already in the page address, such as UTM tags, and Google may use click identifiers that
           its own tag understands. We do not copy those values into a GulbargaHomes database.
         </p>
@@ -365,8 +370,8 @@ export default function PrivacyPolicyPage() {
             text and media the team publishes. It does not store visitor enquiry forms.
           </li>
           <li>
-            <strong className="text-ink">Google.</strong> Receives analytics only if you allow the
-            Google tag. Fonts used on the site are included with the build; pages do not ask Google
+            <strong className="text-ink">Google.</strong> Receives analytics unless you have turned
+            the tag off in this browser. Fonts used on the site are included with the build; pages do not ask Google
             Fonts for a font on each visit.
           </li>
           <li>
@@ -419,12 +424,13 @@ export default function PrivacyPolicyPage() {
           <li>arrange a viewing or a meeting you asked for;</li>
           <li>make an introduction you asked for or acknowledged;</li>
           <li>send other joint-venture updates only if you ticked the optional box, or later asked for them;</li>
-          <li>measure site use, only if you allow analytics;</li>
+          <li>measure site use, unless you have turned analytics off in this browser;</li>
           <li>keep a record where a tax, accounting or legal duty requires it.</li>
         </ul>
         <p>
-          Contact about an enquiry you started is part of answering you. Analytics runs only with
-          the choice on this website. Marketing messages about other joint ventures run only with
+          Contact about an enquiry you started is part of answering you. Analytics runs on the live
+          site unless this browser has a saved decline, which you can set or change in the section
+          above. Marketing messages about other joint ventures run only with
           the optional box or a later request. You can withdraw that permission by contacting us.
           Withdrawing it does not erase a conversation we still need for an enquiry you already
           asked us to handle.

@@ -1,6 +1,7 @@
 "use client";
 
-import { writeAnalyticsConsent } from "@/lib/analytics/consent";
+import { setGoogleAnalyticsDisabled, writeAnalyticsConsent } from "@/lib/analytics/consent";
+import { GA4_MEASUREMENT_ID } from "@/lib/analytics/config";
 import { pageview } from "@/lib/analytics/track";
 
 import { useAnalyticsConsent } from "./use-analytics-consent";
@@ -10,14 +11,15 @@ export function AnalyticsChoice() {
   const label =
     consent === undefined
       ? "Checking this browser…"
-      : consent === "granted"
-        ? "Analytics is allowed in this browser."
-        : consent === "denied"
-          ? "Analytics is declined in this browser."
-          : "You have not chosen yet. The Google tag stays off until you allow it.";
+      : consent === "denied"
+        ? "Analytics is off in this browser. It stays off on later visits until you turn it on here."
+        : consent === "granted"
+          ? "Analytics is on in this browser."
+          : "Analytics is on in this browser. You can turn it off here. That choice is remembered.";
 
   function choose(value: "granted" | "denied") {
     writeAnalyticsConsent(value);
+    setGoogleAnalyticsDisabled(GA4_MEASUREMENT_ID, value === "denied");
     if (value === "granted") {
       const query = window.location.search;
       pageview(`${window.location.pathname}${query}`);
@@ -33,7 +35,7 @@ export function AnalyticsChoice() {
           Allow analytics
         </button>
         <button type="button" className="btn-ghost" onClick={() => choose("denied")}>
-          Decline analytics
+          Turn analytics off
         </button>
       </div>
     </div>

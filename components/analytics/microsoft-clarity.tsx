@@ -10,7 +10,7 @@ export function MicrosoftClarity() {
   const consent = useAnalyticsConsent();
 
   useEffect(() => {
-    if (consent !== "granted") return;
+    if (consent === undefined || consent === "denied") return;
     if (!isAnalyticsEnabled() || !CLARITY_PROJECT_ID) return;
     if (document.getElementById("microsoft-clarity")) return;
     if (!/^[a-z0-9]+$/i.test(CLARITY_PROJECT_ID)) return;

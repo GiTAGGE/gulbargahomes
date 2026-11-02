@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { setGoogleAnalyticsDisabled } from "@/lib/analytics/consent";
 import { GA4_MEASUREMENT_ID, isAnalyticsEnabled } from "@/lib/analytics/config";
 
 import { useAnalyticsConsent } from "./use-analytics-consent";
@@ -10,7 +11,9 @@ export function GoogleAnalytics() {
   const consent = useAnalyticsConsent();
 
   useEffect(() => {
-    if (consent !== "granted") return;
+    if (consent === undefined) return;
+    setGoogleAnalyticsDisabled(GA4_MEASUREMENT_ID, consent === "denied");
+    if (consent === "denied") return;
     if (!isAnalyticsEnabled() || !GA4_MEASUREMENT_ID) return;
     if (document.getElementById("google-analytics-src")) return;
 
