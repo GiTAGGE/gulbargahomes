@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
+import {
+  TrackedPhoneLink,
+  TrackedWhatsAppLink,
+} from "@/components/analytics/tracked-contact";
 import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
 import type { HomeService } from "@/lib/services";
 import { homeServices, serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
@@ -58,17 +62,44 @@ export function ServicePageLayout({ service }: { service: HomeService }) {
       </ul>
 
       <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-        <a href={wa} target="_blank" rel="noopener noreferrer" className="btn-primary bg-[#25D366] hover:bg-[#1fb855]">
+        <TrackedWhatsAppLink
+          href={wa}
+          source="service"
+          context={{
+            contact_phone: site.contacts[0].phoneDisplay,
+            content_name: service.title,
+            page_type: "service",
+          }}
+          className="btn-primary bg-[#25D366] hover:bg-[#1fb855]"
+        >
           <WhatsAppIcon className="h-5 w-5" /> Discuss your project
-        </a>
+        </TrackedWhatsAppLink>
         <Link href="/properties" className="btn-ghost justify-center">
           Browse properties
         </Link>
       </div>
 
       <p className="mt-10 text-sm text-ink-muted">
-        Call {site.phonesDisplay} or message on WhatsApp with your locality, plot size and rough
-        budget — we will outline the next step for {service.title.toLowerCase()} in Kalaburagi.
+        Call{" "}
+        {site.contacts.map((contact, index) => (
+          <span key={contact.phone}>
+            {index > 0 ? " · " : null}
+            <TrackedPhoneLink
+              href={`tel:${contact.phone}`}
+              source="service"
+              context={{
+                contact_phone: contact.phoneDisplay,
+                content_name: service.title,
+                page_type: "service",
+              }}
+              className="font-semibold text-brand-700 hover:text-brand-800"
+            >
+              {contact.phoneDisplay}
+            </TrackedPhoneLink>
+          </span>
+        ))}{" "}
+        or message on WhatsApp with your locality, plot size and rough budget — we will outline
+        the next step for {service.title.toLowerCase()} in Gulbarga (Kalaburagi).
       </p>
     </div>
   );

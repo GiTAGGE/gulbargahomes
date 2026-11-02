@@ -50,7 +50,11 @@ export function MobileBottomNav() {
         <a
           href={`tel:${site.contacts[0].phone}`}
           className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-[11px] font-medium text-ink-faint touch-manipulation"
-          onClick={() => trackPhoneClick("mobile_nav")}
+          onClick={() =>
+            trackPhoneClick("mobile_nav", {
+              contact_phone: site.contacts[0].phoneDisplay,
+            })
+          }
         >
           <PhoneIcon className="h-5 w-5" />
           Call

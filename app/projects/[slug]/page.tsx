@@ -2,9 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
 import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
 import { getAllProjects, getProject, projectMetaLine } from "@/lib/projects";
 import { projectWhatsAppMessage, whatsAppHref } from "@/lib/services";
+import { site } from "@/lib/site";
 
 type Props = { params: { slug: string } };
 
@@ -108,14 +110,18 @@ export default function ProjectDetailPage({ params }: Props) {
         </div>
       )}
 
-      <a
+      <TrackedWhatsAppLink
         href={wa}
-        target="_blank"
-        rel="noopener noreferrer"
+        source="project"
+        context={{
+          contact_phone: site.contacts[0].phoneDisplay,
+          content_name: project.name,
+          page_type: "project",
+        }}
         className="btn-primary mt-10 bg-[#25D366] hover:bg-[#1fb855]"
       >
         <WhatsAppIcon className="h-5 w-5" /> Enquire about a similar project
-      </a>
+      </TrackedWhatsAppLink>
     </article>
   );
 }

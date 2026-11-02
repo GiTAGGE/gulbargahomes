@@ -6,6 +6,8 @@
   # Netlify sets NODE_ENV=production before install, which omits devDependencies
   # (tailwindcss, typescript, etc.) and breaks `next build`.
   NPM_CONFIG_PRODUCTION = "false"
+  # GA4 measurement ID (Google tag). Override in the Netlify UI if the property changes.
+  NEXT_PUBLIC_GA4_ID = "G-47GFXYGBTL"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

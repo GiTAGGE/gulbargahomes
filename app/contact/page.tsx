@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 
+import {
+  TrackedPhoneLink,
+  TrackedWhatsAppLink,
+} from "@/components/analytics/tracked-contact";
 import { JsonLd } from "@/components/jsonld";
 import { breadcrumbSchema, metaDescription } from "@/lib/seo";
 import { site } from "@/lib/site";
@@ -39,24 +43,26 @@ export default function ContactPage() {
 
       <div className="mt-8 grid gap-3">
         {site.contacts.map((contact) => (
-          <a
+          <TrackedPhoneLink
             key={contact.phone}
             href={`tel:${contact.phone}`}
+            source="contact_page"
+            context={{ contact_phone: contact.phoneDisplay, page_type: "contact" }}
             className="btn-primary justify-center"
           >
             Call {contact.phoneDisplay}
-          </a>
+          </TrackedPhoneLink>
         ))}
         {site.contacts.map((contact) => (
-          <a
+          <TrackedWhatsAppLink
             key={`wa-${contact.whatsapp}`}
             href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            source="contact_page"
+            context={{ contact_phone: contact.phoneDisplay, page_type: "contact" }}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft"
           >
             WhatsApp {contact.phoneDisplay}
-          </a>
+          </TrackedWhatsAppLink>
         ))}
         <a href={`mailto:${site.email}`} className="btn-ghost justify-center">
           {site.email}

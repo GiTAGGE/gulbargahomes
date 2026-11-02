@@ -6,6 +6,7 @@ type Gtag = (...args: unknown[]) => void;
 declare global {
   interface Window {
     gtag?: Gtag;
+    dataLayer?: unknown[];
     clarity?: (...args: unknown[]) => void;
   }
 }
@@ -38,12 +39,31 @@ export function pageview(url: string): void {
   });
 }
 
+function ensureGtag(): Gtag | null {
+  if (typeof window === "undefined") return null;
+  if (typeof window.gtag === "function") return window.gtag;
+
+  window.dataLayer = window.dataLayer || [];
+  const queued: Gtag = (...args) => {
+    window.dataLayer?.push(args);
+  };
+  window.gtag = queued;
+  return queued;
+}
+
 export function trackEvent(
   name: string,
   params?: Record<string, string | number | boolean | null | undefined>,
+  beacon = false,
 ): void {
-  if (!isAnalyticsEnabled() || typeof window === "undefined" || !window.gtag) return;
-  window.gtag("event", name, eventParams(params));
+  if (!isAnalyticsEnabled()) return;
+  const gtag = ensureGtag();
+  if (!gtag) return;
+
+  const payload = eventParams(params);
+  // Beacon so the hit is sent before the browser opens the dialer or WhatsApp.
+  if (beacon) payload.transport_type = "beacon";
+  gtag("event", name, payload);
 }
 
 function clarityTag(key: string, value: string): void {
@@ -55,9 +75,9 @@ export function trackPhoneClick(
   source: ContactSource,
   context: PropertyAnalyticsContext = {},
 ): void {
-  const params = { contact_source: source, ...context };
-  trackEvent("phone_click", params);
-  trackEvent("generate_lead", { method: "phone", ...params });
+  const params = { contact_source: source, lead_type: "call", ...context };
+  trackEvent("phone_click", params, true);
+  trackEvent("generate_lead", { method: "phone", currency: "INR", ...params }, true);
   clarityTag("contact", "phone");
 }
 
@@ -65,9 +85,9 @@ export function trackWhatsAppClick(
   source: ContactSource,
   context: PropertyAnalyticsContext = {},
 ): void {
-  const params = { contact_source: source, ...context };
-  trackEvent("whatsapp_click", params);
-  trackEvent("generate_lead", { method: "whatsapp", ...params });
+  const params = { contact_source: source, lead_type: "whatsapp", ...context };
+  trackEvent("whatsapp_click", params, true);
+  trackEvent("generate_lead", { method: "whatsapp", currency: "INR", ...params }, true);
   clarityTag("contact", "whatsapp");
 }
 

@@ -8,7 +8,9 @@ import {
   whatsAppHref,
 } from "@/lib/services";
 import { getAllProjects } from "@/lib/projects";
+import { site } from "@/lib/site";
 
+import { TrackedWhatsAppLink } from "./analytics/tracked-contact";
 import { ProjectPortfolioShowcase } from "./project-portfolio";
 import { ArrowIcon, WhatsAppIcon } from "./icons";
 
@@ -48,14 +50,18 @@ export function HomeBuildRenovateSection() {
             >
               View projects <ArrowIcon className="h-4 w-4" />
             </Link>
-            <a
+            <TrackedWhatsAppLink
               href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
+              source="home_build"
+              context={{
+                contact_phone: site.contacts[0].phoneDisplay,
+                content_name: "a home project",
+                page_type: "home",
+              }}
               className="btn-primary shrink-0 bg-[#25D366] hover:bg-[#1fb855]"
             >
               <WhatsAppIcon className="h-5 w-5" /> Discuss your project
-            </a>
+            </TrackedWhatsAppLink>
           </div>
         </div>
 
@@ -184,14 +190,18 @@ export function HomeTrustSection() {
                 <span className="text-brand-600">✓</span> Local team serving Gulbarga & Kalaburagi
               </li>
             </ul>
-            <a
+            <TrackedWhatsAppLink
               href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
+              source="home_trust"
+              context={{
+                contact_phone: site.contacts[0].phoneDisplay,
+                content_name: "general enquiry",
+                page_type: "home",
+              }}
               className="btn-primary mt-8 w-full bg-[#25D366] hover:bg-[#1fb855] sm:w-auto"
             >
               <WhatsAppIcon className="h-5 w-5" /> Chat on WhatsApp
-            </a>
+            </TrackedWhatsAppLink>
           </div>
         </div>
       </div>

@@ -2,9 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
 import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
 import { getAllDesigns, getDesign } from "@/lib/designs";
 import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
+import { site } from "@/lib/site";
 
 type Props = { params: { slug: string } };
 
@@ -52,14 +54,18 @@ export default function DesignDetailPage({ params }: Props) {
         <div className="prose-property mt-6 whitespace-pre-wrap">{design.body}</div>
       )}
 
-      <a
+      <TrackedWhatsAppLink
         href={wa}
-        target="_blank"
-        rel="noopener noreferrer"
+        source="design"
+        context={{
+          contact_phone: site.contacts[0].phoneDisplay,
+          content_name: design.title,
+          page_type: "design",
+        }}
         className="btn-primary mt-10 bg-[#25D366] hover:bg-[#1fb855]"
       >
         <WhatsAppIcon className="h-5 w-5" /> Discuss this design
-      </a>
+      </TrackedWhatsAppLink>
     </article>
   );
 }
