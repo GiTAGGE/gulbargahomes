@@ -18,8 +18,9 @@ const nextConfig = {
   },
   async redirects() {
     return [
-      { source: "/admin", destination: "/admin/index.html", permanent: false },
-      { source: "/admin/", destination: "/admin/index.html", permanent: false },
+      { source: "/admin", destination: "/admin/properties", permanent: false },
+      { source: "/admin/", destination: "/admin/properties", permanent: false },
+      { source: "/admin/index.html", destination: "/admin/properties", permanent: false },
       {
         source: "/properties/2bhk-house-rent-biddapur-colony",
         destination: "/properties/1bhk-house-rent-biddapur-colony",
@@ -74,3 +75,9 @@ const nextConfig = {
 };
 
 export default nextConfig;
+
+// Local `next dev` only — skipped during `next build` (Netlify and OpenNext).
+if (process.env.NODE_ENV === "development") {
+  const { initOpenNextCloudflareForDev } = await import("@opennextjs/cloudflare");
+  initOpenNextCloudflareForDev();
+}

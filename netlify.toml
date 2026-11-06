@@ -1,3 +1,6 @@
+# Rollback only. Production target is Cloudflare Workers (see README).
+# Do not use this Netlify config for the listing desk — property edits need D1.
+
 [build]
   command = "npm run build"
   publish = ".next"

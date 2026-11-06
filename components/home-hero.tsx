@@ -24,8 +24,8 @@ const quickLinks = [
   { label: "Build", href: "/#build-renovate", Icon: BuildingIcon },
 ];
 
-export function HomeHero() {
-  const localities = getLocalities();
+export async function HomeHero() {
+  const localities = await getLocalities();
   const popularLocalities = localities.slice(0, 3);
   const buildWa = whatsAppHref(serviceWhatsAppMessage("home construction or renovation"));
 

@@ -7,8 +7,8 @@ import {
 import { getLocationPages } from "@/lib/locations";
 import { site } from "@/lib/site";
 
-export function SiteFooter() {
-  const locationPages = getLocationPages().slice(0, 8);
+export async function SiteFooter() {
+  const locationPages = (await getLocationPages()).slice(0, 8);
 
   return (
     <footer className="mt-16 border-t border-brand-100 bg-white sm:mt-20">

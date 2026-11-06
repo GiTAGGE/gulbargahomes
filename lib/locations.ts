@@ -119,14 +119,14 @@ export function getCitySeoPages(): LocationPage[] {
   ];
 }
 
-export function getLocationPages(): LocationPage[] {
+export async function getLocationPages(): Promise<LocationPage[]> {
   const seen = new Map<string, LocationPage>();
 
   for (const page of getCitySeoPages()) {
     seen.set(page.slug, page);
   }
 
-  for (const property of getAllProperties()) {
+  for (const property of await getAllProperties()) {
     const page = pageFor(property.listing, property.propertyType, property.locality);
     if (!seen.has(page.slug)) {
       seen.set(page.slug, page);
@@ -136,12 +136,12 @@ export function getLocationPages(): LocationPage[] {
   return Array.from(seen.values()).sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-export function getLocationPage(slug: string): LocationPage | undefined {
-  return getLocationPages().find((page) => page.slug === slug);
+export async function getLocationPage(slug: string): Promise<LocationPage | undefined> {
+  return (await getLocationPages()).find((page) => page.slug === slug);
 }
 
-export function getLocationPageProperties(page: LocationPage): Property[] {
-  return getAllProperties().filter((property) =>
+export async function getLocationPageProperties(page: LocationPage): Promise<Property[]> {
+  return (await getAllProperties()).filter((property) =>
     propertyMatchesLocationPage(property, page),
   );
 }

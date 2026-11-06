@@ -12,8 +12,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function FavoritesPage() {
-  const properties = getAllProperties();
+export const dynamic = "force-dynamic";
+
+export default async function FavoritesPage() {
+  const properties = await getAllProperties();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">

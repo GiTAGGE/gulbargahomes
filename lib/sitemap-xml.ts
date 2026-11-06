@@ -80,9 +80,9 @@ const URLSET_OPEN = `<?xml version="1.0" encoding="UTF-8"?>
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
         xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">`;
 
-export function buildUrlSitemapXml(): string {
+export async function buildUrlSitemapXml(): Promise<string> {
   const now = new Date().toISOString();
-  const properties = getAllProperties();
+  const properties = await getAllProperties();
   const newestListing = properties.reduce(
     (latest, property) => (property.publishedAt > latest ? property.publishedAt : latest),
     properties[0]?.publishedAt ?? now,
@@ -142,7 +142,7 @@ export function buildUrlSitemapXml(): string {
     urls.push(blocks.join("\n"));
   }
 
-  for (const page of getLocationPages()) {
+  for (const page of await getLocationPages()) {
     urls.push(
       [
         "  <url>",
@@ -158,8 +158,8 @@ export function buildUrlSitemapXml(): string {
   return `${URLSET_OPEN}\n${urls.join("\n")}\n</urlset>\n`;
 }
 
-export function buildVideoSitemapXml(): string {
-  const properties = getAllProperties().filter(propertyHasVideo);
+export async function buildVideoSitemapXml(): Promise<string> {
+  const properties = (await getAllProperties()).filter(propertyHasVideo);
 
   const urls = properties.map((property) =>
     [

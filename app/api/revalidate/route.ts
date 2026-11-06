@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   revalidatePath("/[location]", "page");
   revalidatePath("/sitemap.xml");
 
-  for (const page of getLocationPages()) {
+  for (const page of await getLocationPages()) {
     revalidatePath(`/${page.slug}`);
   }
 

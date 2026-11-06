@@ -13,13 +13,13 @@ export const metadata: Metadata = {
   ),
 };
 
-export default function DesignsIndexPage({
+export default async function DesignsIndexPage({
   searchParams,
 }: {
-  searchParams: { room?: string };
+  searchParams: Promise<{ room?: string }>;
 }) {
   const all = getAllDesigns();
-  const room = searchParams.room?.trim();
+  const room = (await searchParams).room?.trim();
   const designs = room ? all.filter((d) => d.roomType === room) : all;
   const roomTypes = getDesignRoomTypes();
 

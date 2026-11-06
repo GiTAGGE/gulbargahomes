@@ -32,5 +32,16 @@ next-env.d.ts
 # netlify
 .netlify
 
+# cloudflare / opennext
+.open-next
+.wrangler
+.dev.vars
+
+# local property database used by `npm run dev` when D1 is not bound
+.data
+
+# admin uploads saved locally when the R2 bucket is not bound
+/public/uploads
+
 # pagefind search index (generated in postbuild)
 /public/pagefind
