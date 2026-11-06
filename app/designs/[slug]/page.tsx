@@ -8,14 +8,15 @@ import { getAllDesigns, getDesign } from "@/lib/designs";
 import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
 import { site } from "@/lib/site";
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
   return getAllDesigns().map((d) => ({ slug: d.slug }));
 }
 
-export function generateMetadata({ params }: Props) {
-  const design = getDesign(params.slug);
+export async function generateMetadata({ params }: Props) {
+  const { slug } = await params;
+  const design = getDesign(slug);
   if (!design) return {};
   return {
     title: design.title,
@@ -23,8 +24,9 @@ export function generateMetadata({ params }: Props) {
   };
 }
 
-export default function DesignDetailPage({ params }: Props) {
-  const design = getDesign(params.slug);
+export default async function DesignDetailPage({ params }: Props) {
+  const { slug } = await params;
+  const design = getDesign(slug);
   if (!design) notFound();
 
   const wa = whatsAppHref(

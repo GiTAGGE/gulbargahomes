@@ -24,7 +24,11 @@ export function PropertyImage({
     <div className={`relative overflow-hidden bg-brand-100 ${className}`}>
       <Image
         src={imageSrc}
-        unoptimized={isCloudinaryUrl(imageSrc)}
+        unoptimized={
+          isCloudinaryUrl(imageSrc) ||
+          imageSrc.startsWith("/media/") ||
+          imageSrc.startsWith("/uploads/")
+        }
         alt={property.title}
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"

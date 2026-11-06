@@ -12,11 +12,11 @@ function matches(query: string, ...values: Array<string | null | undefined>) {
   return values.some((value) => value?.toLowerCase().includes(normalized));
 }
 
-export function searchSite(query: string, limit = 8): SiteSearchResult[] {
+export async function searchSite(query: string, limit = 8): Promise<SiteSearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const propertyResults = getAllProperties()
+  const propertyResults = (await getAllProperties())
     .filter((property) =>
       matches(
         trimmed,
@@ -41,7 +41,7 @@ export function searchSite(query: string, limit = 8): SiteSearchResult[] {
       }`,
     }));
 
-  const locationResults = getLocationPages()
+  const locationResults = (await getLocationPages())
     .filter((page) =>
       matches(trimmed, page.heading, page.locality, page.title, page.description),
     )

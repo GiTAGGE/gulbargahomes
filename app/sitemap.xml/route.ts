@@ -1,8 +1,7 @@
 import { buildUrlSitemapXml, sitemapResponse } from "@/lib/sitemap-xml";
 
-export const dynamic = "force-static";
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
-export function GET() {
-  return sitemapResponse(buildUrlSitemapXml());
+export async function GET() {
+  return sitemapResponse(await buildUrlSitemapXml());
 }

@@ -90,8 +90,9 @@ export function SiteSearch({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
+        const apiResults = await searchViaApi(trimmed);
         if (useApiFallbackRef.current || !pagefindRef.current) {
-          setResults(await searchViaApi(trimmed));
+          setResults(apiResults);
           return;
         }
 
@@ -99,11 +100,11 @@ export function SiteSearch({
         const data = await Promise.all(
           search.results.slice(0, 8).map((result) => result.data()),
         );
-        setResults(
-          data
-            .map(normalizePagefindResult)
-            .filter((result): result is SiteSearchResult => result !== null),
-        );
+        const indexed = data
+          .map(normalizePagefindResult)
+          .filter((result): result is SiteSearchResult => result !== null)
+          .filter((result) => !apiResults.some((item) => item.url === result.url));
+        setResults([...apiResults, ...indexed].slice(0, 8));
       } catch {
         setResults(await searchViaApi(trimmed));
       } finally {

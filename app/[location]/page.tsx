@@ -4,30 +4,23 @@ import { notFound } from "next/navigation";
 
 import { PropertyCard } from "@/components/property-card";
 import { JsonLd } from "@/components/jsonld";
-import {
-  getLocationPage,
-  getLocationPageProperties,
-  getLocationPages,
-} from "@/lib/locations";
+import { getLocationPage, getLocationPageProperties } from "@/lib/locations";
 import { breadcrumbSchema, itemListSchema, metaDescription } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/url";
 import { site } from "@/lib/site";
 
-export const dynamicParams = true;
+export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  return getLocationPages().map((page) => ({ location: page.slug }));
-}
-
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: { location: string };
-}): Metadata {
-  const page = getLocationPage(params.location);
+  params: Promise<{ location: string }>;
+}): Promise<Metadata> {
+  const { location } = await params;
+  const page = await getLocationPage(location);
   if (!page) return {};
 
-  const properties = getLocationPageProperties(page);
+  const properties = await getLocationPageProperties(page);
   const heroProperty = properties.find((property) => property.featured) ?? properties[0];
   const description = metaDescription(page.description);
 
@@ -48,15 +41,16 @@ export function generateMetadata({
   };
 }
 
-export default function LocationPage({
+export default async function LocationPage({
   params,
 }: {
-  params: { location: string };
+  params: Promise<{ location: string }>;
 }) {
-  const page = getLocationPage(params.location);
+  const { location } = await params;
+  const page = await getLocationPage(location);
   if (!page) notFound();
 
-  const properties = getLocationPageProperties(page);
+  const properties = await getLocationPageProperties(page);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10" data-pagefind-body>

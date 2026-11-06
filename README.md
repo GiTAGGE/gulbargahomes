@@ -1,82 +1,119 @@
 # GulbargaHomes
 
-Premium real estate platform for **Gulbarga (Kalaburagi)** — rental houses, flats, independent homes, villas and residential plots. Built with **Next.js**, **Tailwind CSS**, and hosted on **Netlify** (free plan, no server, no database).
+Premium real estate platform for **Gulbarga (Kalaburagi)** — rental houses, flats, independent homes, villas, commercial space and residential plots.
 
-Live Netlify URL: `https://gulbarga.netlify.app`  
-Custom domain (ready to map in GoDaddy / Netlify): [gulbargahomes.com](https://gulbargahomes.com)
+Live domain: [gulbargahomes.com](https://gulbargahomes.com)  
+Production target: **Cloudflare Workers** via OpenNext (same path as HubliTaxi).  
+Netlify (`gulbarga.netlify.app`, `netlify.toml`) stays in the repo as a rollback until DNS is cut over.
 
 ## What this site is
 
-GulbargaHomes is a city-only, file-based portal. Each listing is an MDX file with photos and optional **video tours**. Editors use the Decap CMS admin at `/admin/index.html` (Netlify Identity + Git Gateway). Publishing a listing commits to GitHub and rebuilds the static site.
+Listings live in **Cloudflare D1** (SQLite). The listing desk at `/admin/properties` adds and edits them without a git commit or a rebuild. Photos and video tours that are already in `public/images` and `public/videos` stay on those URLs and ship with the Worker as static assets. New uploads go to the **R2** bucket `gulbargahomes-media` and are served from `/media/...`.
+
+The MDX files in `content/properties/` are the migration snapshot. The first request on an empty D1 database copies them in. After that, the database is the source of truth.
+
+Projects and interior-design previews are still MDX in `content/projects/` and `content/designs/`.
 
 ## Tech stack
 
-- Next.js 14 (App Router, TypeScript) — static generation
-- Tailwind CSS — sandstone / terracotta palette
-- MDX listings in `content/properties/`
-- WebP photos + short MP4 walkthroughs
-- Pagefind full-text search
-- Decap CMS (git-based admin, no database)
+- Next.js 15 (App Router, TypeScript) on Cloudflare Workers (`@opennextjs/cloudflare`)
+- Tailwind CSS
+- D1 database `gulbargahomes` for properties
+- R2 for new photos and videos, plus the OpenNext incremental cache
+- Existing WebP photos and MP4/MOV tours in `public/`
+- Pagefind plus `/api/search` (search prefers the database)
 - SEO: JSON-LD (`RealEstateAgent`, `Residence` / `LandPlot`, `VideoObject`, `FAQPage`), sitemap, robots, Gulbarga **and** Kalaburagi landing pages
 
 ## Local development
 
 ```bash
 npm install
+cp .env.example .env.local   # set ADMIN_PASSWORD and ADMIN_SESSION_SECRET
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. Listing desk: http://localhost:3000/admin/properties
+
+`npm run dev` uses local D1 when the OpenNext dev binding is active. If that binding is missing, it uses `.data/properties.json` (created from the MDX snapshot, gitignored).
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Dev server |
-| `npm run build` | Production build + Pagefind |
+| `npm run build` | Refresh the property snapshot, then production build + Pagefind |
+| `npm run preview` | OpenNext build + local Workers runtime |
+| `npm run deploy` | Build and deploy the Worker (`--keep-vars` so dashboard secrets stay) |
 | `npm run images` | Rebuild WebP photos, hero image and MP4 tours |
-| `node scripts/generate-gulbarga-listings.mjs` | Regenerate starter listings |
 | `npm run lint` | ESLint |
 
-Admin locally: `npx decap-server`, then http://localhost:3000/admin/index.html
+## Listing desk
 
-## Admin: photos and videos
+Sign in at `/admin/properties`. From there you can:
 
-In **Properties → Videos** you can:
+- Search and filter every listing
+- Add a property with price, locality, Vastu, bachelor/family rules, amenities, nearby places and FAQs
+- Upload photos (set a cover, reorder) and videos, or paste a YouTube URL
+- Mark a listing Available, Rented, or Sold without deleting it
+- Delete a listing after a second confirmation
 
-1. Upload an MP4 (keep under ~8 MB on Netlify’s free plan), and/or
-2. Paste a YouTube URL
+Existing photos and tours keep their `/images/...` and `/videos/...` paths. New files upload to R2 (or `public/uploads` in local dev without R2). Video uploads can be up to 80 MB.
 
-Videos appear in the property gallery next to stills.
+One existing tour, `public/videos/properties/video-project.mp4`, was re-encoded under Cloudflare’s 25 MiB static-asset limit. The picture is still 1280×720 and the original audio track was copied across. The URL did not change.
 
-Listings are **MDX files in Git** (`content/properties/`) — there is no separate database. After you publish in admin, Netlify must **finish a deploy** before new properties appear on the live site.
+## What you need in Cloudflare
 
-## Cloudinary uploads (optional)
+Do this once in the same Cloudflare account that will own `gulbargahomes.com`. Resource **names** below match `wrangler.jsonc`. Replace the placeholder `database_id` values after the create commands print real ids. Do not commit secrets.
 
-To upload images/videos to **Cloudinary** instead of committing large files to Git:
+```bash
+npx wrangler login
 
-1. In [Cloudinary Console](https://console.cloudinary.com/) → top-left cloud name (e.g. `jzsi7rvy`).
-2. **Settings → Upload → Upload presets** → **Add upload preset** → **Signing mode: Unsigned** → save the preset name.
-3. **Settings → Access keys** → copy **API Key** (not the secret).
-4. In **Netlify → Site → Environment variables**, add:
-   - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` = your cloud name  
-   - `NEXT_PUBLIC_CLOUDINARY_API_KEY` = API key  
-   - `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` = unsigned preset name  
-5. Trigger a **new deploy**. Admin will upload to Cloudinary; the site stores `https://res.cloudinary.com/...` URLs in the property file.
+# Listings database
+npx wrangler d1 create gulbargahomes
+# Paste database_id into wrangler.jsonc → d1_databases (binding DB)
 
-Do **not** put the API **secret** in Netlify public env vars or in `config.yml`.
+# OpenNext tag cache (revalidatePath after you save a listing)
+npx wrangler d1 create gulbargahomes-next-tag-cache
+# Paste database_id into wrangler.jsonc → d1_databases (binding NEXT_TAG_CACHE_D1)
 
-## Netlify + custom domain
+# OpenNext incremental cache
+npx wrangler r2 bucket create gulbargahomes-next-cache
 
-The site is already connected to Netlify. After this build is live on `gulbarga.netlify.app`:
+# New property photos and videos
+npx wrangler r2 bucket create gulbargahomes-media
+```
 
-1. In Netlify: **Domain management → Add domain** → `gulbargahomes.com` and `www.gulbargahomes.com`
-2. In GoDaddy DNS, point:
-   - `A` record `@` → Netlify load balancer `75.2.60.5` (or the values Netlify shows)
-   - `CNAME` `www` → `gulbarga.netlify.app`
-3. Enable Netlify Identity **Invite only** + Git Gateway so only you can open `/admin/index.html`
-4. **Identity → Configuration**: set **Site URL** to `https://gulbargahomes.com` (no `www`). Password-reset emails open `/admin/recover.html` automatically after deploy (or paste the full email link — it is converted from `#recovery_token` to a dedicated reset page).
-5. Google Analytics is installed with measurement ID `G-47GFXYGBTL` (`NEXT_PUBLIC_GA4_ID` in `netlify.toml`). WhatsApp and call clicks send `whatsapp_click` / `phone_click` and a `generate_lead` event. Mark `generate_lead` as a key event in GA4 Admin so those leads show as conversions. Optional: set `NEXT_PUBLIC_CLARITY_ID` in Netlify env vars.
+The Durable Object class `DOQueueHandler` comes from the OpenNext build. The `v1` migration in `wrangler.jsonc` registers it. No separate create command.
 
-Public phone and WhatsApp are `+91 81234 50725` and `+91 84313 95255` (`lib/site.ts`).
+`npm run deploy` runs OpenNext `populateCache`, which creates the D1 `revalidations` table. The listings table is created on the first request and filled from `lib/property-seed.json` (the current MDX files). You do not need a manual SQL import.
+
+### Worker secrets and build variables
+
+Set these in the Worker **Settings → Variables and Secrets**. Also add the `NEXT_PUBLIC_*` values as **build variables** if you use Workers Builds, because Next inlines them at build time.
+
+| Variable | Secret | Purpose |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | yes | Listing desk password. There is no username. |
+| `ADMIN_SESSION_SECRET` | yes | `openssl rand -hex 32` |
+| `NEXT_PUBLIC_GA4_ID` | no | `G-47GFXYGBTL` unless the GA4 property changes |
+| `NEXT_PUBLIC_CLARITY_ID` | no | Optional Microsoft Clarity id |
+| `REVALIDATE_SECRET` | yes | Optional, for `POST /api/revalidate` |
+
+Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does not wipe those secrets.
+
+### Workers Builds
+
+Connect this GitHub repo. Build command: `npm run deploy`. Node 20 (see `.nvmrc`).
+
+Custom domains in `wrangler.jsonc`: `gulbargahomes.com` and `www.gulbargahomes.com`. The zone for `gulbargahomes.com` must already be on this Cloudflare account (move nameservers from GoDaddy to Cloudflare if they are not). `www` should redirect to the apex the way the app already does. Leave `workers.dev` on until the custom domain is serving traffic, then you can turn the old Netlify site off.
+
+`https://gulbargahomes.<your-subdomain>.workers.dev` remains a rollback URL. Canonical tags and the sitemap use `https://gulbargahomes.com`.
+
+### Cloudflare Images
+
+`wrangler.jsonc` includes the `IMAGES` binding, same as HubliTaxi, so `next/image` can optimize on the edge. That product is billed separately. If the account does not have it, remove the `images` block from `wrangler.jsonc` and set `images.unoptimized: true` in `next.config.mjs`. The WebP files in `public/images` still load either way.
+
+### Google Analytics
+
+Measurement ID `G-47GFXYGBTL`. WhatsApp and call clicks send `whatsapp_click` / `phone_click` and `generate_lead`. Mark `generate_lead` as a key event in GA4. Public phone and WhatsApp are `+91 81234 50725` and `+91 84313 95255` (`lib/site.ts`).
 
 ## SEO notes
 

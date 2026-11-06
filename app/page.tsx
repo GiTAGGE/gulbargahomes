@@ -15,8 +15,9 @@ import { ArrowIcon, CheckIcon, PinIcon } from "@/components/icons";
 import { faqSchema, homeFaqs, itemListSchema, metaDescription } from "@/lib/seo";
 import { getAllProperties } from "@/lib/properties";
 import { site } from "@/lib/site";
+import type { Property } from "@/lib/types";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: site.homeSeoTitle,
@@ -67,7 +68,7 @@ function PropertyStrip({
   title: string;
   description: string;
   href: string;
-  items: ReturnType<typeof getAllProperties>;
+  items: Property[];
 }) {
   if (!items.length) return null;
   return (
@@ -93,8 +94,8 @@ function PropertyStrip({
   );
 }
 
-export default function HomePage() {
-  const allProperties = getAllProperties();
+export default async function HomePage() {
+  const allProperties = await getAllProperties();
   const listingLocalities = Array.from(
     new Set(allProperties.map((property) => property.locality)),
   ).sort();

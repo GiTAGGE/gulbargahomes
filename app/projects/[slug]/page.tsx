@@ -8,14 +8,15 @@ import { getAllProjects, getProject, projectMetaLine } from "@/lib/projects";
 import { projectWhatsAppMessage, whatsAppHref } from "@/lib/services";
 import { site } from "@/lib/site";
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
   return getAllProjects().map((p) => ({ slug: p.slug }));
 }
 
-export function generateMetadata({ params }: Props) {
-  const project = getProject(params.slug);
+export async function generateMetadata({ params }: Props) {
+  const { slug } = await params;
+  const project = getProject(slug);
   if (!project) return {};
   return {
     title: project.name,
@@ -23,8 +24,9 @@ export function generateMetadata({ params }: Props) {
   };
 }
 
-export default function ProjectDetailPage({ params }: Props) {
-  const project = getProject(params.slug);
+export default async function ProjectDetailPage({ params }: Props) {
+  const { slug } = await params;
+  const project = getProject(slug);
   if (!project) notFound();
 
   const wa = whatsAppHref(projectWhatsAppMessage(project.name));

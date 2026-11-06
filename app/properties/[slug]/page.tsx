@@ -14,7 +14,7 @@ import { PropertyCard } from "@/components/property-card";
 import { RecordView } from "@/components/record-view";
 import { ShareButton } from "@/components/share-button";
 import { bhkLabel, formatPrice } from "@/lib/format";
-import { getProperty, getPropertySlugs, getSimilarProperties } from "@/lib/properties";
+import { getProperty, getSimilarProperties } from "@/lib/properties";
 import { statusBannerMessage, statusLabel } from "@/lib/property-status";
 import {
   breadcrumbSchema,
@@ -27,18 +27,15 @@ import { site } from "@/lib/site";
 import { propertyHasVideo } from "@/lib/types";
 import { absoluteUrl, propertyUrl } from "@/lib/url";
 
-export const dynamicParams = false;
+export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  return getPropertySlugs().map((slug) => ({ slug }));
-}
-
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
-}): Metadata {
-  const property = getProperty(params.slug);
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const property = await getProperty(slug);
   if (!property) return {};
 
   const tags: string[] = [];
@@ -109,11 +106,16 @@ function Highlight({
   );
 }
 
-export default function PropertyPage({ params }: { params: { slug: string } }) {
-  const property = getProperty(params.slug);
+export default async function PropertyPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const property = await getProperty(slug);
   if (!property) notFound();
 
-  const similar = getSimilarProperties(property, 3);
+  const similar = await getSimilarProperties(property, 3);
   const statusMessage = statusBannerMessage(property.status);
 
   const breadcrumb = [

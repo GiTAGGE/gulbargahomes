@@ -1,0 +1,69 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gulbargahomes",
+  "main": ".open-next/worker.js",
+  // workers.dev stays as a rollback URL. Production traffic uses Custom Domains.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "gulbargahomes.com", "custom_domain": true },
+    { "pattern": "www.gulbargahomes.com", "custom_domain": true }
+  ],
+  "upload_source_maps": true,
+  "compatibility_date": "2026-11-06",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "images": {
+    // Requires Cloudflare Images on the account. If optimization fails,
+    // remove this block and set images.unoptimized: true in next.config.mjs.
+    "binding": "IMAGES"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "gulbargahomes"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "gulbargahomes-next-cache"
+    },
+    {
+      "binding": "MEDIA",
+      "bucket_name": "gulbargahomes-media"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEXT_CACHE_DO_QUEUE",
+        "class_name": "DOQueueHandler"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DOQueueHandler"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gulbargahomes",
+      "database_id": "00000000-0000-4000-8000-000000000001",
+      "migrations_dir": "migrations"
+    },
+    {
+      "binding": "NEXT_TAG_CACHE_D1",
+      "database_name": "gulbargahomes-next-tag-cache",
+      "database_id": "00000000-0000-4000-8000-000000000002"
+    }
+  ]
+}

@@ -6,7 +6,6 @@ import { GoogleAnalytics } from "@/components/analytics/google-analytics";
 import { MicrosoftClarity } from "@/components/analytics/microsoft-clarity";
 import { AnalyticsPageView } from "@/components/analytics/page-view";
 import { FloatingContact } from "@/components/floating-contact";
-import { NetlifyIdentityWidget } from "@/components/netlify-identity";
 import { HideNetlifyBadge } from "@/components/hide-netlify-badge";
 import { JsonLd } from "@/components/jsonld";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
@@ -80,7 +79,6 @@ export default function RootLayout({
         <SiteFooter />
         <FloatingContact />
         <MobileBottomNav />
-        <NetlifyIdentityWidget />
       </body>
     </html>
   );

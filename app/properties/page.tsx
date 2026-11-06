@@ -16,17 +16,17 @@ import { site } from "@/lib/site";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-/** Refresh listings after CMS edits without waiting for a full redeploy. */
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
-export function generateMetadata({
+export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: SearchParams;
-}): Metadata {
-  const localities = getLocalities();
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  const resolved = await searchParams;
+  const localities = await getLocalities();
   const filters = parseExplorerFilters(
-    searchParamsRecordToURLSearchParams(searchParams),
+    searchParamsRecordToURLSearchParams(resolved),
     localities,
   );
   const { title, description } = getExplorerPageCopy(filters);
@@ -51,15 +51,16 @@ function ExplorerFallback() {
   return <div className="skeleton h-96 rounded-2xl" />;
 }
 
-export default function PropertiesPage({
+export default async function PropertiesPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
-  const properties = getAllProperties();
-  const localities = getLocalities();
+  const resolved = await searchParams;
+  const properties = await getAllProperties();
+  const localities = await getLocalities();
   const initial = parseExplorerFilters(
-    searchParamsRecordToURLSearchParams(searchParams),
+    searchParamsRecordToURLSearchParams(resolved),
     localities,
   );
   const { heading, description } = getExplorerPageCopy(initial);
