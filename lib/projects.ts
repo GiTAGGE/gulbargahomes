@@ -9,7 +9,14 @@ import { canonicalLocalityName } from "./locality";
 import type { ProjectStatus } from "./project-meta";
 export type { ProjectStatus } from "./project-meta";
 export { projectMetaLine } from "./project-meta";
+import projectSeed from "./project-seed.json";
 import { site } from "./site";
+
+type ContentSeed = {
+  slug: string;
+  body: string;
+  data: Record<string, unknown>;
+};
 
 const CONTENT_DIR = path.join(process.cwd(), "content", "projects");
 
@@ -115,15 +122,28 @@ function parseProject(file: string): PortfolioProject {
   return normalizeProject(data as Record<string, unknown>, content);
 }
 
+function projectsFromDisk(): PortfolioProject[] | null {
+  try {
+    if (!fs.existsSync(CONTENT_DIR)) return null;
+    const files = fs.readdirSync(CONTENT_DIR).filter((file) => file.endsWith(".mdx"));
+    if (files.length === 0) return null;
+    return files.map(parseProject);
+  } catch {
+    // Cloudflare Workers do not expose content/ at process.cwd().
+    return null;
+  }
+}
+
+function projectsFromSeed(): PortfolioProject[] {
+  return (projectSeed as ContentSeed[]).map((record) =>
+    normalizeProject(record.data, record.body),
+  );
+}
+
 export function getAllProjects(): PortfolioProject[] {
   if (process.env.NODE_ENV === "production" && cache) return cache;
 
-  if (!fs.existsSync(CONTENT_DIR)) return [];
-
-  const projects = fs
-    .readdirSync(CONTENT_DIR)
-    .filter((file) => file.endsWith(".mdx"))
-    .map(parseProject);
+  const projects = projectsFromDisk() ?? projectsFromSeed();
 
   projects.sort((a, b) => {
     if (a.featured !== b.featured) return a.featured ? -1 : 1;
