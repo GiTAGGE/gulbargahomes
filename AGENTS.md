@@ -16,7 +16,7 @@ See `README.md` for the Cloudflare resources, secrets, and domain cutover.
 
 ## Gotchas
 
-- Link the listing desk as `/admin/properties`, not the old Decap `/admin/index.html`
+- Link the listing desk as `/admin/properties`. The old Decap admin and Netlify Identity files have been removed.
 - Placeholder D1 ids in `wrangler.jsonc` must be replaced after `wrangler d1 create`
 - Do not commit `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET`
 - A single static video must stay under 25 MiB (Cloudflare asset limit). Larger new videos belong in R2

@@ -108,7 +108,7 @@ export default function TermsPage() {
 
       <LegalSection id="third-parties" title="Other services">
         <p>
-          WhatsApp, your phone network, Netlify, and Google Analytics if you allow it, are separate
+          WhatsApp, your phone network, Cloudflare, and Google Analytics if you allow it, are separate
           services with their own terms. Meta Instant Forms, if you use one in an advertisement,
           are Meta’s forms, not pages of this website.
         </p>

@@ -328,16 +328,10 @@ export default function PrivacyPolicyPage() {
           in this project, so the Clarity script is not loaded.
         </p>
         <p>
-          Every page also loads the Netlify Identity script so an invited editor can open an invite
-          or password-recovery link. Loading that script contacts Netlify. It does not create an
-          account for ordinary visitors. An invited editor who signs in may have a login cookie
-          such as <span className="font-medium text-ink">nf_jwt</span>. Admin drafts can also be
-          stored in that editor’s browser.
-        </p>
-        <p>
-          Netlify hosts the site and may keep standard server logs, which can include IP address,
-          browser type, time and the page requested, so the site can be delivered and protected.
-          We do not use those logs as a marketing list.
+          Cloudflare Workers hosts the site and may keep standard request logs, which can include
+          IP address, browser type, time and the page requested, so the site can be delivered and
+          protected. We do not use those logs as a marketing list. The listing desk keeps its own
+          sign-in cookie after a successful password login. Ordinary visitors do not get that cookie.
         </p>
         <AnalyticsChoice />
       </LegalSection>
@@ -362,12 +356,12 @@ export default function PrivacyPolicyPage() {
         <p>We share information only as far as the activity requires.</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong className="text-ink">Netlify.</strong> Hosts the site and provides Identity and
-            Git Gateway for invited editors.
+            <strong className="text-ink">Cloudflare.</strong> Hosts the site on Workers, stores
+            listings in D1, and stores new listing photos and videos in R2.
           </li>
           <li>
-            <strong className="text-ink">GitHub.</strong> Stores the website files, including listing
-            text and media the team publishes. It does not store visitor enquiry forms.
+            <strong className="text-ink">GitHub.</strong> Stores the website source, including the
+            photos and videos that ship with the site. It does not store visitor enquiry forms.
           </li>
           <li>
             <strong className="text-ink">Google.</strong> Receives analytics unless you have turned
@@ -463,8 +457,8 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection id="security" title="Security">
         <p>
-          We have no security certification to display. The public site is hosted as pages on
-          Netlify. Admin editing is limited to invited people through Netlify Identity. Do not send
+          We have no security certification to display. The public site is hosted on Cloudflare
+          Workers. The listing desk is limited to people with the desk password. Do not send
           document copies through the joint-venture form. No method of contact is free of risk,
           especially on WhatsApp and email.
         </p>
