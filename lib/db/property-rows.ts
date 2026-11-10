@@ -165,6 +165,16 @@ export function rowToInventory(row: PropertyRow): InventoryProperty {
   };
 }
 
+/**
+ * The listing as the public Property shape, for formatters and the editor.
+ * Internal-only availabilities (On Hold, Withdrawn) read as Available; the
+ * editor never writes status, so this cannot leak back.
+ */
+export function asListing(property: InventoryProperty): Property {
+  const status = property.status === "Rented" || property.status === "Sold" ? property.status : "Available";
+  return { ...property, status };
+}
+
 export function lifecycleOf(property: InventoryProperty): LifecycleState {
   return {
     listing: property.listing,

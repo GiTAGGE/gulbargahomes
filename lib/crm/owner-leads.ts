@@ -140,6 +140,9 @@ export async function listOwnerLeads(
   const status = strictOneOf(filter.status, OWNER_LEAD_STATUSES);
   if (status) add("l.status = ?", status);
   if (filter.status === "open") conditions.push("l.status IN ('New', 'Contacted', 'Details pending')");
+  if (filter.status === "closed") {
+    conditions.push("l.status IN ('Not interested', 'Unreachable', 'Duplicate', 'Invalid')");
+  }
   if (filter.contactId) add("l.contact_id = ?", filter.contactId);
   if (filter.q?.trim()) {
     const q = `%${filter.q.trim()}%`;

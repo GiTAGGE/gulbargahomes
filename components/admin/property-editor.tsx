@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { formatPrice } from "@/lib/format";
 import { slugifyTitle } from "@/lib/property-input";
@@ -25,17 +25,42 @@ const TYPES: PropertyType[] = ["House", "Flat", "Villa", "Plot", "Commercial", "
 const FACINGS: Facing[] = ["East", "West", "North", "South"];
 const FURNISHING: Furnishing[] = ["Fully Furnished", "Semi Furnished", "Unfurnished"];
 
+export type EditorPermissions = {
+  editPrice: boolean;
+  archive: boolean;
+  changeAvailability: boolean;
+};
+
 export function PropertyEditor({
   initial,
   mode,
   localities,
+  rowVersion: initialRowVersion,
+  internalNotes: initialNotes = "",
+  isPublic = false,
+  availabilityLabel,
+  permissions = { editPrice: true, archive: true, changeAvailability: true },
 }: {
+  availabilityLabel?: string;
   initial: Property;
   mode: "create" | "edit";
   localities: string[];
+  rowVersion?: number;
+  internalNotes?: string;
+  isPublic?: boolean;
+  permissions?: EditorPermissions;
 }) {
   const router = useRouter();
   const [property, setProperty] = useState(initial);
+  const [rowVersion, setRowVersion] = useState(initialRowVersion);
+  // Status changes from the side panel bump the version without touching content fields.
+  useEffect(() => {
+    setRowVersion((current) =>
+      initialRowVersion !== undefined && (current === undefined || initialRowVersion > current) ? initialRowVersion : current,
+    );
+  }, [initialRowVersion]);
+  const [internalNotes, setInternalNotes] = useState(initialNotes);
+  const priceLocked = mode === "edit" && !permissions.editPrice;
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
   const [mapTouched, setMapTouched] = useState(mode === "edit" && Boolean(initial.mapQuery));
   const [error, setError] = useState("");
@@ -118,18 +143,25 @@ export function PropertyEditor({
     const response = await fetch(endpoint, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ property }),
+      body: JSON.stringify({ property, rowVersion, internalNotes }),
     });
     const data = (await response.json().catch(() => ({}))) as {
       error?: string;
-      property?: Property;
+      property?: Property & { rowVersion?: number };
     };
     setPending(false);
     if (!response.ok || !data.property) {
       setError(data.error || "Could not save this listing.");
       return;
     }
-    setNotice("Saved. The public site will show this version on the next visit.");
+    setRowVersion(data.property.rowVersion);
+    setNotice(
+      mode === "create"
+        ? "Saved as a draft. It stays off the website until it is verified and published."
+        : isPublic
+          ? "Saved. The public site will show this version on the next visit."
+          : "Saved. This property is not on the public website.",
+    );
     if (mode === "create" || data.property.slug !== initial.slug) {
       router.push(`/admin/properties/${data.property.slug}/edit`);
       router.refresh();
@@ -151,10 +183,10 @@ export function PropertyEditor({
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
       setPending(false);
-      setError(data.error || "Could not delete this listing.");
+      setError(data.error || "Could not archive this listing.");
       return;
     }
-    window.location.href = "/admin/properties";
+    window.location.href = "/admin/properties?tab=archived";
   }
 
   return (
@@ -215,12 +247,23 @@ export function PropertyEditor({
               options={LISTINGS}
               onChange={(listing) => update({ listing })}
             />
-            <Choice
-              label="Availability"
-              value={property.status}
-              options={STATUSES}
-              onChange={(status) => update({ status })}
-            />
+            {mode === "create" && permissions.changeAvailability ? (
+              <Choice
+                label="Availability"
+                value={property.status}
+                options={STATUSES}
+                onChange={(status) => update({ status })}
+              />
+            ) : (
+              <div>
+                <p className="text-sm font-semibold text-ink">Availability</p>
+                <p className="mt-1.5 text-sm text-ink-muted">
+                  {mode === "edit"
+                    ? `${availabilityLabel ?? property.status}. Change it from the status panel so it is checked and recorded.`
+                    : "Starts as Available. Confirm it with the owner from the status panel."}
+                </p>
+              </div>
+            )}
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-semibold text-ink">
@@ -279,7 +322,14 @@ export function PropertyEditor({
           </div>
         </Section>
 
-        <Section title="Price and size" hint="Rent is monthly. Sale prices are stored in rupees.">
+        <Section
+          title="Price and size"
+          hint={
+            priceLocked
+              ? "Your role cannot change the price. Ask an inventory manager."
+              : "Rent is monthly. Sale prices are stored in rupees."
+          }
+        >
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-semibold text-ink">
               Price (INR)
@@ -287,14 +337,16 @@ export function PropertyEditor({
                 type="number"
                 min={0}
                 value={property.price}
+                disabled={priceLocked}
                 onChange={(event) => update({ price: Number(event.target.value) })}
-                className={fieldClass}
+                className={`${fieldClass} disabled:bg-surface-muted disabled:text-ink-muted`}
               />
             </label>
             <label className="block text-sm font-semibold text-ink">
               Suffix
               <input
                 value={property.priceSuffix}
+                disabled={priceLocked}
                 onChange={(event) => update({ priceSuffix: event.target.value })}
                 placeholder={property.listing === "Rent" ? "/month" : ""}
                 className={fieldClass}
@@ -552,6 +604,19 @@ export function PropertyEditor({
           />
         </Section>
 
+        <Section
+          title="Internal notes"
+          hint="Staff only. Never shown on the website: owner terms, key handover, negotiation notes."
+        >
+          <textarea
+            value={internalNotes}
+            onChange={(event) => setInternalNotes(event.target.value)}
+            rows={4}
+            maxLength={4000}
+            className={fieldClass}
+          />
+        </Section>
+
         <Section title="Amenities and rules">
           <ChipEditor
             label="Amenities"
@@ -664,9 +729,9 @@ export function PropertyEditor({
               {property.locality || "Locality"} · {priceLabel}
             </p>
             <p className="text-sm text-ink-muted">
-              {property.gallery.length} photos · {property.videos.length} videos · {property.status}
+              {property.gallery.length} photos · {property.videos.length} videos · {availabilityLabel ?? property.status}
             </p>
-            {mode === "edit" && property.slug && (
+            {mode === "edit" && isPublic && property.slug && (
               <Link href={`/properties/${property.slug}`} className="inline-block text-sm font-semibold text-brand-700">
                 Open public page
               </Link>
@@ -675,16 +740,16 @@ export function PropertyEditor({
         </div>
         <div className="mt-3 flex flex-col gap-2">
           <button type="button" className="btn-primary" disabled={pending || Boolean(uploading)} onClick={() => void save()}>
-            {pending ? "Saving…" : mode === "create" ? "Publish listing" : "Save changes"}
+            {pending ? "Saving…" : mode === "create" ? "Save as draft" : "Save changes"}
           </button>
-          {mode === "edit" && (
+          {mode === "edit" && permissions.archive && (
             <button
               type="button"
               className="btn-ghost text-red-800"
               disabled={pending}
               onClick={() => void remove()}
             >
-              {confirmDelete ? "Confirm delete" : "Delete listing"}
+              {confirmDelete ? "Confirm archive" : "Archive listing"}
             </button>
           )}
         </div>

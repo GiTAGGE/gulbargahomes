@@ -19,10 +19,10 @@ export default async function AdminLoginPage({
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
           GulbargaHomes
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-ink">Listing desk</h1>
+        <h1 className="mt-2 text-2xl font-bold text-ink">Operations desk</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Add and update houses, flats, plots and commercial listings for Gulbarga and Kalaburagi.
-          Changes save to the property database — no git publish, no rebuild wait.
+          Staff only. Owner leads, requirements, verified inventory and listings for Gulbarga and
+          Kalaburagi.
         </p>
         <LoginForm nextPath={nextPath} />
       </div>
