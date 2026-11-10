@@ -1,3 +1,8 @@
 # Copy to .dev.vars for local OpenNext / Wrangler preview. Do not commit .dev.vars.
 # Selects which Next.js env file the Worker preview loads.
 NEXTJS_ENV=development
+
+# Meta Lead Ads, for testing the webhook and cron against the built Worker
+# META_APP_SECRET=
+# META_WEBHOOK_VERIFY_TOKEN=
+# META_TOKEN_KEY=
