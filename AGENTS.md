@@ -9,7 +9,8 @@ See `README.md` for the Cloudflare resources, secrets, and domain cutover.
 ## Services
 
 - Dev server: `npm run dev` → http://localhost:3000
-- Listing desk: http://localhost:3000/admin/properties
+- Listing desk: http://localhost:3000/admin/properties (operations CRM: `/admin/today`, `/admin/owner-leads`, `/admin/requirements`, `/admin/contacts`, `/admin/team`)
+- Tests: `npm test` (Node test runner + tsx, in-memory `node:sqlite` stands in for D1)
 - Lint / build: `npm run lint`, `npm run build`
 - Worker: `npm run preview`, `npm run deploy`
 - Media: `npm run images` rebuilds WebP photos, hero assets and MP4 tours from `public/images/source/`
@@ -22,3 +23,5 @@ See `README.md` for the Cloudflare resources, secrets, and domain cutover.
 - A single static video must stay under 25 MiB (Cloudflare asset limit). Larger new videos belong in R2
 - Pagefind search index is built in `postbuild`; property search also hits the database via `/api/search`
 - City copy must mention both **Gulbarga** and **Kalaburagi**
+- Public pages read listings only through `lib/properties.ts` (the `public_properties` view: Verified + Published). ESLint blocks public code from importing `@/lib/inventory`, `@/lib/crm` or `@/lib/admin`
+- Schema changes go in `lib/db/migrations.ts` as a new version; never edit an applied migration. `audit_log` is append-only (triggers reject UPDATE/DELETE)

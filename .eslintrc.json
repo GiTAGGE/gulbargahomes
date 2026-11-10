@@ -1,3 +1,38 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+      "excludedFiles": ["app/admin/**", "app/api/admin/**", "components/admin/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/lib/admin/*", "@/lib/crm/*", "@/lib/inventory/*", "@/components/admin/*"],
+                "message": "Public pages read listings only through @/lib/properties (published + verified). Inventory, CRM and admin code stays in /admin."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["lib/properties.ts", "lib/site-search-data.ts", "lib/sitemap-xml.ts", "lib/locations.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["./admin/*", "./crm/*", "./inventory/repository", "@/lib/admin/*", "@/lib/crm/*", "@/lib/inventory/repository"],
+                "message": "Public data modules must not read the internal inventory or CRM."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

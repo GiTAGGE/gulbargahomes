@@ -45,15 +45,22 @@ Open http://localhost:3000. Listing desk: http://localhost:3000/admin/properties
 | `npm run images` | Rebuild WebP photos, hero image and MP4 tours |
 | `npm run lint` | ESLint |
 
-## Listing desk
+## Listing desk and operations CRM
 
-Sign in at `/admin/properties`. From there you can:
+Sign in at `/admin/properties` with a named staff account, or leave the email blank to use the shared `ADMIN_PASSWORD` (signed in as "Primary admin"). Owners and customers never log in. Every listing is created and changed by staff. The full design is in [`docs/crm-architecture.md`](docs/crm-architecture.md).
 
-- Search and filter every listing
-- Add a property with price, locality, Vastu, bachelor/family rules, amenities, nearby places and FAQs
-- Upload photos (set a cover, reorder) and videos, or paste a YouTube URL
-- Mark a listing Available, Rented, or Sold without deleting it
-- Delete a listing after a second confirmation
+- **Today** (`/admin/today`) lists follow-ups due, new owner leads, urgent requirements, properties waiting for verification and properties whose owner availability check has expired.
+- **Owner leads** record an owner's interest from a Meta form, a call or WhatsApp. A lead never creates a property by itself. Staff use *Convert to draft property*, which creates an internal draft linked to the owner. One owner can have several properties.
+- **Requirements** record tenants and buyers, ranked by an intent score (urgency, budget, detail, engagement).
+- **Inventory** shows every property, with tabs for what is on the website, the pipeline, properties that need reconfirming, discreet properties, off-market properties and the archive.
+  - New properties start as **Draft + Unpublished**. They reach the website only once they are **Verified + Published** and Available, Rented or Sold.
+  - "Delete" now archives.
+  - Each change is written to an append-only history, with who made it and when.
+- **Availability checks** expire after 14 days for rentals and 30 days for sales. Until staff confirm with the owner again, the property stays out of matching.
+- **Contacts** hold one record per mobile number, with every call, message and note across their leads and requirements.
+- **Team** (super admin only) adds named accounts with a role: Super admin, Inventory manager, Lead executive or Viewer. Viewers see masked phone numbers.
+
+Editing a property still supports price, locality, Vastu, bachelor/family rules, amenities, nearby places, FAQs, photo upload (set a cover, reorder), video upload and YouTube URLs.
 
 Existing photos and tours keep their `/images/...` and `/videos/...` paths. New files upload to R2 (or `public/uploads` in local dev without R2). Video uploads can be up to 80 MB.
 
@@ -83,7 +90,7 @@ npx wrangler r2 bucket create gulbargahomes-media
 
 The Durable Object class `DOQueueHandler` comes from the OpenNext build. The `v1` migration in `wrangler.jsonc` registers it. No separate create command.
 
-`npm run deploy` runs OpenNext `populateCache`, which creates the D1 `revalidations` table. The listings table is created on the first request and filled from `lib/property-seed.json` (the current MDX files). You do not need a manual SQL import.
+`npm run deploy` runs OpenNext `populateCache`, which creates the D1 `revalidations` table. The listings table is created on the first request and filled from `lib/property-seed.json` (the current MDX files). You do not need a manual SQL import. Schema changes are versioned migrations in `lib/db/migrations.ts`, applied on the first request after a deploy and recorded in `schema_migrations`. When an existing database is upgraded, every current listing is kept as Verified + Published, so the website does not change.
 
 ### Worker secrets and build variables
 
@@ -91,8 +98,9 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 
 | Variable | Secret | Purpose |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | yes | Listing desk password. There is no username. |
+| `ADMIN_PASSWORD` | yes | Shared listing desk password (signs in as "Primary admin", a super admin). Named staff accounts are added under Team. |
 | `ADMIN_SESSION_SECRET` | yes | `openssl rand -hex 32` |
+| `ADMIN_LEGACY_LOGIN` | no | Set to `disabled` once everyone has a named account. This switches off the shared password and ends its existing sessions. |
 | `NEXT_PUBLIC_GA4_ID` | no | `G-47GFXYGBTL` unless the GA4 property changes |
 | `NEXT_PUBLIC_CLARITY_ID` | no | Optional Microsoft Clarity id |
 | `REVALIDATE_SECRET` | yes | Optional, for `POST /api/revalidate` |
