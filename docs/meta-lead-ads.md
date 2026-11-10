@@ -476,7 +476,7 @@ later deploy:
      message. This message is how a wrong-format `META_APP_SECRET` shows up,
      since Secret values cannot be read back.
    - `GET /api/webhooks/meta-leads` with a wrong verify token returns 403
-   - an unsigned `POST` returns 401 (503 means a secret is missing or malformed)
+   - an unsigned `POST` returns 401 (503 means the App Secret is not set at all)
 6. In Meta: save the webhook callback (Verify and save), subscribe `leadgen`,
    and turn on Require App Secret.
 7. Connect from `https://gulbargahomes.com/admin/integrations/meta`, classify
