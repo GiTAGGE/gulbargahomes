@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { getMediaBucket } from "@/lib/properties";
+import { authorize } from "@/lib/admin/route";
+import { getMediaBucket } from "@/lib/db/database";
 
 const MAX_BYTES = 80 * 1024 * 1024;
 
@@ -23,9 +23,8 @@ function safeBase(name: string): string {
 }
 
 export async function POST(request: Request) {
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
+  const auth = await authorize(request, "property.edit");
+  if ("response" in auth) return auth.response;
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

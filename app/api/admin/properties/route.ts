@@ -1,36 +1,32 @@
 import { NextResponse } from "next/server";
 
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { can } from "@/lib/admin/permissions";
+import { authorize, errorResponse, readJson } from "@/lib/admin/route";
+import { nowIso } from "@/lib/db/sql";
+import { availabilityFromInput, createDraftProperty } from "@/lib/inventory/repository";
 import { parsePropertyDraft } from "@/lib/property-input";
-import { getProperty, saveProperty } from "@/lib/properties";
-import { revalidateListings } from "@/lib/revalidate-listings";
 
+/** Creates an unpublished draft. Publishing is a separate, permissioned action. */
 export async function POST(request: Request) {
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
-
-  const body = (await request.json().catch(() => null)) as { property?: unknown } | null;
-  const parsed = parsePropertyDraft(body?.property);
-  if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
-  }
-
-  const existing = await getProperty(parsed.property.slug);
-  if (existing) {
-    return NextResponse.json(
-      { error: "A property with that slug already exists. Open it to edit, or choose another slug." },
-      { status: 409 },
-    );
-  }
+  const auth = await authorize(request, "property.create");
+  if ("response" in auth) return auth.response;
+  const { admin, db } = auth;
 
   try {
-    await saveProperty(parsed.property);
-    revalidateListings();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not save the property.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+    const body = await readJson(request);
+    const parsed = parsePropertyDraft(body.property);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  return NextResponse.json({ ok: true, property: parsed.property });
+    const status = can(admin.role, "property.change_availability")
+      ? availabilityFromInput((body.property as Record<string, unknown>)?.status)
+      : "Available";
+    const property = await createDraftProperty(db, admin, parsed.property, {
+      now: nowIso(),
+      status,
+      internalNotes: typeof body.internalNotes === "string" ? body.internalNotes.slice(0, 4000) : "",
+    });
+    return NextResponse.json({ ok: true, property });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

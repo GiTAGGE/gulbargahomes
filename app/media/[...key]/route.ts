@@ -7,7 +7,7 @@ type Context = { params: Promise<{ key: string[] }> };
 export async function GET(request: Request, context: Context) {
   const { key } = await context.params;
   const objectKey = key.join("/");
-  if (!objectKey || objectKey.includes("..")) {
+  if (!objectKey || objectKey.includes("..") || objectKey.startsWith("private/")) {
     return new Response("Not found", { status: 404 });
   }
 

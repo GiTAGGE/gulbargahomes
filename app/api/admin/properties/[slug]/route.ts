@@ -1,63 +1,63 @@
 import { NextResponse } from "next/server";
 
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { can } from "@/lib/admin/permissions";
+import { authorize, errorResponse, jsonError, readJson } from "@/lib/admin/route";
+import { nowIso } from "@/lib/db/sql";
+import {
+  applyPropertyLifecycle,
+  getInventoryBySlug,
+  updatePropertyContent,
+} from "@/lib/inventory/repository";
 import { parsePropertyDraft } from "@/lib/property-input";
-import { deleteProperty, getProperty, saveProperty } from "@/lib/properties";
 import { revalidateListings } from "@/lib/revalidate-listings";
 
 type Context = { params: Promise<{ slug: string }> };
 
 export async function PATCH(request: Request, context: Context) {
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
-
+  const auth = await authorize(request, "property.edit");
+  if ("response" in auth) return auth.response;
+  const { admin, db } = auth;
   const { slug } = await context.params;
-  const current = await getProperty(slug);
-  if (!current) {
-    return NextResponse.json({ error: "That property is no longer on the site." }, { status: 404 });
-  }
-
-  const body = (await request.json().catch(() => null)) as { property?: unknown } | null;
-  const parsed = parsePropertyDraft(body?.property);
-  if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
-  }
-
-  if (parsed.property.slug !== slug) {
-    const taken = await getProperty(parsed.property.slug);
-    if (taken) {
-      return NextResponse.json(
-        { error: "Another property already uses that slug." },
-        { status: 409 },
-      );
-    }
-  }
 
   try {
-    await saveProperty(parsed.property, slug);
-    revalidateListings();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not save the property.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+    const access = { includeDiscreet: can(admin.role, "property.view_discreet") };
+    const current = await getInventoryBySlug(db, slug, access);
+    if (!current) return jsonError(404, "That property is no longer in the inventory.");
 
-  return NextResponse.json({ ok: true, property: parsed.property });
+    const body = await readJson(request);
+    const parsed = parsePropertyDraft(body.property);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    const expectedVersion = Number.isInteger(body.rowVersion) ? Number(body.rowVersion) : undefined;
+    const property = await updatePropertyContent(db, admin, current, parsed.property, {
+      now: nowIso(),
+      expectedVersion,
+      allowPriceChange: can(admin.role, "property.edit_price"),
+      internalNotes: typeof body.internalNotes === "string" ? body.internalNotes.slice(0, 4000) : undefined,
+    });
+    revalidateListings();
+    return NextResponse.json({ ok: true, property });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
-export async function DELETE(_request: Request, context: Context) {
-  if (!(await isAdminAuthenticated())) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
-
+/** Kept for existing callers: archives instead of deleting. */
+export async function DELETE(request: Request, context: Context) {
+  const auth = await authorize(request, "property.archive");
+  if ("response" in auth) return auth.response;
+  const { admin, db } = auth;
   const { slug } = await context.params;
-  try {
-    await deleteProperty(slug);
-    revalidateListings();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not delete the property.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
 
-  return NextResponse.json({ ok: true });
+  try {
+    const current = await getInventoryBySlug(db, slug, {
+      includeDiscreet: can(admin.role, "property.view_discreet"),
+    });
+    if (!current) return jsonError(404, "That property is no longer in the inventory.");
+    const property = await applyPropertyLifecycle(db, admin, current, { type: "archive" }, { now: nowIso() });
+    revalidateListings();
+    return NextResponse.json({ ok: true, property });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
