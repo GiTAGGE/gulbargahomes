@@ -3,8 +3,7 @@
 Premium real estate platform for **Gulbarga (Kalaburagi)** — rental houses, flats, independent homes, villas, commercial space and residential plots.
 
 Live domain: [gulbargahomes.com](https://gulbargahomes.com)  
-Production target: **Cloudflare Workers** via OpenNext (same path as HubliTaxi).  
-Netlify (`gulbarga.netlify.app`, `netlify.toml`) stays in the repo as a rollback until DNS is cut over.
+Production host: **Cloudflare Workers** via OpenNext (same path as HubliTaxi).
 
 ## What this site is
 
@@ -103,7 +102,7 @@ Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does no
 
 Connect this GitHub repo. Build command: `npm run deploy`. Node 20 (see `.nvmrc`).
 
-Custom domains in `wrangler.jsonc`: `gulbargahomes.com` and `www.gulbargahomes.com`. The zone for `gulbargahomes.com` must already be on this Cloudflare account (move nameservers from GoDaddy to Cloudflare if they are not). `www` should redirect to the apex the way the app already does. Leave `workers.dev` on until the custom domain is serving traffic, then you can turn the old Netlify site off.
+Custom domains in `wrangler.jsonc`: `gulbargahomes.com` and `www.gulbargahomes.com`. `www` redirects to the apex in the app. `workers.dev` stays available as a rollback URL.
 
 `https://gulbargahomes.<your-subdomain>.workers.dev` remains a rollback URL. Canonical tags and the sitemap use `https://gulbargahomes.com`.
 

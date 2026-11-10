@@ -65,6 +65,8 @@ const nextConfig = {
         permanent: true,
       },
       {
+        // Kept until the Netlify site gulbarga is deleted, so that hostname
+        // still sends visitors to the apex if a request reaches this app.
         source: "/:path*",
         has: [{ type: "host", value: "gulbarga.netlify.app" }],
         destination: "https://gulbargahomes.com/:path*",
@@ -76,7 +78,7 @@ const nextConfig = {
 
 export default nextConfig;
 
-// Local `next dev` only — skipped during `next build` (Netlify and OpenNext).
+// Local `next dev` only — skipped during `next build` and the OpenNext Worker build.
 if (process.env.NODE_ENV === "development") {
   const { initOpenNextCloudflareForDev } = await import("@opennextjs/cloudflare");
   initOpenNextCloudflareForDev();
