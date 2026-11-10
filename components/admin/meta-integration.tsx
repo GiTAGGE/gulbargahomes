@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatDateTime } from "@/lib/admin/format";
+import { OPTIONAL_SCOPES, REQUIRED_SCOPES, type OptionalScope } from "@/lib/meta/config";
 import type { MetaConnectionView } from "@/lib/meta/connection";
 import type { StoredForm } from "@/lib/meta/forms";
 import type { ImportJob } from "@/lib/meta/imports";
@@ -149,6 +150,10 @@ function ConnectionCard({
 }: Props & { busy: string; act: Act; setMessage: (value: { tone: "error" | "ok" | "warn"; text: string } | null) => void }) {
   const [pages, setPages] = useState<{ id: string; name: string; canManageLeads: boolean }[] | null>(null);
   const [checks, setChecks] = useState<{ label: string; ok: boolean; detail: string }[] | null>(null);
+  const [optional, setOptional] = useState<OptionalScope[]>(() =>
+    (Object.keys(OPTIONAL_SCOPES) as OptionalScope[]).filter((scope) => connection.scopes.includes(scope)),
+  );
+  const connectHref = `${API}/connect${optional.length ? `?${optional.map((scope) => `optional=${scope}`).join("&")}` : ""}`;
   const choosing = canManage && connection.awaitingPageChoice && (flash.choosePage || connection.status === "pending_page");
 
   useEffect(() => {
@@ -187,7 +192,7 @@ function ConnectionCard({
               </button>
             )}
             <a
-              href={missingSecrets.length ? undefined : `${API}/connect`}
+              href={missingSecrets.length ? undefined : connectHref}
               aria-disabled={missingSecrets.length > 0}
               className={`btn-primary ${missingSecrets.length ? "pointer-events-none opacity-50" : ""}`}
             >
@@ -200,7 +205,7 @@ function ConnectionCard({
       <div className="space-y-3">
         {missingSecrets.length > 0 && (
           <Notice tone="warn">
-            Add these Worker secrets in Cloudflare before connecting: <span className="font-mono">{missingSecrets.join(", ")}</span>.
+            Add or correct these Worker secrets in Cloudflare before connecting (the App Secret is 32 hex characters): <span className="font-mono">{missingSecrets.join(", ")}</span>.
           </Notice>
         )}
         {connection.status === "expired" && (
@@ -221,7 +226,10 @@ function ConnectionCard({
             {!pages ? (
               <p className="mt-1 text-sm text-ink-muted">Loading Pages…</p>
             ) : pages.length === 0 ? (
-              <p className="mt-1 text-sm text-ink-muted">This Facebook account does not manage any Pages.</p>
+              <p className="mt-1 text-sm text-ink-muted">
+                Meta returned no Pages for this Facebook account. Check that the account has a task on the GulbargaHomes Page. If the
+                Page is managed only through the Business portfolio, tick the Business portfolio option below and reconnect.
+              </p>
             ) : (
               <ul className="mt-2 space-y-2">
                 {pages.map((page) => (
@@ -261,8 +269,36 @@ function ConnectionCard({
           <Detail label="Last successful sync">{formatDateTime(connection.lastSuccessAt)}</Detail>
           <Detail label="Last checked">{formatDateTime(connection.lastCheckedAt)}</Detail>
         </dl>
-        {connection.scopes.length > 0 && (
-          <p className="text-xs text-ink-faint">Granted: {connection.scopes.join(", ")}</p>
+        <div className="space-y-1 text-xs text-ink-faint">
+          <p>
+            Required: <span className="font-mono">{REQUIRED_SCOPES.join(", ")}</span>
+          </p>
+          {connection.scopes.length > 0 && (
+            <p>
+              Granted to this connection: <span className="font-mono">{connection.scopes.join(", ")}</span>. A granted permission
+              in testing is not the same as Advanced Access from App Review.
+            </p>
+          )}
+        </div>
+        {canManage && (
+          <fieldset className="space-y-1 rounded-xl border border-surface-muted p-3 text-sm">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Optional on next connect</legend>
+            {(Object.entries(OPTIONAL_SCOPES) as [OptionalScope, string][]).map(([scope, purpose]) => (
+              <label key={scope} className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={optional.includes(scope)}
+                  onChange={(event) =>
+                    setOptional((current) => (event.target.checked ? [...current, scope] : current.filter((item) => item !== scope)))
+                  }
+                />
+                <span>
+                  <span className="font-mono text-xs">{scope}</span> — {purpose}
+                </span>
+              </label>
+            ))}
+          </fieldset>
         )}
         {checks && (
           <ul className="space-y-1 rounded-xl bg-surface-muted/60 p-3 text-sm">

@@ -90,8 +90,10 @@ export async function receiveWebhook(
   let created = 0;
   let repeats = 0;
   let ignored = 0;
+  // Expired and mid-reconnect connections still queue leads so nothing is lost; a disconnected one does not.
+  const acceptingPage = connection.status === "disconnected" ? "" : connection.pageId;
   for (const change of parsed.changes) {
-    if (connection.pageId && change.pageId && change.pageId !== connection.pageId) {
+    if (!acceptingPage || change.pageId !== acceptingPage) {
       ignored += 1;
       continue;
     }
@@ -124,7 +126,13 @@ export async function receiveWebhook(
       parsed.changes.length,
       created,
       repeats,
-      ignored ? `${ignored} lead(s) for another Page ignored` : parsed.changes.length ? "" : "No leadgen changes",
+      ignored
+        ? acceptingPage
+          ? `${ignored} lead(s) for another Page ignored`
+          : `${ignored} lead(s) ignored: no Page is connected`
+        : parsed.changes.length
+          ? ""
+          : "No leadgen changes",
     )
     .run();
   if (parsed.changes.length) await touchConnection(db, "last_webhook_at", input.now);

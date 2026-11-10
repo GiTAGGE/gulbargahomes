@@ -16,7 +16,8 @@ createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
-  const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString() || "{}") : {};
+  const raw = Buffer.concat(chunks).toString();
+  const body = url.pathname.startsWith("/__") && raw ? JSON.parse(raw) : {};
 
   if (url.pathname.endsWith("/dialog/oauth")) {
     const back = new URL(url.searchParams.get("redirect_uri") ?? "");
@@ -47,6 +48,10 @@ createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(meta.calls));
     return;
   }
-  const response = await meta.fetch(url.toString(), { method: req.method, headers: req.headers as Record<string, string> });
+  const response = await meta.fetch(url.toString(), {
+    method: req.method,
+    headers: req.headers as Record<string, string>,
+    ...(raw ? { body: raw } : {}),
+  });
   res.writeHead(response.status, { "content-type": "application/json" }).end(await response.text());
 }).listen(port, "127.0.0.1", () => console.log(`meta mock on http://127.0.0.1:${port}`));

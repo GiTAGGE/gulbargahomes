@@ -4,22 +4,35 @@ export const DEFAULT_GRAPH_VERSION = "v27.0";
 export const OAUTH_STATE_COOKIE = "gh_meta_oauth_state";
 
 /**
- * Asked for at connection time. pages_manage_metadata subscribes the Page to
- * leadgen webhooks; pages_manage_ads lists Instant Forms; ads_read adds
- * campaign, ad set and ad names; business_management is needed when the Page
- * belongs to a Business portfolio.
+ * What lead ingestion needs, per Meta's endpoint references and Lead Ads guides:
+ * - pages_show_list: /me/accounts (choose the Page, get its token)
+ * - pages_manage_metadata: POST/GET /{page-id}/subscribed_apps (leadgen webhook)
+ * - pages_read_engagement, pages_manage_ads, leads_retrieval: read
+ *   /{page-id}/leadgen_forms, /{form-id}/leads and /{lead-id} with field_data
+ * ads_management is not requested: the integration never creates or edits ads.
  */
-export const META_SCOPES = [
+export const REQUIRED_SCOPES = [
   "pages_show_list",
   "pages_read_engagement",
   "pages_manage_metadata",
   "pages_manage_ads",
   "leads_retrieval",
-  "ads_read",
-  "business_management",
 ] as const;
 
-export const REQUIRED_SCOPES = ["pages_show_list", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval"] as const;
+/** Asked for only when the super admin ticks them on Connect. Ingestion works without either. */
+export const OPTIONAL_SCOPES = {
+  ads_read: "Campaign, ad set and ad names on each lead (ids are stored either way)",
+  business_management: "Only if the Page is reachable solely through a Business portfolio and does not appear otherwise",
+} as const;
+export type OptionalScope = keyof typeof OPTIONAL_SCOPES;
+
+export function isOptionalScope(value: string): value is OptionalScope {
+  return Object.prototype.hasOwnProperty.call(OPTIONAL_SCOPES, value);
+}
+
+export function requestedScopes(optional: readonly string[] = []): string[] {
+  return [...REQUIRED_SCOPES, ...optional.filter(isOptionalScope)];
+}
 
 export type MetaConfig = {
   appId: string;
@@ -35,6 +48,7 @@ export type MetaConfig = {
 export type MetaEnv = Record<string, string | undefined>;
 
 export const SECRET_NAMES = ["META_APP_SECRET", "META_WEBHOOK_VERIFY_TOKEN", "META_TOKEN_KEY"] as const;
+const APP_SECRET_FORMAT = /^[0-9a-f]{32}$/i;
 
 /** Graph and dialog hosts can only be pointed elsewhere for local development against a mock. */
 function devOverride(env: MetaEnv, name: string, fallback: string): string {
@@ -58,5 +72,7 @@ export function readMetaConfig(env: MetaEnv = process.env, origin = ""): { confi
   };
   const missing = SECRET_NAMES.filter((name) => !env[name]?.trim());
   if (config.tokenKey && config.tokenKey.length < 32 && !missing.includes("META_TOKEN_KEY")) missing.push("META_TOKEN_KEY");
+  // Meta App Secrets are always 32 hex characters; anything else is a pasted App ID, token or typo.
+  if (config.appSecret && !APP_SECRET_FORMAT.test(config.appSecret)) missing.push("META_APP_SECRET");
   return { config, missing };
 }

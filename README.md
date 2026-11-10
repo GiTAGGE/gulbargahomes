@@ -41,6 +41,8 @@ Open http://localhost:3000. Listing desk: http://localhost:3000/admin/properties
 | `npm run build` | Refresh the property snapshot, then production build + Pagefind |
 | `npm run preview` | OpenNext build + local Workers runtime |
 | `npm run deploy` | Build and deploy the Worker (`--keep-vars` so dashboard secrets stay) |
+| `npm run deploy:staging` | Build and deploy the `staging` environment (own Worker, D1 and R2; see `docs/meta-lead-ads.md`) |
+| `npm run -s erasure:sql -- GH-C0001 --by <email>` | Print the SQL for a manual erasure request; `-- --review` lists contacts due for the 12-month review (see `docs/data-erasure-runbook.md`) |
 | `npm run images` | Rebuild WebP photos, hero image and MP4 tours |
 | `npm run lint` | ESLint |
 

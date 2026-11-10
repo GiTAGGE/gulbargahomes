@@ -7,18 +7,24 @@ import { site } from "@/lib/site";
 
 export const POLICY_UPDATED = "2026-11-02";
 export const POLICY_UPDATED_LABEL = "2 November 2026";
+export const PRIVACY_UPDATED = "2026-11-10";
+export const PRIVACY_UPDATED_LABEL = "10 November 2026";
 
 export function LegalDocument({
   eyebrow,
   title,
   description,
   path,
+  updated = POLICY_UPDATED,
+  updatedLabel = POLICY_UPDATED_LABEL,
   children,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   path: string;
+  updated?: string;
+  updatedLabel?: string;
   children: ReactNode;
 }) {
   return (
@@ -34,7 +40,7 @@ export function LegalDocument({
       <p className="mt-4 text-base leading-relaxed text-ink-muted">{description}</p>
       <p className="mt-3 text-sm text-ink-faint">
         Last updated{" "}
-        <time dateTime={POLICY_UPDATED}>{POLICY_UPDATED_LABEL}</time>
+        <time dateTime={updated}>{updatedLabel}</time>
       </p>
       <div className="mt-8 space-y-10 text-sm leading-relaxed text-ink-muted sm:text-base">
         {children}

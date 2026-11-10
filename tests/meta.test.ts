@@ -6,13 +6,20 @@ import { getOwnerLead } from "../lib/crm/owner-leads";
 import { getRequirement } from "../lib/crm/requirements";
 import { getSource } from "../lib/crm/sources";
 import { prepareDatabase } from "../lib/db/prepare";
-import { readMetaConfig } from "../lib/meta/config";
+import { readMetaConfig, REQUIRED_SCOPES, requestedScopes } from "../lib/meta/config";
 import { getConnection, readPageToken, storePageConnection } from "../lib/meta/connection";
 import { decryptToken, encryptToken, hmacSha256Hex, sweepToken } from "../lib/meta/crypto";
 import { getStoredForm, parseFormSettings, updateFormSettings, upsertDiscoveredForms } from "../lib/meta/forms";
 import { classifyMetaError, createGraphClient } from "../lib/meta/graph";
-import { createImportJob, getImportJob, parseImportInput, reconcileRecentLeads, runImportStep } from "../lib/meta/imports";
-import { enqueueLead, processDue, processIngestion, type MetaRuntime } from "../lib/meta/ingest";
+import { createImportJob, getImportJob, parseImportInput, reconcileRecentLeads, runImportStep, runSweep } from "../lib/meta/imports";
+import {
+  dismissIngestions,
+  enqueueLead,
+  processDue,
+  processIngestion,
+  purgeExpiredQueueData,
+  type MetaRuntime,
+} from "../lib/meta/ingest";
 import { suggestMapping, type FormClassification } from "../lib/meta/mapping";
 import { getIngestionDetail, ingestionStats } from "../lib/meta/overview";
 import { selectPage, testConnection } from "../lib/meta/setup";
@@ -27,12 +34,13 @@ import {
   PAGE_ID,
   PAGE_TOKEN,
   TENANT_FORM,
+  USER_TOKEN,
   type FakeForm,
 } from "./helpers/fake-meta";
 import { createTestDb } from "./helpers/sqlite";
 
 const ENV = {
-  META_APP_SECRET: "test-app-secret",
+  META_APP_SECRET: "0123456789abcdef0123456789abcdef",
   META_WEBHOOK_VERIFY_TOKEN: "verify-me",
   META_TOKEN_KEY: "k".repeat(48),
 };
@@ -74,7 +82,7 @@ async function setup(options: { classify?: Partial<Record<string, FormClassifica
     const form = (await getStoredForm(db, formId))!;
     await updateFormSettings(db, admin, form, parseFormSettings({ classification }, form), { now: clock.iso() });
   }
-  const runtime: MetaRuntime = { db, graph, tokenKey: config.tokenKey, pageId: PAGE_ID, now: clock.now };
+  const runtime: MetaRuntime = { db, graph, tokenKey: config.tokenKey, pageId: PAGE_ID, adNames: meta.scopes.includes("ads_read"), now: clock.now };
   return { db, meta, clock, graph, runtime };
 }
 
@@ -651,5 +659,238 @@ describe("attribution reporting", () => {
       .run();
     const withSpend = await ctx.db.prepare("SELECT spend_minor, currency FROM campaign_lead_funnel WHERE campaign_id = '407'").first<Record<string, unknown>>();
     assert.deepEqual({ ...withSpend }, { spend_minor: 150000, currency: "INR" });
+  });
+});
+
+describe("least-privilege permissions", () => {
+  it("treats an App Secret that is not 32 hex characters as missing, so Connect stays disabled", () => {
+    assert.deepEqual(readMetaConfig(ENV).missing, []);
+    assert.deepEqual(readMetaConfig({ ...ENV, META_APP_SECRET: "gulbarga-home" }).missing, ["META_APP_SECRET"]);
+    assert.deepEqual(readMetaConfig({ ...ENV, META_APP_SECRET: "2327104601371140" }).missing, ["META_APP_SECRET"]);
+  });
+
+  it("asks only for what lead ingestion needs unless optional scopes are ticked", () => {
+    assert.deepEqual(requestedScopes(), ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval"]);
+    for (const scope of ["ads_management", "business_management", "ads_read"]) assert.ok(!requestedScopes().includes(scope));
+    assert.deepEqual(requestedScopes(["ads_read", "ads_management", "business_management"]), [...REQUIRED_SCOPES, "ads_read", "business_management"]);
+    const dialog = new URL(createGraphClient(config).oauthDialogUrl("state123", requestedScopes()));
+    assert.equal(dialog.searchParams.get("scope"), REQUIRED_SCOPES.join(","));
+    assert.equal(dialog.searchParams.get("redirect_uri"), "https://gulbargahomes.com/api/admin/integrations/meta/callback");
+  });
+
+  it("does not request campaign names without ads_read and keeps ids from the webhook", async () => {
+    const ctx = await setup();
+    ctx.runtime.adNames = false;
+    const lead = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    await deliver(ctx, webhookBody(lead));
+    const fetched = ctx.meta.requests.find((request) => request.url.includes(`/${lead.id}?`))!;
+    const fields = new URL(fetched.url).searchParams.get("fields")!;
+    assert.ok(fields.includes("field_data") && fields.includes("campaign_id"));
+    assert.ok(!fields.includes("campaign_name"));
+    const row = (await ingestion(ctx.db, lead.id))!;
+    const source = (await getSource(ctx.db, (await getOwnerLead(ctx.db, row.entity_id))!.sourceId))!;
+    assert.equal(source.metaCampaignId, "401");
+    assert.equal(source.metaCampaignName, "");
+  });
+
+  it("still imports the answers when Meta refuses ad-level fields", async () => {
+    const ctx = await setup();
+    ctx.meta.refuseAdFields = true;
+    const lead = addLead(ctx.meta, TENANT_FORM, { full_name: "Asha", phone_number: "9900112244" });
+    await deliver(ctx, webhookBody(lead));
+    const row = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(row.status, "done");
+    const requirement = (await getRequirement(ctx.db, row.entity_id))!;
+    assert.equal(requirement.contactName, "Asha");
+    const source = (await getSource(ctx.db, requirement.sourceId))!;
+    assert.equal(source.metaAdId, "601", "ad id from the webhook is kept");
+    assert.equal(source.metaCampaignId, "");
+    assert.equal((await getConnection(ctx.db)).status, "connected");
+  });
+});
+
+describe("OAuth token handling", () => {
+  it("exchanges the code with the app secret in a POST body, never in a URL", async () => {
+    const ctx = await setup({ connect: false, classify: {} });
+    const result = await ctx.graph.exchangeCode("oauth-code-XYZ");
+    assert.equal(result.accessToken, USER_TOKEN);
+    const exchanges = ctx.meta.requests.filter((request) => request.url.includes("/oauth/access_token"));
+    assert.equal(exchanges.length, 2);
+    for (const request of exchanges) {
+      assert.equal(request.method, "POST");
+      for (const secret of [ENV.META_APP_SECRET, "oauth-code-XYZ", USER_TOKEN]) assert.ok(!request.url.includes(secret));
+    }
+    assert.ok(new URLSearchParams(exchanges[0].body).get("client_secret") === ENV.META_APP_SECRET);
+    assert.ok(new URLSearchParams(exchanges[1].body).get("fb_exchange_token") === USER_TOKEN);
+  });
+});
+
+describe("Page and form ownership", () => {
+  it("ignores webhooks while disconnected but keeps queueing while the token is expired", async () => {
+    const ctx = await setup();
+    await ctx.db.prepare("UPDATE meta_connection SET status = 'disconnected'").run();
+    const first = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    const ignored = await receiveWebhook(ctx.db, config, {
+      rawBody: webhookBody(first),
+      signature: `sha256=${await hmacSha256Hex(ENV.META_APP_SECRET, webhookBody(first))}`,
+      now: ctx.clock.iso(),
+    });
+    assert.equal(ignored.status === 200 && ignored.ignored, 1);
+    assert.equal(await ingestion(ctx.db, first.id), null);
+
+    await ctx.db.prepare("UPDATE meta_connection SET status = 'expired'").run();
+    const queued = await receiveWebhook(ctx.db, config, {
+      rawBody: webhookBody(first),
+      signature: `sha256=${await hmacSha256Hex(ENV.META_APP_SECRET, webhookBody(first))}`,
+      now: ctx.clock.iso(),
+    });
+    assert.equal(queued.status === 200 && queued.created, 1);
+  });
+
+  it("refuses leads whose form belongs to another Page", async () => {
+    const ctx = await setup();
+    const foreignForm = { ...OWNER_FORM, id: "900000000000099", name: "Someone else's form" };
+    ctx.meta.foreignForms = [foreignForm];
+    const discovered = addLead(ctx.meta, foreignForm, OWNER_ANSWERS);
+    await deliver(ctx, webhookBody(discovered));
+    const row = (await ingestion(ctx.db, discovered.id))!;
+    assert.equal(row.status, "ignored");
+    assert.match(row.last_error, /another Page/);
+    assert.equal(await getStoredForm(ctx.db, foreignForm.id), null);
+
+    const storedForeign = { ...OWNER_FORM, id: "900000000000098", name: "Old Page form" };
+    await upsertDiscoveredForms(ctx.db, admin.id, "8888888888", [{ ...storedForeign, status: "ACTIVE", locale: "en_US", createdTime: null, leadsCount: null }], ctx.clock.iso());
+    const stored = (await getStoredForm(ctx.db, storedForeign.id))!;
+    await updateFormSettings(ctx.db, admin, stored, parseFormSettings({ classification: "owner" }, stored), { now: ctx.clock.iso() });
+    const lead = addLead(ctx.meta, storedForeign, { ...OWNER_ANSWERS, phone_number: "9845000099" });
+    await deliver(ctx, webhookBody(lead));
+    assert.equal((await ingestion(ctx.db, lead.id))!.status, "ignored");
+    const owners = await ctx.db.prepare("SELECT COUNT(*) AS n FROM owner_leads").first<{ n: number }>();
+    assert.equal(owners?.n, 0);
+  });
+});
+
+describe("Worker reliability", () => {
+  it("a lead acknowledged but never processed is picked up by the sweep", async () => {
+    const ctx = await setup();
+    const lead = addLead(ctx.meta, BUYER_FORM, { full_name: "Late", phone_number: "9844444444" });
+    const body = webhookBody(lead);
+    const ack = await receiveWebhook(ctx.db, config, { rawBody: body, signature: `sha256=${await hmacSha256Hex(ENV.META_APP_SECRET, body)}`, now: ctx.clock.iso() });
+    assert.equal(ack.status, 200);
+    assert.equal((await ingestion(ctx.db, lead.id))!.status, "pending");
+    await runSweep(ctx.runtime);
+    assert.equal((await ingestion(ctx.db, lead.id))!.status, "done");
+  });
+
+  it("a run stopped after creating the lead is recovered as done, not duplicated", async () => {
+    const ctx = await setup();
+    const lead = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    await deliver(ctx, webhookBody(lead));
+    const before = (await ingestion(ctx.db, lead.id))!;
+    await ctx.db
+      .prepare("UPDATE meta_lead_ingestions SET status = 'processing', locked_until = ?1 WHERE id = ?2")
+      .bind(new Date(ctx.clock.now().getTime() - 60_000).toISOString(), before.id)
+      .run();
+    ctx.clock.advance(1);
+    await runSweep(ctx.runtime);
+    const after = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(after.status, "done");
+    assert.equal(after.entity_id, before.entity_id);
+    assert.match(after.last_error, /Recovered/);
+    const owners = await ctx.db.prepare("SELECT COUNT(*) AS n FROM owner_leads").first<{ n: number }>();
+    assert.equal(owners?.n, 1);
+    assert.equal((await ingestionStats(ctx.db)).duplicateLeads, 0);
+  });
+
+  it("a locked row is not processed twice before its lock expires", async () => {
+    const ctx = await setup();
+    const lead = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    const queued = await enqueueLead(ctx.db, { leadgenId: lead.id, pageId: PAGE_ID, origin: "webhook" }, ctx.clock.iso());
+    await ctx.db
+      .prepare("UPDATE meta_lead_ingestions SET status = 'processing', locked_until = ?1 WHERE id = ?2")
+      .bind(new Date(ctx.clock.now().getTime() + 4 * 60_000).toISOString(), queued.id)
+      .run();
+    assert.equal(await processIngestion(ctx.runtime, queued.id), "skipped");
+    ctx.clock.advance(5);
+    assert.equal(await processIngestion(ctx.runtime, queued.id), "done");
+  });
+
+  it("a database failure while queueing surfaces so the route answers 500 and Meta retries", async () => {
+    const ctx = await setup();
+    const failing = {
+      ...ctx.db,
+      prepare(sql: string) {
+        if (sql.includes("INSERT INTO meta_lead_ingestions")) throw new Error("D1_ERROR: database is locked");
+        return ctx.db.prepare(sql);
+      },
+    };
+    const lead = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    const body = webhookBody(lead);
+    await assert.rejects(
+      receiveWebhook(failing, config, { rawBody: body, signature: `sha256=${await hmacSha256Hex(ENV.META_APP_SECRET, body)}`, now: ctx.clock.iso() }),
+      /database is locked/,
+    );
+    const retried = await deliver(ctx, body);
+    assert.equal(retried.status === 200 && retried.created, 1);
+  });
+
+  it("test connection resumes an import that paused when the token expired", async () => {
+    const ctx = await setup();
+    addLead(ctx.meta, TENANT_FORM, { phone_number: "9822222299" }, { created_time: "2026-10-05T08:00:00+0000" });
+    const job = await createImportJob(ctx.db, admin, { formIds: [TENANT_FORM.id], since: "2026-10-01T00:00:00Z", until: "2026-11-01T00:00:00Z" }, ctx.clock.iso());
+    ctx.meta.mode = "expired";
+    assert.equal((await runImportStep(ctx.runtime, job.id))!.status, "paused");
+    ctx.meta.mode = "ok";
+    await testConnection(ctx.db, admin, config, [], ctx.graph, ctx.clock.iso());
+    assert.equal((await getImportJob(ctx.db, job.id))!.status, "scanning");
+    let current = (await runImportStep(ctx.runtime, job.id))!;
+    for (let step = 0; step < 5 && current.status !== "completed"; step += 1) current = (await runImportStep(ctx.runtime, job.id))!;
+    assert.equal(current.status, "completed");
+  });
+});
+
+describe("retention of integration data", () => {
+  it("dismissing drops the queue copy of the answers", async () => {
+    const ctx = await setup();
+    const lead = addLead(ctx.meta, TENANT_FORM, { full_name: "No Phone Again", monthly_budget: "9000" });
+    await deliver(ctx, webhookBody(lead));
+    const held = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(held.status, "needs_review");
+    assert.equal(await dismissIngestions(ctx.db, admin, [held.id], ctx.clock.iso()), 1);
+    const dismissed = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(dismissed.status, "ignored");
+    assert.equal(dismissed.payload_json, "");
+    const audit = await ctx.db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'dismiss_ingestion'").first<{ n: number }>();
+    assert.equal(audit?.n, 1);
+  });
+
+  it("keeps phone numbers out of error text and history", async () => {
+    const ctx = await setup();
+    const lead = addLead(ctx.meta, TENANT_FORM, { full_name: "Abroad", phone_number: "+1 415 555 0100" });
+    await deliver(ctx, webhookBody(lead));
+    const row = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(row.status, "needs_review");
+    assert.ok(!row.last_error.includes("415"));
+    const events = await ctx.db.prepare("SELECT message FROM meta_ingestion_events WHERE ingestion_id = ?1").bind(row.id).all<{ message: string }>();
+    assert.ok(events.results.every((event) => !event.message.includes("415")));
+  });
+
+  it("purges old queue copies and delivery logs but never CRM records", async () => {
+    const ctx = await setup();
+    const imported = addLead(ctx.meta, OWNER_FORM, OWNER_ANSWERS);
+    await deliver(ctx, webhookBody(imported));
+    const failed = addLead(ctx.meta, TENANT_FORM, { full_name: "Gone" });
+    await deliver(ctx, webhookBody(failed));
+    await ctx.db.prepare("UPDATE meta_lead_ingestions SET status = 'failed' WHERE leadgen_id = ?1").bind(failed.id).run();
+    ctx.clock.advance(31 * 24 * 60);
+    const result = await purgeExpiredQueueData(ctx.db, ctx.clock.now());
+    assert.equal(result.payloadsCleared, 1);
+    assert.equal((await ingestion(ctx.db, failed.id))!.payload_json, "");
+    const lead = (await getOwnerLead(ctx.db, (await ingestion(ctx.db, imported.id))!.entity_id))!;
+    const source = (await getSource(ctx.db, lead.sourceId))!;
+    assert.ok(Array.isArray(source.rawPayload.answers) && source.rawPayload.answers.length > 0);
+
+    ctx.clock.advance(60 * 24 * 60);
+    assert.ok((await purgeExpiredQueueData(ctx.db, ctx.clock.now())).deliveriesDeleted >= 2);
   });
 });

@@ -95,26 +95,114 @@ today.
 
 ## Connection and tokens
 
-1. A super admin clicks **Connect** and approves the Meta login dialog. An
-   httpOnly state cookie, bound to the callback path and valid for 10 minutes,
-   protects the callback.
-2. The callback exchanges the code for a long-lived user token and checks it with
-   `debug_token`. It is stored encrypted only until a Page is chosen.
-3. The admin picks the Page. The app checks the required permissions, takes the
-   Page token, subscribes the Page to `leadgen`, discovers its forms and
-   deletes the user token. Reconnecting the same Page selects it automatically.
+1. A super admin clicks **Connect** and approves the Meta login dialog.
+   - Only the required permissions are requested, plus any optional ones ticked
+     on the page.
+   - The callback is protected by a random `state`. It must match an httpOnly
+     cookie that is scoped to `/api/admin/integrations/meta`, uses SameSite=Lax,
+     is Secure on https, and expires after 10 minutes.
+   - The callback also requires a signed-in super admin session.
+2. The callback exchanges the code for a long-lived user token.
+   - Both exchanges are POSTs with the app secret in the body, never in a URL.
+   - The token is checked with `debug_token`.
+   - The user token is stored encrypted only until a Page is chosen.
+3. The admin picks the Page. The app then:
+   - checks the required permissions
+   - takes the Page token
+   - subscribes the Page to `leadgen`
+   - discovers its forms
+   - deletes the user token
 
-Tokens are encrypted with AES-256-GCM using `META_TOKEN_KEY`, are sent only
-in the `Authorization` header with `appsecret_proof`, never appear in URLs,
-logs or API responses, and are redacted from Meta error messages before those
-are stored. A Page token from a long-lived user token does not expire, but
-Meta's data access for the user ends after 90 days. The page shows the date
-and warns 14 days ahead, and reconnecting renews it.
+   Reconnecting the same Page selects it automatically.
 
-**Test connection** checks the secrets, the token (`debug_token`), Page access
-and the webhook subscription (and re-subscribes if needed). **Disconnect**
-unsubscribes the app from the Page and deletes the tokens. Forms, mappings and
-leads are kept.
+The redirect URI is `https://<host>/api/admin/integrations/meta/callback`, built
+from the host the admin is using, and must match an entry in Meta's *Valid OAuth
+Redirect URIs* exactly. Connect from `https://gulbargahomes.com`, not `www` or
+workers.dev. Alternatively, set `META_OAUTH_REDIRECT_URI` to pin it.
+
+**Token protection:**
+- Tokens are encrypted with AES-256-GCM. The key is SHA-256 of `META_TOKEN_KEY`,
+  each value has a random 96-bit IV, and the column name is bound as additional
+  authenticated data, so a user-token ciphertext cannot be used as a Page token.
+- Page and user tokens are sent only in the `Authorization` header, with
+  `appsecret_proof`. They never appear in URLs, logs or admin JSON.
+- Meta error messages are stored only after tokens are stripped from them, since
+  Meta sometimes echoes the token back.
+
+**Where tokens and secrets travel in a URL** (Meta's API only accepts them there):
+- `debug_token?input_token=…`, with the app token in the header.
+- The `appsecret_proof` HMAC (safe to expose).
+
+Both are outbound subrequests. Workers traces, which would record them, are off,
+and `redact_query_string` keeps incoming `hub.verify_token` and OAuth `code`
+values out of Workers Logs.
+
+**Require App Secret** is compatible with every call:
+- Page and user token calls carry `appsecret_proof`.
+- `debug_token` uses the app token (`app_id|app_secret`), which needs no proof.
+- The code exchange sends `client_secret`.
+
+**Expiry and reconnecting:**
+- A Page token from a long-lived user token does not expire, but Meta's *data
+  access* ends 90 days after the person last authorised the app.
+- The page shows that date and warns 14 days ahead.
+- When Meta refuses the token (error 190, or a permission error), the connection
+  becomes **Reconnect needed**. Leads keep queueing as `waiting_token`, and
+  imports pause.
+- Reconnecting, or a passing **Test connection**, requeues those leads and
+  resumes paused imports.
+
+**Test connection** checks the Worker secrets, the token (`debug_token`), Page
+access and the webhook subscription, and re-subscribes if needed.
+
+**Disconnect** unsubscribes the app from the Page and deletes the tokens. Forms,
+mappings and leads are kept. Webhooks that still arrive while disconnected are
+logged and ignored.
+
+## Meta permissions
+
+The integration requests only these. The table lists every Graph call it makes.
+
+| Call | Token | Permissions (Meta reference / guide) |
+| --- | --- | --- |
+| `POST /oauth/access_token` (code, then `fb_exchange_token`) | — (client secret) | — |
+| `GET /debug_token` | app token | — |
+| `GET /me` (name) | user | — (public_profile, default) |
+| `GET /me/accounts` (Pages + Page tokens) | user | `pages_show_list` |
+| `GET /{page-id}` (name) | Page | `pages_read_engagement` |
+| `POST`/`GET`/`DELETE /{page-id}/subscribed_apps` | Page | `pages_manage_metadata`, `pages_show_list` |
+| `GET /{page-id}/leadgen_forms`, `GET /{form-id}` | Page | `pages_manage_ads`, `leads_retrieval`, `pages_read_engagement`, `pages_show_list` |
+| `GET /{lead-id}`, `GET /{form-id}/leads` (`field_data`) | Page | `leads_retrieval`, `pages_manage_ads`, `pages_read_engagement`, `pages_show_list` |
+
+**Required:** `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`,
+`pages_manage_ads`, `leads_retrieval`.
+
+**Optional**, requested only if ticked on the Connect card:
+- `ads_read`: campaign, ad set and ad **names**. The ids come with the lead
+  either way.
+- `business_management`: only if the Page is reachable solely through the
+  Business portfolio and does not appear in the Page picker. Meta documents it
+  for Business Manager assets and system-user tokens, which this flow does not
+  use.
+
+**Not requested:**
+- `ads_management`. Meta's Lead Ads guides list it for "ad-level" lead fields,
+  but this app never creates or edits ads.
+- If Meta refuses `ad_id` / `adset_id` / `campaign_id` without it, the lead is
+  fetched again without those fields. The answers are still imported, the ad id
+  from the webhook is kept, and the connection stays healthy.
+- If staging shows that Meta refuses the **answers** themselves without
+  `ads_management`, add it to `REQUIRED_SCOPES` in `lib/meta/config.ts` and
+  document why.
+
+**Caveats:**
+- Meta's permission reference lists `ads_management`, `ads_read`,
+  `business_management` and `pages_manage_ads` as "dependencies" of
+  `leads_retrieval` for App Review. If App Review asks for one of them, add it
+  then, with the reason.
+- "Ready for testing" in the dashboard is **not** production approval. While the
+  app is Unpublished, permissions only work for people with a role on the app,
+  and Meta only delivers webhooks for test leads.
 
 ## Historical import
 
@@ -167,58 +255,259 @@ disconnect is written to `audit_log`. Leads created by the integration show
 The migration only adds tables, columns, indexes and a view. Existing listings,
 leads and URLs are untouched.
 
+## Reliability on Cloudflare Workers
+
+- **Durable before 200.** The webhook writes the `meta_lead_ingestions` row and
+  the delivery log, and only then answers `200 EVENT_RECEIVED`. Any database
+  error answers 500, so Meta redelivers. The unique `leadgen_id` makes the
+  redelivery harmless.
+- **Processing after the response** runs in `ctx.waitUntil`, obtained through
+  `getCloudflareContext()`, with a 25-second budget.
+  - Verified on the built Worker under `wrangler dev`: the response took 72 ms,
+    and the row was then processed in the background.
+  - If the isolate is stopped first, nothing is lost. A row that was never
+    started stays `pending`, and a row that was mid-flight stays `processing`
+    with a five-minute lock.
+- **The cron sweep** (`*/5 * * * *` → `worker.ts` → `/api/integrations/meta/sweep`):
+  - picks up `pending` and `retry` rows that are due, and `processing` rows
+    whose lock expired
+  - advances imports
+  - reconciles the last 48 hours every six hours
+  - applies retention
+
+  Verified locally: a stale `processing` row was claimed and processed by the
+  scheduled event.
+- **Locking.** Claiming is one conditional `UPDATE … RETURNING`, so two isolates
+  cannot hold the same row. A row is retried only after its lock expires.
+- **An interrupted run** that created the lead but did not mark the row done is
+  recognised on the next attempt. The record was created by "Meta Lead Ads" for
+  that same lead id, so the row is marked `done`, with no second lead and no
+  duplicate count.
+- **No partial CRM records.** The contact, lead source, owner lead or
+  requirement, and audit entry are written in one D1 batch, which is atomic.
+
+## Retention of integration data
+
+| Data | Kept |
+| --- | --- |
+| Lead answers on the CRM record (`lead_sources.raw_payload_json`) | With the CRM record: 12 months after the last meaningful interaction, then reviewed by hand by the Super Admin ([runbook](data-erasure-runbook.md)) |
+| Queue copy of answers (`meta_lead_ingestions.payload_json`) | Cleared at once when dismissed; otherwise 30 days after the row became `done`, `duplicate`, `ignored` or `failed` |
+| Rows held for review / mapping | Until staff retry or dismiss them |
+| Webhook delivery log (ids and counts only) | 90 days |
+| Processing history (`meta_ingestion_events`) | With the queue row. Messages hold no phone numbers |
+| Audit log | Append-only, permanent |
+
+Deletion requests and the 12-month review are manual and run by the Super
+Admin; see [`data-erasure-runbook.md`](data-erasure-runbook.md). The policy
+wording on `/privacy-policy` and `/data-deletion` describes exactly this.
+
 ## Cloudflare configuration
+
+Add these as type **Secret** (encrypted), not Text, under **Workers & Pages →
+gulbargahomes → Settings → Variables and Secrets**. Do not put them in
+`wrangler.jsonc`.
 
 | Variable | Secret | Purpose |
 | --- | --- | --- |
-| `META_APP_SECRET` | yes | App secret (App settings → Basic). Verifies webhooks, signs Graph calls, derives the cron token. |
-| `META_WEBHOOK_VERIFY_TOKEN` | yes | Any random string, e.g. `openssl rand -hex 24`. Paste the same value into the Meta webhook settings. |
-| `META_TOKEN_KEY` | yes | At least 32 characters, `openssl rand -hex 32`. Encrypts stored tokens. Changing it requires reconnecting. |
+| `META_APP_SECRET` | yes | The 32-character App Secret from Meta → App settings → Basic. Verifies webhook signatures, signs Graph calls, derives the cron token. |
+| `META_WEBHOOK_VERIFY_TOKEN` | yes | Random string (`openssl rand -hex 24`). The same value goes into the Meta webhook settings. |
+| `META_TOKEN_KEY` | yes | `openssl rand -hex 32`. Encrypts stored tokens. Changing it requires reconnecting. |
 | `META_APP_ID` | no | Defaults to `2327104601371140` |
 | `META_GRAPH_VERSION` | no | Defaults to `v27.0` |
 | `META_OAUTH_REDIRECT_URI` | no | Defaults to `https://<host>/api/admin/integrations/meta/callback` |
 
-The cron trigger and `main: "worker.ts"` are in `wrangler.jsonc` and take effect
-on the next deploy.
+**Config that preserves dashboard variables:**
+- `wrangler.jsonc` sets `keep_vars: true`, so dashboard variables survive any
+  deploy, including Workers Builds. `npm run deploy` also passes `--keep-vars`.
+- Secrets are always kept by deploys.
+- The dashboard's "Update your Wrangler configuration" prompt refers to
+  plain-text variables. Secrets must never be copied into the file.
+
+**Binding check (`wrangler deploy --dry-run`):**
+- Production: `DB` → `gulbargahomes`, `NEXT_TAG_CACHE_D1`,
+  `NEXT_INC_CACHE_R2_BUCKET`, `MEDIA` → `gulbargahomes-media`,
+  `NEXT_CACHE_DO_QUEUE`, `WORKER_SELF_REFERENCE`, `IMAGES` and `ASSETS`.
+- The cron is `*/5 * * * *`, and `main` is `worker.ts`, which re-exports
+  OpenNext's Durable Object classes.
+- The `staging` environment has its own D1, R2 and Worker name, and no routes.
 
 ## Meta app setup (GulbargaHomes CRM, App ID 2327104601371140)
 
-1. **Facebook Login for Business → Settings → Valid OAuth Redirect URIs:**
-   `https://gulbargahomes.com/api/admin/integrations/meta/callback`.
-2. **Webhooks → Page → Subscribe to `leadgen`**
+1. **Use cases → Capture & manage ad leads → Permissions:**
+   - Make the required five available: `pages_show_list`,
+     `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_ads`,
+     `leads_retrieval`.
+   - `ads_read` and `business_management` are optional.
+   - Leave `ads_management` off.
+2. **Facebook Login for Business → Settings:**
+   - Client OAuth login: on
+   - Web OAuth login: on
+   - Enforce HTTPS: on
+   - Strict mode for redirect URIs: on
+   - Valid OAuth Redirect URIs: exactly
+     `https://gulbargahomes.com/api/admin/integrations/meta/callback` (add the
+     staging URL too while testing staging)
+3. **Use cases → Customize → Webhooks → Page:**
    - Callback URL: `https://gulbargahomes.com/api/webhooks/meta-leads`
-   - Verify token: the value of `META_WEBHOOK_VERIFY_TOKEN`
-   - Deploy first. Meta calls the URL to verify it when you save.
-3. **App settings → Advanced:** turn on *Require App Secret* (the app already
-   sends `appsecret_proof`).
-4. **Permissions:** `leads_retrieval`, `pages_show_list`, `pages_read_engagement`,
-   `pages_manage_metadata`, `pages_manage_ads`, `ads_read`, `business_management`.
-   While the app is unpublished these work for people with a role on the app.
-5. **Business Suite → Page settings → Leads Access (Leads Access Manager):** allow
-   the GulbargaHomes CRM app and the people who connect it.
-6. Connect from `/admin/integrations/meta`. Classify the three forms and check
-   their mappings.
-7. Send a test lead with the **Lead Ads Testing Tool**
-   (developers.facebook.com/tools/lead-ads-testing). It should appear under
-   *Recently imported* within seconds.
+   - Verify token: the exact value of `META_WEBHOOK_VERIFY_TOKEN` → *Verify and save*
+   - Then, under **Webhook fields**, subscribe to **`leadgen`**. Use the same
+     API version as the app, v27.0.
+   - Meta allows one callback URL per object per app, so staging needs a
+     separate test app or a temporary switch (see Staging).
+4. **App settings → Advanced → Security:** Require App Secret: **on**.
+5. **App settings → Basic:**
+   - Privacy Policy URL `https://gulbargahomes.com/privacy-policy`, once updated.
+   - User data deletion → Data deletion instructions URL
+     `https://gulbargahomes.com/data-deletion`.
+   - Category, app icon and business: Gulbarga Homes.
+6. **Meta Business Suite → Settings → Integrations → Leads Access:** allow the
+   GulbargaHomes CRM app and the person who will connect it.
+7. The person who connects needs a task on the Page that includes Ads/Leads
+   (ADVERTISE) and leads access.
 
 ### Still needed before real (non-test) leads
 
-- **Privacy Policy update.** `/privacy-policy` currently says Instant Form
-  leads are "collected by Meta" and "not imported into this website". Once the
-  integration is connected that is no longer true. The Meta section, the
-  "Phone, WhatsApp and email" list and retention need rewording to say that
-  submissions are imported into the private GulbargaHomes CRM, what is kept,
-  who can see it and how to ask for deletion. The data-deletion page should
-  cover CRM records too. Meta App Review checks this page.
+- **Confirm `META_APP_SECRET`.** All five values are now Secrets, so their
+  contents can no longer be read back. The value set before the conversion was
+  not a Meta App Secret (13 characters). If it was not replaced with the
+  32-character App Secret when converting, Connect fails at the token exchange.
+- **Deploy the privacy and data-deletion wording** together with this code. The
+  wording describes the 30- and 90-day purges, which only run with this code.
+- **Named staff accounts.** Production has no named admin accounts, only the
+  shared `ADMIN_PASSWORD` login, which acts as a Super Admin. Create named
+  accounts under Team, then set `ADMIN_LEGACY_LOGIN=disabled`, so the audit
+  history shows who handled each lead.
+- **App Review:** Advanced Access for the five required permissions, plus any
+  optional ones you decide to use. Submit a screencast of Connect → choose Page
+  → classify form → a test lead arriving as an owner lead or requirement.
+- **Business verification** for Gulbarga Homes.
+- **Publishing the app** (Unpublished → Live). Until then Meta delivers only
+  dashboard and Lead Ads Testing Tool events. No real leads arrive.
 
-- Advanced Access for `leads_retrieval`, `pages_manage_ads`,
-  `pages_manage_metadata`, `pages_read_engagement`, `pages_show_list`, `ads_read`
-  and `business_management` through App Review, with a screencast of this flow.
-- Business verification for Gulbarga Homes.
-- Publishing the app (switch from Unpublished to Live). This needs the privacy
-  policy URL (`https://gulbargahomes.com/privacy-policy`), the data deletion URL
-  (`https://gulbargahomes.com/data-deletion`), an icon and a category.
+## Staging test procedure
+
+Staging uses its own Worker (`gulbargahomes-staging.<subdomain>.workers.dev`),
+D1 and R2. Production data is never touched.
+
+**Set up staging once:**
+
+1. Create the staging resources:
+
+   ```bash
+   npx wrangler d1 create gulbargahomes-staging
+   npx wrangler d1 create gulbargahomes-staging-next-tag-cache
+   npx wrangler r2 bucket create gulbargahomes-staging-next-cache
+   npx wrangler r2 bucket create gulbargahomes-staging-media
+   ```
+
+   Paste the two D1 ids over `REPLACE_WITH_STAGING_DB_ID` and
+   `REPLACE_WITH_STAGING_TAG_CACHE_ID` in `wrangler.jsonc`.
+2. Set secrets for staging with `npx wrangler secret put <NAME> --env staging`:
+   - `ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET`
+   - `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN` and `META_TOKEN_KEY`
+
+   Use a different `META_TOKEN_KEY` and verify token from production.
+3. Deploy with `npm run deploy:staging`. The first request creates the schema
+   and seeds the listings from `lib/property-seed.json`.
+4. Point Meta at staging, in one of two ways:
+   - **Recommended:** a separate Meta test app. Set `META_APP_ID` and its secret
+     on staging.
+   - **Or** temporarily change the GulbargaHomes CRM app's Page webhook callback
+     to `https://gulbargahomes-staging.<subdomain>.workers.dev/api/webhooks/meta-leads`,
+     and add the staging callback to the OAuth redirect URIs. Switch both back
+     before production.
+
+**Test run:**
+
+1. Sign in at `/admin/login` on staging → Integrations → Meta Lead Ads → Connect
+   with Facebook. Leave the optional boxes unticked first.
+2. Choose the GulbargaHomes Page. Expect 3 forms and "Leadgen webhook:
+   Subscribed".
+3. Run **Test connection**. All four checks should pass.
+4. Classify the owner, tenant and buyer forms, check their mappings and save.
+5. In the Lead Ads Testing Tool, create one test lead per form. Within seconds,
+   each should appear under *Recently imported*:
+   - the owner form as an owner lead (New, no property)
+   - the tenant and buyer forms as requirements (New, unqualified)
+   - each with Form answers on its page
+6. In the Testing Tool, resend the same lead. Expect *Webhook repeats* + 1 and no
+   new lead.
+7. Check the ad fields on the lead's Source card. If Meta refused ad fields, the
+   campaign id is blank but the answers are present. Tick `ads_read`, reconnect,
+   send another test lead, and the campaign names should appear.
+8. Run a historical import for the last 7 days. Expect "found" to equal Meta's
+   count, with earlier test leads counted as duplicates.
+9. Set staging's `META_APP_SECRET` to a wrong value, send a test lead, and expect
+   a rejected delivery (401) in Webhook activity. Restore the value. Meta retries
+   for up to 36 hours.
+10. Disconnect. Send a test lead and expect "ignored: no Page is connected".
+    Reconnect.
+11. Sign in as an inventory manager (view only), a lead executive and a viewer:
+    - only the super admin can change anything
+    - lead executives and viewers cannot open Integrations
+    - viewers see masked numbers
+12. Smoke-test the public site on staging: every URL in `/sitemap.xml` should
+    return 200, including `/properties` and each `/properties/<slug>`; also try
+    search.
+
+## Production deployment procedure
+
+Production already runs this code from PR #35, deployed on 10 Nov 2026 with
+migration 5 applied. It holds no Meta connection or leads yet. For this and any
+later deploy:
+
+1. Merge to `main` only after staging passes.
+2. Back up D1 and note the bookmark:
+
+   ```bash
+   npx wrangler d1 export gulbargahomes --remote --output backups/gulbargahomes-$(date +%F).sql
+   npx wrangler d1 time-travel info gulbargahomes
+   ```
+
+3. Confirm the Worker secrets with `npx wrangler secret list`. Expect five
+   names, all `secret_text`.
+4. Run `npm run deploy` (it passes `--keep-vars`; `keep_vars` is also set).
+5. Check after deploying:
+   - every sitemap URL returns 200
+   - `/privacy-policy` and `/data-deletion` show the new wording, dated
+     10 November 2026
+   - `/admin/login` returns 200
+   - `/admin/integrations/meta` shows no "Add or correct these Worker secrets"
+     message. This message is how a wrong-format `META_APP_SECRET` shows up,
+     since Secret values cannot be read back.
+   - `GET /api/webhooks/meta-leads` with a wrong verify token returns 403
+   - an unsigned `POST` returns 401 (503 means the App Secret is not set at all)
+6. In Meta: save the webhook callback (Verify and save), subscribe `leadgen`,
+   and turn on Require App Secret.
+7. Connect from `https://gulbargahomes.com/admin/integrations/meta`, classify
+   the forms, and send one Testing Tool lead per form.
+8. Only after App Review, business verification and the privacy update: publish
+   the app.
+
+## Rollback procedure
+
+- **Code:** in Workers & Pages → gulbargahomes → Deployments, roll back to the
+  previous version, or run `npx wrangler rollback <version-id>`.
+  - The pre-CRM version was `fc702796` and the Meta version is `b2993229`.
+  - Rolling back the code leaves the additive tables in place, so the old code
+    keeps working.
+- **Stop Meta traffic without a code rollback:** Disconnect on the admin page.
+  This unsubscribes the Page and deletes the tokens. Alternatively, remove the
+  webhook subscription in the Meta dashboard. Queued leads stay in D1.
+- **Data:**
+  - Migration 5 is additive only: new tables, new nullable or defaulted columns,
+    indexes and a view. It does not need reverting.
+  - To restore the database to before a deploy:
+
+    ```bash
+    npx wrangler d1 time-travel restore gulbargahomes --bookmark=<bookmark>
+    ```
+
+    Bookmark before PR #35: `00000285-00000000-0000511f-4da88fb1de23daf154d836033cb7f30e`.
+    This also discards any leads received since then.
+  - Alternatively, import the SQL export into a new database.
+- **Cron:** removing `triggers.crons` and deploying stops the sweep. Retries
+  then happen only on new webhook deliveries.
 
 ## Known limitations
 
@@ -229,7 +518,11 @@ on the next deploy.
   still visible under Form answers.
 - Funnel counts reflect current statuses, not stage history. Spend import is
   not built yet, so cost metrics stay empty.
-- Campaign, ad set and ad names need `ads_read` on the ad account. Without it
-  only the ids are stored.
-- Retries and reconciliation rely on the cron trigger, which only runs on the
-  deployed Worker. Locally, use *Process queue now*.
+- Campaign, ad set and ad names need the optional `ads_read`. Ad-level ids may
+  need advertiser access on the ad account. Without either, the answers still
+  import.
+- Retries, reconciliation and retention rely on the cron trigger, which runs
+  only on the deployed Worker. Locally, use *Process queue now*.
+- There is no erasure screen. Erasure is a Super Admin SQL procedure
+  ([runbook](data-erasure-runbook.md)) and leaves the append-only audit history
+  unchanged.

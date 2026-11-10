@@ -6,7 +6,7 @@ import { authorize, errorResponse, HttpError, readJson } from "@/lib/admin/route
 import { nowIso } from "@/lib/db/sql";
 import { listForms } from "@/lib/meta/forms";
 import { listImportJobs } from "@/lib/meta/imports";
-import { INGESTION_STATUSES, processDue, requeueIngestions, type IngestionStatus } from "@/lib/meta/ingest";
+import { dismissIngestions, INGESTION_STATUSES, processDue, requeueIngestions, type IngestionStatus } from "@/lib/meta/ingest";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
 import { metaRuntime } from "@/lib/meta/runtime";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
@@ -95,27 +95,8 @@ export async function POST(request: Request) {
       case "dismiss": {
         const ids = idList(body.ids);
         if (!ids.length) throw new HttpError(400, "Choose the leads to dismiss.");
-        for (const id of ids) {
-          await auth.db.batch([
-            auth.db
-              .prepare(
-                `UPDATE meta_lead_ingestions SET status = 'ignored', last_error = 'Dismissed by an admin', updated_at = ?1
-                 WHERE id = ?2 AND status IN ('failed', 'needs_review', 'needs_mapping')`,
-              )
-              .bind(now, id),
-            auditStatement(auth.db, {
-              actor: auth.admin,
-              entityType: "integration",
-              entityId: "meta",
-              entityLabel: "Meta Lead Ads",
-              action: "dismiss_ingestion",
-              context: { ingestion_id: id },
-              at: now,
-              onlyIfPreviousChanged: true,
-            }),
-          ]);
-        }
-        return NextResponse.json({ ok: true });
+        const dismissed = await dismissIngestions(auth.db, auth.admin, ids, now);
+        return NextResponse.json({ ok: true, dismissed });
       }
       default:
         throw new HttpError(400, "Unknown action.");
