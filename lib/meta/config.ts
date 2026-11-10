@@ -48,6 +48,7 @@ export type MetaConfig = {
 export type MetaEnv = Record<string, string | undefined>;
 
 export const SECRET_NAMES = ["META_APP_SECRET", "META_WEBHOOK_VERIFY_TOKEN", "META_TOKEN_KEY"] as const;
+const APP_SECRET_FORMAT = /^[0-9a-f]{32}$/i;
 
 /** Graph and dialog hosts can only be pointed elsewhere for local development against a mock. */
 function devOverride(env: MetaEnv, name: string, fallback: string): string {
@@ -71,5 +72,7 @@ export function readMetaConfig(env: MetaEnv = process.env, origin = ""): { confi
   };
   const missing = SECRET_NAMES.filter((name) => !env[name]?.trim());
   if (config.tokenKey && config.tokenKey.length < 32 && !missing.includes("META_TOKEN_KEY")) missing.push("META_TOKEN_KEY");
+  // Meta App Secrets are always 32 hex characters; anything else is a pasted App ID, token or typo.
+  if (config.appSecret && !APP_SECRET_FORMAT.test(config.appSecret)) missing.push("META_APP_SECRET");
   return { config, missing };
 }

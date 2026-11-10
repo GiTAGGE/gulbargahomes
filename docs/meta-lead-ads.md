@@ -290,15 +290,16 @@ leads and URLs are untouched.
 
 | Data | Kept |
 | --- | --- |
-| Lead answers on the CRM record (`lead_sources.raw_payload_json`) | With the CRM record; no automatic deletion |
-| Queue copy of answers (`meta_lead_ingestions.payload_json`) | Cleared when imported or dismissed; otherwise 30 days after the row became `ignored` or `failed` |
+| Lead answers on the CRM record (`lead_sources.raw_payload_json`) | With the CRM record: 12 months after the last meaningful interaction, then reviewed by hand by the Super Admin ([runbook](data-erasure-runbook.md)) |
+| Queue copy of answers (`meta_lead_ingestions.payload_json`) | Cleared at once when dismissed; otherwise 30 days after the row became `done`, `duplicate`, `ignored` or `failed` |
 | Rows held for review / mapping | Until staff retry or dismiss them |
 | Webhook delivery log (ids and counts only) | 90 days |
 | Processing history (`meta_ingestion_events`) | With the queue row. Messages hold no phone numbers |
 | Audit log | Append-only, permanent |
 
-The CRM has no erasure tool yet (see
-[`privacy-meta-lead-ads-proposal.md`](privacy-meta-lead-ads-proposal.md)).
+Deletion requests and the 12-month review are manual and run by the Super
+Admin; see [`data-erasure-runbook.md`](data-erasure-runbook.md). The policy
+wording on `/privacy-policy` and `/data-deletion` describes exactly this.
 
 ## Cloudflare configuration
 
@@ -366,13 +367,16 @@ gulbargahomes → Settings → Variables and Secrets**. Do not put them in
 
 ### Still needed before real (non-test) leads
 
-- **Correct `META_APP_SECRET` in Cloudflare.** The value currently set is not a
-  Meta App Secret.
-- **Store the Meta values as Secrets.** The three Meta values, and
-  `ADMIN_PASSWORD`, are currently plain-text variables.
-- **Privacy Policy and data-deletion update**: proposal in
-  [`privacy-meta-lead-ads-proposal.md`](privacy-meta-lead-ads-proposal.md).
-  Includes the decision on an erasure tool.
+- **Confirm `META_APP_SECRET`.** All five values are now Secrets, so their
+  contents can no longer be read back. The value set before the conversion was
+  not a Meta App Secret (13 characters). If it was not replaced with the
+  32-character App Secret when converting, Connect fails at the token exchange.
+- **Deploy the privacy and data-deletion wording** together with this code. The
+  wording describes the 30- and 90-day purges, which only run with this code.
+- **Named staff accounts.** Production has no named admin accounts, only the
+  shared `ADMIN_PASSWORD` login, which acts as a Super Admin. Create named
+  accounts under Team, then set `ADMIN_LEGACY_LOGIN=disabled`, so the audit
+  history shows who handled each lead.
 - **App Review:** Advanced Access for the five required permissions, plus any
   optional ones you decide to use. Submit a screencast of Connect → choose Page
   → classify form → a test lead arriving as an owner lead or requirement.
@@ -514,4 +518,6 @@ later deploy:
   import.
 - Retries, reconciliation and retention rely on the cron trigger, which runs
   only on the deployed Worker. Locally, use *Process queue now*.
-- The CRM has no erasure tool for deletion requests yet.
+- There is no erasure screen. Erasure is a Super Admin SQL procedure
+  ([runbook](data-erasure-runbook.md)) and leaves the append-only audit history
+  unchanged.

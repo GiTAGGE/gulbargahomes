@@ -40,7 +40,7 @@ import {
 import { createTestDb } from "./helpers/sqlite";
 
 const ENV = {
-  META_APP_SECRET: "test-app-secret",
+  META_APP_SECRET: "0123456789abcdef0123456789abcdef",
   META_WEBHOOK_VERIFY_TOKEN: "verify-me",
   META_TOKEN_KEY: "k".repeat(48),
 };
@@ -663,6 +663,12 @@ describe("attribution reporting", () => {
 });
 
 describe("least-privilege permissions", () => {
+  it("treats an App Secret that is not 32 hex characters as missing, so Connect stays disabled", () => {
+    assert.deepEqual(readMetaConfig(ENV).missing, []);
+    assert.deepEqual(readMetaConfig({ ...ENV, META_APP_SECRET: "gulbarga-home" }).missing, ["META_APP_SECRET"]);
+    assert.deepEqual(readMetaConfig({ ...ENV, META_APP_SECRET: "2327104601371140" }).missing, ["META_APP_SECRET"]);
+  });
+
   it("asks only for what lead ingestion needs unless optional scopes are ticked", () => {
     assert.deepEqual(requestedScopes(), ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval"]);
     for (const scope of ["ads_management", "business_management", "ads_read"]) assert.ok(!requestedScopes().includes(scope));

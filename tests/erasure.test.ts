@@ -64,7 +64,7 @@ async function seed() {
     db,
     actor,
     other,
-    { intent: "Sell", propertyType: "Plot", locality: "Aland Road", locationText: "", expectedPrice: null, notes: "Ravi note", priority: "Warm" },
+    { intent: "Sale", propertyType: "Plot", locality: "Aland Road", locationText: "", expectedPrice: null, notes: "Ravi note", priority: "Warm" },
     parseSourceInput({ channel: "manual" }),
     NOW,
   );
@@ -102,7 +102,7 @@ describe("manual erasure SQL", () => {
     assert.equal(after.notes, "Ravi note");
     assert.equal((await listContacts(db)).some((item) => item.name === "Ravi Patil"), true);
 
-    const audit = db.raw.prepare("SELECT action, actor_email FROM audit_log WHERE action = 'erase'").all().map((row) => ({ ...row }));
+    const audit = db.raw.prepare("SELECT action, actor_email FROM audit_log WHERE action = 'erase'").all().map((row) => ({ ...(row as object) }));
     assert.deepEqual(audit, [{ action: "erase", actor_email: "owner@example.com" }]);
   });
 

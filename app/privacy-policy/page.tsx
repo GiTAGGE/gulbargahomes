@@ -7,7 +7,8 @@ import {
   LegalLinks,
   LegalSection,
   LegalToc,
-  POLICY_UPDATED_LABEL,
+  PRIVACY_UPDATED,
+  PRIVACY_UPDATED_LABEL,
 } from "@/components/legal-document";
 import { metaDescription } from "@/lib/seo";
 import { site } from "@/lib/site";
@@ -21,6 +22,7 @@ const toc = [
   { id: "enquiries", label: "Buyer and tenant enquiries" },
   { id: "joint-venture", label: "Agricultural land joint ventures" },
   { id: "meta", label: "Meta ads and Instant Forms" },
+  { id: "crm", label: "Our private enquiry system" },
   { id: "messages", label: "Phone, WhatsApp and email" },
   { id: "collected", label: "Information involved" },
   { id: "cookies-and-analytics", label: "Cookies, storage and analytics" },
@@ -42,7 +44,7 @@ const toc = [
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: metaDescription(
-    "How GulbargaHomes handles enquiries, listings, analytics and agricultural land joint-venture introductions in Gulbarga (Kalaburagi).",
+    "How GulbargaHomes handles enquiries, Meta Instant Form leads, listings, analytics and agricultural land joint-venture introductions in Gulbarga (Kalaburagi).",
   ),
   alternates: { canonical: "/privacy-policy" },
   robots: { index: true, follow: true },
@@ -54,7 +56,9 @@ export default function PrivacyPolicyPage() {
       eyebrow="Privacy"
       title="Privacy Policy"
       path="/privacy-policy"
-      description="This notice describes how GulbargaHomes handles personal information in connection with gulbargahomes.com. It matches the website as it works today, including the agricultural land joint-venture enquiry, and it says plainly which tools are not connected."
+      updated={PRIVACY_UPDATED}
+      updatedLabel={PRIVACY_UPDATED_LABEL}
+      description="This notice describes how GulbargaHomes handles personal information in connection with gulbargahomes.com, our Facebook and Instagram advertisements, and our private enquiry system. It matches how these work today, and it says plainly which tools are not connected."
     >
       <LegalToc items={toc} />
 
@@ -81,9 +85,11 @@ export default function PrivacyPolicyPage() {
           <li>the agricultural land joint-venture form on this website;</li>
           <li>calls, WhatsApp chats and emails you exchange with us about a property or a joint venture;</li>
           <li>
-            Meta Instant Forms, if you submit one in a Facebook or Instagram advertisement — those
-            forms are collected by Meta, not by this website.
+            Meta Instant Forms you submit in a GulbargaHomes advertisement on Facebook or
+            Instagram. Meta collects the form and passes your answers to our private enquiry
+            system;
           </li>
+          <li>the private enquiry system our staff use to record and follow up enquiries.</li>
         </ul>
         <p>
           It does not cover a separate contract you may later sign with a landowner, buyer, investor
@@ -96,8 +102,9 @@ export default function PrivacyPolicyPage() {
         <p>
           The public site is a set of pages about homes, plots, commercial space, construction and
           related services in Gulbarga (Kalaburagi). Visitors do not create an account. There is no
-          public registration, login, checkout or payment. There is no database of visitor
-          enquiries on the website.
+          public registration, login, checkout or payment. The public pages do not store what you
+          type. Enquiries that reach us by Meta Instant Form, phone, WhatsApp or email can be
+          recorded by our staff in a private enquiry system that is not part of the public website.
         </p>
         <p>
           Search filters and the site search box send words you type to this website so results can
@@ -126,7 +133,8 @@ export default function PrivacyPolicyPage() {
           GulbargaHomes phone numbers. They do not show a property owner’s private mobile number.
         </p>
         <p>
-          Photos and video files for listings are stored with the website. The admin screen can be
+          Photos and video files for listings are stored with the website or in Cloudflare R2
+          storage. The admin screen can be
           pointed at Cloudinary, but that upload path is turned off in this project unless hosting
           environment variables are added. We do not describe Cloudinary as an active store of
           visitor data.
@@ -148,8 +156,8 @@ export default function PrivacyPolicyPage() {
           If you want a house, flat, plot, shop or piece of land shown on GulbargaHomes, contact us
           by phone, WhatsApp or email. We look at the details, and we may ask follow-up questions
           or ask to see the property. A listing is added by our team in the private admin, and only
-          after that check. The admin writes the listing into the website files. It is not a public
-          form.
+          after that check. Listings are stored in our listing database on Cloudflare. It is not a
+          public form.
         </p>
         <p>
           A published listing can include property facts and media. It is not an invitation to
@@ -170,6 +178,10 @@ export default function PrivacyPolicyPage() {
           owner or their representative that someone wants to see the property, and we may pass on
           the contact details needed for that visit. The website does not forward your message to
           the owner by itself.
+        </p>
+        <p>
+          Our staff may record your enquiry in our private enquiry system, described below, so we
+          can follow it up.
         </p>
         <p>
           There is no separate “book a viewing” form. A viewing request is a phone call or a
@@ -217,7 +229,8 @@ export default function PrivacyPolicyPage() {
         <p>
           The form does not write your answers into a website database. Choosing submit opens
           WhatsApp to {site.contacts[0].phoneDisplay} with the answers in the message. If WhatsApp
-          does not open, nothing has been stored on the website.
+          does not open, nothing has been stored on the website. If you send the message, our
+          staff may record the enquiry in our private enquiry system.
         </p>
       </LegalSection>
 
@@ -228,17 +241,46 @@ export default function PrivacyPolicyPage() {
           Instagram from our code.
         </p>
         <p>
-          We may advertise on Facebook or Instagram, including ads that use a Meta Instant Form for
-          agricultural landowners. If you fill in that form, Meta collects what you submit, under
-          Meta’s own terms and privacy policy. This website does not receive those submissions
-          automatically, and they do not appear in a GulbargaHomes database by themselves.
+          We advertise on Facebook and Instagram, including ads that use a Meta Instant Form for
+          property owners, tenants, buyers and landowners in Gulbarga (Kalaburagi). When you submit
+          one of those forms, Meta collects your answers under Meta’s own terms and privacy policy
+          and sends them to GulbargaHomes. Our system receives them automatically and records them
+          in our private enquiry system. This includes:
+        </p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>your name and mobile number, and your email if the form asks for it;</li>
+          <li>the answers you gave about the property, your budget, the area and your timing;</li>
+          <li>which form, advertisement and campaign the answers came from;</li>
+          <li>whether you used Facebook or Instagram, and when you submitted the form.</li>
+        </ul>
+        <p>
+          We use these details to call or message you about the enquiry you made and to keep a
+          record of our follow-ups. Submitting a form does not list a property, does not publish
+          your details, and does not share your number with an owner, tenant or buyer. Those steps
+          need a separate conversation with you.
         </p>
         <p>
-          Someone at GulbargaHomes may later download or read those leads inside Meta’s advertising
-          tools and contact you by phone or WhatsApp. That contact is separate from the website
-          form. Use the contacts on this page if you want access, a correction, or deletion of
-          details we received that way. We can act on copies we hold. We cannot delete Meta’s copy
+          Meta also keeps its own copy. We can act on the copy we hold. We cannot delete Meta’s copy
           for you; Meta provides its own controls.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="crm" title="Our private enquiry system">
+        <p>
+          The enquiry system is a private part of our admin, hosted on Cloudflare. It holds the
+          people who contact us, the properties they want to list, the homes or land they are
+          looking for, the source of each enquiry, and the calls, notes and follow-ups our staff
+          record. It is not visible on the public website.
+        </p>
+        <p>
+          Only authorised GulbargaHomes staff can sign in. Each signed-in person has a role that
+          limits what they can see and change. Roles that do not need your mobile number see it
+          partly hidden. Only our Super Admin can connect or disconnect Meta, and only our Super
+          Admin can carry out a deletion request.
+        </p>
+        <p>
+          The system keeps a history of who created or changed each record, so we can check how an
+          enquiry was handled. That history cannot be edited after it is written.
         </p>
       </LegalSection>
 
@@ -266,8 +308,8 @@ export default function PrivacyPolicyPage() {
             you send.
           </li>
           <li>
-            <strong className="text-ink">Meta Instant Forms.</strong> Collected by Meta, then handled
-            manually if we export them. Not imported into this website.
+            <strong className="text-ink">Meta Instant Forms.</strong> Received automatically from
+            Meta and recorded in our private enquiry system, as described above.
           </li>
         </ul>
         <p>
@@ -284,6 +326,8 @@ export default function PrivacyPolicyPage() {
           <li>village, taluk or area, district, land size, unit and ownership answers;</li>
           <li>whether you say an RTC or Pahani is available, whether there is road access, and whether co-owners agree;</li>
           <li>anything you later say by phone, WhatsApp or email, including a viewing request;</li>
+          <li>answers you give in a Meta Instant Form, and which advertisement and form you used;</li>
+          <li>notes our staff make about calls, visits and follow-ups on your enquiry;</li>
           <li>the page you were on, when that is included in a prepared WhatsApp sentence;</li>
           <li>search words, if you use search;</li>
           <li>property addresses you save or recently open, stored in this browser;</li>
@@ -357,7 +401,8 @@ export default function PrivacyPolicyPage() {
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
             <strong className="text-ink">Cloudflare.</strong> Hosts the site on Workers, stores
-            listings in D1, and stores new listing photos and videos in R2.
+            listings in D1, stores new listing photos and videos in R2, and hosts our private
+            enquiry system, including enquiries received from Meta Instant Forms.
           </li>
           <li>
             <strong className="text-ink">GitHub.</strong> Stores the website source, including the
@@ -370,7 +415,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong className="text-ink">WhatsApp / Meta.</strong> Receives a chat when you choose to
-            message us, and receives Instant Form answers if you submit one in an ad.
+            message us. Collects Instant Form answers if you submit one in an ad, and passes them to
+            us. We do not send your enquiry records back to Meta.
           </li>
           <li>
             <strong className="text-ink">Your phone network.</strong> Connects a call you place to
@@ -386,9 +432,9 @@ export default function PrivacyPolicyPage() {
           </li>
         </ul>
         <p>
-          These are not active on this website: a customer-relationship database, an email delivery
-          provider, a payment service, Google Ads conversion tracking, Google Tag Manager, a Meta
-          Pixel, and Meta’s Conversions API. Cloudinary is not in use unless hosting settings are
+          These are not active on this website: an email delivery provider, a payment service,
+          Google Ads conversion tracking, Google Tag Manager, a Meta Pixel, and Meta’s Conversions
+          API. Cloudinary is not in use unless hosting settings are
           later switched on for admin uploads.
         </p>
         <p>We do not sell personal information.</p>
@@ -413,6 +459,7 @@ export default function PrivacyPolicyPage() {
         <p>We use personal information to:</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>answer a property, service or joint-venture enquiry;</li>
+          <li>record and follow up an enquiry you made, including through a Meta Instant Form;</li>
           <li>call or message you about that enquiry;</li>
           <li>check whether a listing or a land opportunity is genuine before we publish or introduce it;</li>
           <li>arrange a viewing or a meeting you asked for;</li>
@@ -441,11 +488,31 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection id="retention" title="How long information is kept">
         <p>
-          The website has no visitor account and no automatic deletion schedule, because it does
-          not store those enquiries. A WhatsApp chat, phone note or email stays in that tool while
-          we still need it to answer you, finish a viewing or introduction, or meet a legal duty.
-          We do not publish a fixed number of months. There is no software timer deleting those
-          chats.
+          We keep an enquiry in our private enquiry system for 12 months after our last meaningful
+          interaction with you about it, such as a call, a message, a visit, or a change to your
+          listing or requirement. After that, our Super Admin reviews the record and deletes or
+          anonymises it, unless you still have an active listing or enquiry with us, you have asked
+          us to keep it, or a law that applies to us requires us to keep it. This review is done by
+          hand. It is not an automatic timer, so a record can stay a little longer than 12 months
+          until the next review.
+        </p>
+        <p>
+          When our system receives a Meta Instant Form, it also keeps a working copy of the answers
+          while it records the enquiry. That copy is cleared within 30 days after the enquiry is
+          recorded or found to be a repeat. If a form needs our staff to check it first, the copy
+          stays until they record it or set it aside; setting it aside clears it straight away.
+          Technical logs of messages from Meta, which contain reference numbers but not your
+          answers, are deleted after 90 days.
+        </p>
+        <p>
+          The history of who created or changed a record is kept for as long as we operate the
+          enquiry system, so we can show how our staff handled an enquiry. It can still contain
+          your name and mobile number as they were first recorded, even after the enquiry itself
+          has been deleted or anonymised. Only our Super Admin and inventory managers can view it.
+        </p>
+        <p>
+          A WhatsApp chat, phone note or email stays in that tool while we still need it to answer
+          you, finish a viewing or introduction, or meet a legal duty.
         </p>
         <p>
           Listing text and photos stay on the site until we edit or remove them. Browser saves stay
@@ -458,7 +525,9 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="security" title="Security">
         <p>
           We have no security certification to display. The public site is hosted on Cloudflare
-          Workers. The listing desk is limited to people with the desk password. Do not send
+          Workers. Our admin and private enquiry system are limited to authorised staff who sign
+          in, and each role limits what that person can see. The access that lets our system read
+          Meta Instant Forms is stored encrypted. Do not send
           document copies through the joint-venture form. No method of contact is free of risk,
           especially on WhatsApp and email.
         </p>
@@ -467,7 +536,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="rights" title="Your choices and requests">
         <p>You can ask us to:</p>
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>tell you what personal information we still hold about you in chats and mail we control;</li>
+          <li>tell you what personal information we hold about you in our enquiry system, and in chats and mail we control;</li>
           <li>correct something that is wrong;</li>
           <li>stop optional joint-venture updates;</li>
           <li>stop using your details for a new introduction;</li>
@@ -492,9 +561,17 @@ export default function PrivacyPolicyPage() {
           <Link href="/data-deletion" className="font-semibold text-brand-700 hover:underline">
             data deletion
           </Link>{" "}
-          page for the steps and the same contacts. We will delete or stop using personal
-          information we can still access, except where a law that applies to us requires us to
-          keep it. We will not keep an optional marketing permission after you withdraw it.
+          page for the steps and the same contacts. Deletion requests are handled by hand by our
+          Super Admin, after we confirm the request comes from you. We will delete or anonymise the
+          enquiry records we hold about you, including Meta Instant Form answers, and mark your
+          number so our staff do not contact you again, except where a law that applies to us
+          requires us to keep something. We will not keep an optional marketing permission after
+          you withdraw it.
+        </p>
+        <p>
+          We keep the Meta reference number of a form you sent, which is not your name or number,
+          so the same form is not imported again. The history of who changed a record is not
+          edited, as explained under how long information is kept.
         </p>
         <p>
           We cannot, from this website, erase Meta’s copy of an Instant Form, Google’s copy of an
@@ -524,7 +601,7 @@ export default function PrivacyPolicyPage() {
       <LegalSection id="changes" title="Changes to this notice">
         <p>
           When this notice changes, we change the “last updated” date at the top. The current date
-          is {POLICY_UPDATED_LABEL}. Older versions are not stored as separate pages on the site.
+          is {PRIVACY_UPDATED_LABEL}. Older versions are not stored as separate pages on the site.
         </p>
       </LegalSection>
 

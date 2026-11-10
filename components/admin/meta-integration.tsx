@@ -205,7 +205,7 @@ function ConnectionCard({
       <div className="space-y-3">
         {missingSecrets.length > 0 && (
           <Notice tone="warn">
-            Add these Worker secrets in Cloudflare before connecting: <span className="font-mono">{missingSecrets.join(", ")}</span>.
+            Add or correct these Worker secrets in Cloudflare before connecting (the App Secret is 32 hex characters): <span className="font-mono">{missingSecrets.join(", ")}</span>.
           </Notice>
         )}
         {connection.status === "expired" && (
