@@ -464,14 +464,19 @@ later deploy:
    npx wrangler d1 time-travel info gulbargahomes
    ```
 
-3. Confirm the Worker secrets (type Secret) and that `META_APP_SECRET` is the
-   32-character App Secret.
+3. Confirm the Worker secrets with `npx wrangler secret list`. Expect five
+   names, all `secret_text`.
 4. Run `npm run deploy` (it passes `--keep-vars`; `keep_vars` is also set).
 5. Check after deploying:
    - every sitemap URL returns 200
+   - `/privacy-policy` and `/data-deletion` show the new wording, dated
+     10 November 2026
    - `/admin/login` returns 200
+   - `/admin/integrations/meta` shows no "Add or correct these Worker secrets"
+     message. This message is how a wrong-format `META_APP_SECRET` shows up,
+     since Secret values cannot be read back.
    - `GET /api/webhooks/meta-leads` with a wrong verify token returns 403
-   - an unsigned `POST` returns 401 (503 means the secret is missing)
+   - an unsigned `POST` returns 401 (503 means a secret is missing or malformed)
 6. In Meta: save the webhook callback (Verify and save), subscribe `leadgen`,
    and turn on Require App Secret.
 7. Connect from `https://gulbargahomes.com/admin/integrations/meta`, classify
