@@ -1,7 +1,7 @@
 import { auditStatement, diffFields, type AuditActor } from "../admin/audit";
 import { HttpError, isUniqueViolation } from "../admin/errors";
 import type { InventoryProperty } from "../db/property-rows";
-import { formatCode, newId, nextSequence, type SqlDb, type SqlValue } from "../db/sql";
+import { changedRows, formatCode, newId, nextSequence, type SqlDb, type SqlValue } from "../db/sql";
 import { createDraftProperty } from "../inventory/repository";
 import { canonicalLocalityName } from "../locality";
 import { emptyProperty, slugifyTitle } from "../property-input";
@@ -356,26 +356,36 @@ export async function convertOwnerLead(
     },
   );
 
-  if (lead.status !== "Converted") {
-    await updateVersionedRecord(db, actor, {
-      table: "owner_leads",
+  const context = { property_id: property.id, property_code: property.code };
+  const label = `${lead.code} ${lead.contactName}`;
+  // Not version-checked: the draft already exists, so the lead must follow it.
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE owner_leads SET status = 'Converted', converted_at = ?1, converted_by = ?2, updated_at = ?1, updated_by = ?2, row_version = row_version + 1
+         WHERE id = ?3 AND status != 'Converted'`,
+      )
+      .bind(options.now, actor.id, lead.id),
+    auditStatement(db, {
+      actor,
       entityType: "owner_lead",
-      id: lead.id,
-      label: `${lead.code} ${lead.contactName}`,
-      rowVersion: lead.rowVersion,
-      before: { status: lead.status, converted_at: lead.convertedAt, converted_by: lead.convertedBy },
-      next: { status: "Converted", converted_at: options.now, converted_by: actor.id },
+      entityId: lead.id,
+      entityLabel: label,
       action: "convert",
-      now: options.now,
-    });
-  } else {
+      changes: { status: [lead.status, "Converted"] },
+      context,
+      at: options.now,
+      onlyIfPreviousChanged: true,
+    }),
+  ]);
+  if (changedRows(results[0]) === 0) {
     await auditStatement(db, {
       actor,
       entityType: "owner_lead",
       entityId: lead.id,
-      entityLabel: `${lead.code} ${lead.contactName}`,
+      entityLabel: label,
       action: "convert_additional",
-      context: { property_id: property.id, property_code: property.code },
+      context,
       at: options.now,
     }).run();
   }
