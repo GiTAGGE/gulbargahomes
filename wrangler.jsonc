@@ -20,8 +20,13 @@
     "binding": "ASSETS"
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    // Webhook handshakes and the OAuth callback carry hub.verify_token / code in the query string.
+    "redact_query_string": true
   },
+  // Variables added in the dashboard survive deploys that do not pass --keep-vars (e.g. Workers Builds).
+  // Secrets are never stored here and are always kept.
+  "keep_vars": true,
   "images": {
     // Requires Cloudflare Images on the account. If optimization fails,
     // remove this block and set images.unoptimized: true in next.config.mjs.
@@ -69,5 +74,37 @@
       "database_name": "gulbargahomes-next-tag-cache",
       "database_id": "5b9f52e0-7e3f-4f11-a936-77506aa41ab2"
     }
-  ]
+  ],
+  // Staging Worker on workers.dev with its own D1 and R2 (docs/meta-lead-ads.md, "Staging").
+  // Create the resources and replace the REPLACE_ ids before `--env staging` deploys.
+  "env": {
+    "staging": {
+      "name": "gulbargahomes-staging",
+      // Must stay empty: routes are inherited, and staging must never claim the production domains.
+      "routes": [],
+      "workers_dev": true,
+      "images": { "binding": "IMAGES" },
+      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "gulbargahomes-staging" }],
+      "r2_buckets": [
+        { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "gulbargahomes-staging-next-cache" },
+        { "binding": "MEDIA", "bucket_name": "gulbargahomes-staging-media" }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gulbargahomes-staging",
+          "database_id": "REPLACE_WITH_STAGING_DB_ID",
+          "migrations_dir": "migrations"
+        },
+        {
+          "binding": "NEXT_TAG_CACHE_D1",
+          "database_name": "gulbargahomes-staging-next-tag-cache",
+          "database_id": "REPLACE_WITH_STAGING_TAG_CACHE_ID"
+        }
+      ]
+    }
+  }
 }
