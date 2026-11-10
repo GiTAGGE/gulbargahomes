@@ -68,7 +68,14 @@ export function PropertyTable({ properties }: { properties: InventoryRow[] }) {
                       <span className="truncate font-semibold text-ink">{property.title}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-sm text-ink-muted">
-                      {property.locality} · {property.sizeLabel} · {property.propertyType} · {property.priceLabel}
+                      {[
+                        property.locality,
+                        property.sizeLabel !== property.propertyType ? property.sizeLabel : null,
+                        property.propertyType,
+                        property.priceLabel,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                     <span className="mt-1.5 flex flex-wrap gap-1">
                       <Pill tone={verificationTone(property.verificationStatus)}>{property.verificationStatus}</Pill>

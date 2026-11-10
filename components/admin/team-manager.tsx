@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/admin/format";
 import { ROLE_DESCRIPTION, ROLE_LABEL, ROLES, type Role } from "@/lib/admin/permissions";
 import type { AdminUser } from "@/lib/admin/users";
 
-import { Pill, inputClass, labelClass } from "./ui";
+import { Pill, controlClass, inputClass, labelClass } from "./ui";
 
 async function call(url: string, method: string, body: unknown): Promise<string | null> {
   const response = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -68,7 +68,7 @@ export function TeamManager({ users, currentId }: { users: AdminUser[]; currentI
                   aria-label={`Role for ${user.name}`}
                   disabled={Boolean(pending)}
                   onChange={(event) => void run(user.id, `/api/admin/users/${user.id}`, "PATCH", { role: event.target.value })}
-                  className={`${inputClass} mt-0 w-auto`}
+                  className={controlClass}
                 >
                   {ROLES.map((role) => (
                     <option key={role} value={role}>
@@ -100,7 +100,7 @@ export function TeamManager({ users, currentId }: { users: AdminUser[]; currentI
                     value={resetting.password}
                     onChange={(event) => setResetting({ id: user.id, password: event.target.value })}
                     placeholder="New password (10+ characters)"
-                    className={`${inputClass} mt-0`}
+                    className={`${controlClass} min-w-0 flex-1`}
                   />
                   <button
                     type="button"

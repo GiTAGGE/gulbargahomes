@@ -60,7 +60,11 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
               <Field label="BHK">
                 {requirement.bhkMin === null && requirement.bhkMax === null
                   ? "Any"
-                  : `${requirement.bhkMin ?? "?"}–${requirement.bhkMax ?? requirement.bhkMin ?? "?"}`}
+                  : requirement.bhkMax === null
+                    ? `${requirement.bhkMin}+`
+                    : requirement.bhkMin === null || requirement.bhkMin === requirement.bhkMax
+                      ? `${requirement.bhkMax}`
+                      : `${requirement.bhkMin}–${requirement.bhkMax}`}
               </Field>
               <Field label="Budget">{budgetLabel(requirement.budgetMin, requirement.budgetMax)}</Field>
               <Field label="Localities">

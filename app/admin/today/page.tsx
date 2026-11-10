@@ -30,7 +30,10 @@ export default async function TodayPage() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <AdminShell eyebrow={formatDate(now.toISOString())} title={`${greeting}, ${admin.name.split(" ")[0]}`}>
+    <AdminShell
+      eyebrow={formatDate(now.toISOString())}
+      title={admin.legacy ? greeting : `${greeting}, ${admin.name.split(" ")[0]}`}
+    >
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <Stat label="Follow-ups due" value={queue.followups.length} />
         <Stat label="Overdue" value={queue.overdueCount} tone="alert" />

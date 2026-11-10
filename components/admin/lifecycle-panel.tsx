@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { availabilityTone, formatDate, formatDateTime, publicationTone, verificationTone } from "@/lib/admin/format";
 
-import { Pill, inputClass } from "./ui";
+import { Pill, controlClass, inputClass } from "./ui";
 
 const AVAILABILITY = ["Available", "On Hold", "Rented", "Sold", "Withdrawn"] as const;
 
@@ -125,25 +125,28 @@ export function LifecyclePanel(props: LifecyclePanelProps) {
               : "Never confirmed with the owner."}
           </p>
           {can("confirm_availability") && (
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={validDays}
-                onChange={(event) => setValidDays(event.target.value)}
-                placeholder={`${props.validDays} days`}
-                aria-label="Valid for days"
-                className={`${inputClass} mt-0 w-24`}
-              />
+            <div className="space-y-2">
               <button
                 type="button"
                 disabled={Boolean(pending)}
                 onClick={() => void run("confirm_availability", validDays ? { validDays: Number(validDays) } : {})}
-                className="btn-primary flex-1"
+                className="btn-primary w-full"
               >
                 {pending === "confirm_availability" ? "Saving…" : "Owner confirmed available"}
               </button>
+              <label className="flex items-center gap-2 text-xs text-ink-muted">
+                Valid for
+                <input
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={validDays}
+                  onChange={(event) => setValidDays(event.target.value)}
+                  placeholder={String(props.validDays)}
+                  className={`${controlClass} w-20 py-1`}
+                />
+                days
+              </label>
             </div>
           )}
 
@@ -154,7 +157,7 @@ export function LifecyclePanel(props: LifecyclePanelProps) {
                   value={availability}
                   onChange={(event) => setAvailability(event.target.value)}
                   aria-label="Availability"
-                  className={`${inputClass} mt-0 flex-1`}
+                  className={`${controlClass} min-w-0 flex-1`}
                 >
                   {AVAILABILITY.map((status) => (
                     <option key={status}>{status}</option>

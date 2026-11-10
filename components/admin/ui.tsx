@@ -104,7 +104,10 @@ export function Tabs({ tabs, active }: { tabs: { key: string; label: string; hre
   );
 }
 
-export const inputClass =
-  "mt-1 w-full rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm text-ink outline-none ring-brand-600 focus:ring-2 disabled:bg-surface-muted";
+/** Field styling without width or margin, for inline controls. */
+export const controlClass =
+  "rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm text-ink outline-none ring-brand-600 focus:ring-2 disabled:bg-surface-muted";
+
+export const inputClass = `mt-1 w-full ${controlClass}`;
 
 export const labelClass = "block text-xs font-semibold text-ink";
