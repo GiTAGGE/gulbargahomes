@@ -28,13 +28,21 @@ export class FakeMeta {
   subscribed = false;
   mode: "ok" | "down" | "expired" | "rate_limited" = "ok";
   calls: string[] = [];
+  /** Full request URLs and bodies, to check that secrets never travel in a URL. */
+  requests: { method: string; url: string; body: string }[] = [];
   scopes = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
+  /** Simulates a token without advertiser access: ad-level lead fields are refused. */
+  refuseAdFields = false;
+  /** Forms Meta knows about that belong to a different Page. */
+  foreignForms: FakeForm[] = [];
 
   fetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
     const url = new URL(input);
     const path = url.pathname.replace(/^\/v\d+\.\d+/, "");
     const method = (init.method ?? "GET").toUpperCase();
     this.calls.push(`${method} ${path}`);
+    const body = typeof init.body === "string" ? init.body : "";
+    this.requests.push({ method, url: input, body });
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     const auth = new Headers(init.headers).get("authorization") ?? "";
@@ -52,7 +60,13 @@ export class FakeMeta {
     if (auth && !auth.endsWith(PAGE_TOKEN) && !auth.endsWith(USER_TOKEN)) {
       return json({ error: { message: "Invalid OAuth access token", type: "OAuthException", code: 190 } }, 401);
     }
-    if (path === "/oauth/access_token") return json({ access_token: USER_TOKEN, expires_in: 5_184_000 });
+    if (path === "/oauth/access_token") {
+      const form = new URLSearchParams(body);
+      if (method !== "POST" || !form.get("client_secret")) {
+        return json({ error: { message: "Missing client_secret", type: "OAuthException", code: 1 } }, 400);
+      }
+      return json({ access_token: USER_TOKEN, expires_in: 5_184_000 });
+    }
     if (path === "/me") return json({ id: "777", name: "Gulbarga Support" });
     if (path === "/me/accounts") {
       return json({ data: [{ id: PAGE_ID, name: "GulbargaHomes", access_token: PAGE_TOKEN, tasks: ["ADVERTISE", "MANAGE"] }] });
@@ -67,6 +81,13 @@ export class FakeMeta {
     if (path === `/${PAGE_ID}/leadgen_forms`) {
       return json({ data: this.forms.map((form) => ({ ...form, status: "ACTIVE", locale: "en_US", leads_count: 0 })) });
     }
+    const fields = (url.searchParams.get("fields") ?? "").split(",");
+    const askedForAdFields = fields.some((field) => /^(ad|adset|campaign)_(id|name)$/.test(field));
+    if (this.refuseAdFields && askedForAdFields) {
+      return json({ error: { message: "(#200) Requires ads_management permission to access ad fields", code: 200 } }, 403);
+    }
+    const pick = (lead: FakeLead) =>
+      Object.fromEntries(Object.entries(lead).filter(([key]) => key === "id" || key === "form_id" || fields.includes(key)));
     const leadsMatch = path.match(/^\/(\d+)\/leads$/);
     if (leadsMatch) {
       const filtering = JSON.parse(url.searchParams.get("filtering") ?? "[]") as { operator: string; value: number }[];
@@ -79,13 +100,15 @@ export class FakeMeta {
       });
       const page = matching.slice(after, after + limit);
       const next = after + limit < matching.length;
-      return json({ data: page, paging: { cursors: { after: String(after + limit) }, ...(next ? { next: "https://graph/next" } : {}) } });
+      return json({ data: page.map(pick), paging: { cursors: { after: String(after + limit) }, ...(next ? { next: "https://graph/next" } : {}) } });
     }
     const id = path.slice(1);
     const lead = this.leads.find((item) => item.id === id);
-    if (lead) return json(lead);
+    if (lead) return json(pick(lead));
     const form = this.forms.find((item) => item.id === id);
     if (form) return json({ ...form, status: "ACTIVE", locale: "en_US", page: { id: PAGE_ID } });
+    const foreign = this.foreignForms.find((item) => item.id === id);
+    if (foreign) return json({ ...foreign, status: "ACTIVE", locale: "en_US", page: { id: "9999999999" } });
     return json({ error: { message: `Unsupported get request. Object with ID '${id}' does not exist`, code: 100, error_subcode: 33 } }, 400);
   };
 }

@@ -4,7 +4,7 @@ import { newId, parseJson, type SqlDb } from "../db/sql";
 import { markTokenRejected, readPageToken } from "./connection";
 import { getStoredForm, listForms } from "./forms";
 import { MetaApiError, redactTokens } from "./graph";
-import { enqueueLead, processDue, type MetaRuntime } from "./ingest";
+import { enqueueLead, processDue, purgeExpiredQueueData, type MetaRuntime } from "./ingest";
 
 export const IMPORT_STATUSES = ["scanning", "processing", "paused", "completed", "cancelled"] as const;
 export type ImportStatus = (typeof IMPORT_STATUSES)[number];
@@ -199,6 +199,7 @@ export async function runImportStep(runtime: MetaRuntime, id: string): Promise<I
           until: row.until,
           after: cursor.after,
           limit: 50,
+          adNames: runtime.adNames,
         });
         let queued = 0;
         let duplicates = 0;
@@ -278,7 +279,7 @@ export async function reconcileRecentLeads(runtime: MetaRuntime, options: { forc
     for (let pageCount = 0; pageCount < 10; pageCount += 1) {
       let page;
       try {
-        page = await runtime.graph.listFormLeads(form.formId, token, { since, until: at, after, limit: 100 });
+        page = await runtime.graph.listFormLeads(form.formId, token, { since, until: at, after, limit: 100, adNames: runtime.adNames });
       } catch (error) {
         if (error instanceof MetaApiError && (error.kind === "auth" || error.kind === "permission")) {
           await markTokenRejected(db, error.message, at);
@@ -319,5 +320,6 @@ export async function runSweep(runtime: MetaRuntime, options: { budgetMs?: numbe
     await runImportStep(runtime, job.id);
   }
   const reconciled = Date.now() - started < budget * 0.75 ? await reconcileRecentLeads(runtime) : null;
-  return { processed, imports: results.length, reconciled };
+  const purged = await purgeExpiredQueueData(runtime.db, runtime.now ? runtime.now() : new Date());
+  return { processed, imports: results.length, reconciled, purged };
 }

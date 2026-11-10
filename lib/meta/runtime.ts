@@ -14,6 +14,7 @@ export async function metaRuntime(db: SqlDb, origin = "") {
     graph: createGraphClient(config),
     tokenKey: config.tokenKey,
     pageId: connection.pageId,
+    adNames: connection.scopes.includes("ads_read"),
   };
   return { runtime, config, missing, connection };
 }

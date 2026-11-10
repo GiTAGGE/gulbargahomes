@@ -183,6 +183,7 @@ export async function testConnection(db: SqlDb, actor: AuditActor, config: MetaC
       db
         .prepare("UPDATE meta_lead_ingestions SET status = 'pending', next_attempt_at = ?1, updated_at = ?1 WHERE status = 'waiting_token'")
         .bind(now),
+      db.prepare("UPDATE meta_import_jobs SET status = 'scanning', updated_at = ?1 WHERE status = 'paused'").bind(now),
     ]);
   }
   await auditStatement(db, {

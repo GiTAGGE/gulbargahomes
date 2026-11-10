@@ -1,4 +1,4 @@
-import type { AuditActor } from "../admin/audit";
+import { auditStatement, type AuditActor } from "../admin/audit";
 import { HttpError } from "../admin/errors";
 import { findContactByPhone } from "../crm/contacts";
 import { noMatching, type MatchingTrigger } from "../crm/matching-hook";
@@ -25,6 +25,8 @@ export type MetaRuntime = {
   graph: GraphClient;
   tokenKey: string;
   pageId: string;
+  /** ads_read was granted, so lead fetches also ask for campaign, ad set and ad names. */
+  adNames?: boolean;
   matching?: MatchingTrigger;
   now?: () => Date;
 };
@@ -164,17 +166,27 @@ async function claim(db: SqlDb, id: string, now: Date): Promise<IngestionRow | n
     .first<IngestionRow>();
 }
 
+/**
+ * The CRM record for this Meta lead, if any. `ours` means the integration
+ * created it: leadgen ids are unique in the queue, so that can only be an
+ * earlier attempt of this same row that stopped before it was marked done.
+ */
 async function existingEntity(db: SqlDb, leadgenId: string) {
   const sourceId = await sourceIdForMetaLead(db, leadgenId);
   if (!sourceId) return null;
-  const owner = await db.prepare("SELECT id, contact_id FROM owner_leads WHERE source_id = ?1").bind(sourceId).first<{ id: string; contact_id: string }>();
-  if (owner) return { entityType: "owner_lead", entityId: owner.id, contactId: owner.contact_id };
-  const requirement = await db
-    .prepare("SELECT id, contact_id FROM demand_requirements WHERE source_id = ?1")
+  const owner = await db
+    .prepare("SELECT id, contact_id, created_by FROM owner_leads WHERE source_id = ?1")
     .bind(sourceId)
-    .first<{ id: string; contact_id: string }>();
-  if (requirement) return { entityType: "requirement", entityId: requirement.id, contactId: requirement.contact_id };
-  return { entityType: "lead_source", entityId: sourceId, contactId: undefined };
+    .first<{ id: string; contact_id: string; created_by: string }>();
+  if (owner) return { entityType: "owner_lead", entityId: owner.id, contactId: owner.contact_id, ours: owner.created_by === META_ACTOR.id };
+  const requirement = await db
+    .prepare("SELECT id, contact_id, created_by FROM demand_requirements WHERE source_id = ?1")
+    .bind(sourceId)
+    .first<{ id: string; contact_id: string; created_by: string }>();
+  if (requirement) {
+    return { entityType: "requirement", entityId: requirement.id, contactId: requirement.contact_id, ours: requirement.created_by === META_ACTOR.id };
+  }
+  return { entityType: "lead_source", entityId: sourceId, contactId: undefined, ours: false };
 }
 
 function sourceFor(lead: MetaLead, form: { formId: string; name: string }, row: IngestionRow, mapped: MappedLead): SourceInput {
@@ -189,7 +201,7 @@ function sourceFor(lead: MetaLead, form: { formId: string; name: string }, row: 
     metaCampaignName: lead.campaignName.slice(0, 160),
     metaAdsetId: lead.adsetId.slice(0, 64),
     metaAdsetName: lead.adsetName.slice(0, 160),
-    metaAdId: lead.adId.slice(0, 64),
+    metaAdId: (lead.adId || row.ad_id).slice(0, 64),
     metaAdName: lead.adName.slice(0, 160),
     utmSource: "",
     utmMedium: "",
@@ -207,7 +219,7 @@ function sourceFor(lead: MetaLead, form: { formId: string; name: string }, row: 
         form_id: form.formId,
         form_name: form.name,
         page_id: row.page_id,
-        ad_id: lead.adId,
+        ad_id: lead.adId || row.ad_id,
         adset_id: lead.adsetId,
         campaign_id: lead.campaignId,
         platform: lead.platform,
@@ -264,9 +276,19 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
   if (!row) return "skipped";
 
   try {
+    if (runtime.pageId && row.page_id && row.page_id !== runtime.pageId) {
+      await finish(db, row, at, "ignored", { error: `Lead belongs to Page ${row.page_id}, not the connected Page.`, kind: "ownership" });
+      return "ignored";
+    }
     const already = await existingEntity(db, row.leadgen_id);
+    if (already?.ours) {
+      const { ours: _ours, ...entity } = already;
+      await finish(db, row, at, "done", { ...entity, error: "Recovered: the lead was created by an earlier attempt that stopped before finishing." });
+      return "done";
+    }
     if (already) {
-      await finish(db, row, at, "duplicate", { ...already, error: "This Meta lead was already in the CRM." });
+      const { ours: _ours, ...entity } = already;
+      await finish(db, row, at, "duplicate", { ...entity, error: "This Meta lead was already in the CRM." });
       return "duplicate";
     }
 
@@ -280,20 +302,28 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
     }
 
     if (!lead || !lead.fieldData.length) {
-      lead = await runtime.graph.getLead(row.leadgen_id, token!);
+      lead = await runtime.graph.getLead(row.leadgen_id, token!, { adNames: runtime.adNames });
       await logEvent(db, row.id, at, "fetch", "ok", "Lead answers retrieved from Graph API");
     }
     const formId = lead.formId || row.form_id;
     let form = await getStoredForm(db, formId);
+    const payload = JSON.stringify(lead);
     if (!form && formId) {
       const discovered = await runtime.graph.getForm(formId, token!);
+      if (runtime.pageId && discovered.pageId && discovered.pageId !== runtime.pageId) {
+        await finish(db, row, at, "ignored", { error: `Form ${formId} belongs to another Page.`, kind: "ownership", payload });
+        return "ignored";
+      }
       await upsertDiscoveredForms(db, META_ACTOR.id, discovered.pageId || row.page_id || runtime.pageId, [discovered], at);
       form = await getStoredForm(db, formId);
     }
-    const payload = JSON.stringify(lead);
     if (!form) {
       await finish(db, row, at, "needs_review", { error: "The lead has no form id.", kind: "data", payload });
       return "needs_review";
+    }
+    if (runtime.pageId && form.pageId && form.pageId !== runtime.pageId) {
+      await finish(db, row, at, "ignored", { error: `Form “${form.name}” belongs to another Page.`, kind: "ownership", payload });
+      return "ignored";
     }
     if (form.classification === "ignore") {
       await finish(db, row, at, "ignored", { error: `Form “${form.name}” is set to Ignore.`, kind: "mapping", payload });
@@ -311,7 +341,8 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
     const mapped = mapLead(form, lead);
     const phone = normalizeIndianMobile(mapped.contact.phone);
     if (!phone) {
-      const reason = mapped.problems[0] ?? `“${mapped.contact.phone}” is not a valid Indian mobile number.`;
+      // The number itself stays in the (role-masked) answers, not in the error text and history.
+      const reason = mapped.problems[0] ?? "The mobile number on the form is not a valid Indian mobile number.";
       await finish(db, row, at, "needs_review", { error: reason, kind: "data", payload });
       return "needs_review";
     }
@@ -338,7 +369,8 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
       if (error instanceof HttpError && error.status === 409) {
         const raced = await existingEntity(db, row.leadgen_id);
         if (raced) {
-          await finish(db, row, at, "duplicate", { ...raced, error: "Imported by a parallel delivery." });
+          const { ours: _ours, ...entity } = raced;
+          await finish(db, row, at, "duplicate", { ...entity, error: "Imported by a parallel delivery." });
           return "duplicate";
         }
         // Two different leads for the same new mobile number collided; the next attempt finds the contact.
@@ -446,4 +478,54 @@ export async function requeueIngestions(
     .bind(now)
     .run();
   return changedRows(result);
+}
+
+/** Staff decided not to import these. The queue's copy of the answers is dropped at once. */
+export async function dismissIngestions(db: SqlDb, actor: AuditActor, ids: string[], now: string): Promise<number> {
+  let total = 0;
+  for (const id of ids.slice(0, 200)) {
+    const [result] = await db.batch([
+      db
+        .prepare(
+          `UPDATE meta_lead_ingestions SET status = 'ignored', last_error = 'Dismissed by an admin', payload_json = '', updated_at = ?1
+           WHERE id = ?2 AND status IN ('failed', 'needs_review', 'needs_mapping')`,
+        )
+        .bind(now, id),
+      auditStatement(db, {
+        actor,
+        entityType: "integration",
+        entityId: "meta",
+        entityLabel: "Meta Lead Ads",
+        action: "dismiss_ingestion",
+        context: { ingestion_id: id },
+        at: now,
+        onlyIfPreviousChanged: true,
+      }),
+    ]);
+    total += changedRows(result);
+  }
+  return total;
+}
+
+/** Days the queue keeps a copy of answers it did not import, and the webhook delivery log. */
+export const QUEUE_PAYLOAD_RETENTION_DAYS = 30;
+export const DELIVERY_LOG_RETENTION_DAYS = 90;
+
+/**
+ * Housekeeping for integration data only. CRM records (contacts, leads,
+ * requirements and their lead sources) are never touched here.
+ */
+export async function purgeExpiredQueueData(db: SqlDb, now: Date) {
+  const payloadBefore = new Date(now.getTime() - QUEUE_PAYLOAD_RETENTION_DAYS * 86_400_000).toISOString();
+  const deliveriesBefore = new Date(now.getTime() - DELIVERY_LOG_RETENTION_DAYS * 86_400_000).toISOString();
+  const [payloads, deliveries] = await db.batch([
+    db
+      .prepare(
+        `UPDATE meta_lead_ingestions SET payload_json = ''
+         WHERE payload_json != '' AND status IN ('ignored', 'failed', 'done', 'duplicate') AND updated_at < ?1`,
+      )
+      .bind(payloadBefore),
+    db.prepare("DELETE FROM meta_webhook_deliveries WHERE received_at < ?1").bind(deliveriesBefore),
+  ]);
+  return { payloadsCleared: changedRows(payloads), deliveriesDeleted: changedRows(deliveries) };
 }

@@ -119,8 +119,24 @@ export type TokenInfo = {
   profileId: string;
 };
 
-const LEAD_FIELDS =
-  "id,created_time,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform,is_organic,field_data";
+const LEAD_BASE_FIELDS = "id,created_time,form_id,platform,is_organic,field_data";
+const LEAD_AD_ID_FIELDS = "ad_id,adset_id,campaign_id";
+const LEAD_AD_NAME_FIELDS = "ad_name,adset_name,campaign_name";
+
+export type LeadFieldOptions = {
+  /** Ask for campaign, ad set and ad names. Only useful when ads_read was granted. */
+  adNames?: boolean;
+};
+
+function leadFields(options: LeadFieldOptions, withAdFields: boolean): string {
+  if (!withAdFields) return LEAD_BASE_FIELDS;
+  return [LEAD_BASE_FIELDS, LEAD_AD_ID_FIELDS, ...(options.adNames ? [LEAD_AD_NAME_FIELDS] : [])].join(",");
+}
+
+/** Ad-level lead fields need advertiser access on the ad account; the answers do not. */
+function adFieldsRefused(error: unknown): boolean {
+  return error instanceof MetaApiError && (error.kind === "permission" || (error.kind === "permanent" && error.code === 100));
+}
 const FORM_FIELDS = "id,name,status,locale,created_time,leads_count,questions{key,label,type,options}";
 
 function epochToIso(value: unknown): string | null {
@@ -215,18 +231,28 @@ export type GraphClient = ReturnType<typeof createGraphClient>;
 export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fetch) {
   async function request<T>(
     path: string,
-    options: { token?: string; method?: string; query?: Record<string, string>; proof?: boolean } = {},
+    options: {
+      token?: string;
+      method?: string;
+      query?: Record<string, string>;
+      /** Sent as a form body (POST) so secrets stay out of the URL. */
+      form?: Record<string, string>;
+      proof?: boolean;
+    } = {},
   ): Promise<T> {
     const url = new URL(path.startsWith("http") ? path : `${config.graphBaseUrl}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
     if (options.token && options.proof !== false && config.appSecret) {
       url.searchParams.set("appsecret_proof", await appSecretProof(config.appSecret, options.token));
     }
+    const headers: Record<string, string> = options.token ? { authorization: `Bearer ${options.token}` } : {};
+    if (options.form) headers["content-type"] = "application/x-www-form-urlencoded";
     let response: Response;
     try {
       response = await fetchImpl(url.toString(), {
-        method: options.method ?? "GET",
-        headers: options.token ? { authorization: `Bearer ${options.token}` } : {},
+        method: options.method ?? (options.form ? "POST" : "GET"),
+        headers,
+        ...(options.form ? { body: new URLSearchParams(options.form).toString() } : {}),
       });
     } catch {
       throw new MetaApiError("Could not reach Meta.", "transient", 0);
@@ -259,7 +285,7 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
     /** OAuth code → short-lived user token → long-lived (about 60 days) user token. */
     async exchangeCode(code: string): Promise<{ accessToken: string; expiresAt: string | null }> {
       const short = await request<{ access_token: string }>("/oauth/access_token", {
-        query: {
+        form: {
           client_id: config.appId,
           client_secret: config.appSecret,
           redirect_uri: config.redirectUri,
@@ -267,7 +293,7 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
         },
       });
       const long = await request<{ access_token: string; expires_in?: number }>("/oauth/access_token", {
-        query: {
+        form: {
           grant_type: "fb_exchange_token",
           client_id: config.appId,
           client_secret: config.appSecret,
@@ -355,36 +381,48 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
       return { ...toForm(raw), pageId: String(page.id ?? "") };
     },
 
-    async getLead(leadgenId: string, pageToken: string): Promise<MetaLead> {
-      const raw = await request<Record<string, unknown>>(`/${encodeURIComponent(leadgenId)}`, {
-        token: pageToken,
-        query: { fields: LEAD_FIELDS },
-      });
-      return toMetaLead(raw);
+    async getLead(leadgenId: string, pageToken: string, options: LeadFieldOptions = {}): Promise<MetaLead> {
+      const fetchLead = (withAdFields: boolean) =>
+        request<Record<string, unknown>>(`/${encodeURIComponent(leadgenId)}`, {
+          token: pageToken,
+          query: { fields: leadFields(options, withAdFields) },
+        });
+      try {
+        return toMetaLead(await fetchLead(true));
+      } catch (error) {
+        if (!adFieldsRefused(error)) throw error;
+        return toMetaLead(await fetchLead(false));
+      }
     },
 
     /** One page of a form's leads created inside [since, until). */
     async listFormLeads(
       formId: string,
       pageToken: string,
-      options: { since: string; until: string; after?: string | null; limit?: number },
+      options: { since: string; until: string; after?: string | null; limit?: number } & LeadFieldOptions,
     ): Promise<{ leads: MetaLead[]; after: string | null }> {
       const filtering = [
         { field: "time_created", operator: "GREATER_THAN", value: Math.floor(Date.parse(options.since) / 1000) - 1 },
         { field: "time_created", operator: "LESS_THAN", value: Math.floor(Date.parse(options.until) / 1000) },
       ];
-      const page = await request<{
-        data?: Record<string, unknown>[];
-        paging?: { cursors?: { after?: string }; next?: string };
-      }>(`/${encodeURIComponent(formId)}/leads`, {
-        token: pageToken,
-        query: {
-          fields: LEAD_FIELDS,
-          limit: String(options.limit ?? 50),
-          filtering: JSON.stringify(filtering),
-          ...(options.after ? { after: options.after } : {}),
-        },
-      });
+      type LeadPage = { data?: Record<string, unknown>[]; paging?: { cursors?: { after?: string }; next?: string } };
+      const fetchPage = (withAdFields: boolean) =>
+        request<LeadPage>(`/${encodeURIComponent(formId)}/leads`, {
+          token: pageToken,
+          query: {
+            fields: leadFields(options, withAdFields),
+            limit: String(options.limit ?? 50),
+            filtering: JSON.stringify(filtering),
+            ...(options.after ? { after: options.after } : {}),
+          },
+        });
+      let page: LeadPage;
+      try {
+        page = await fetchPage(true);
+      } catch (error) {
+        if (!adFieldsRefused(error)) throw error;
+        page = await fetchPage(false);
+      }
       return {
         leads: (page.data ?? []).map((lead) => toMetaLead({ form_id: formId, ...lead })),
         after: page.paging?.next ? (page.paging.cursors?.after ?? null) : null,
