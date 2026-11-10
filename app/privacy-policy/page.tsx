@@ -498,8 +498,8 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           When our system receives a Meta Instant Form, it also keeps a working copy of the answers
-          while it records the enquiry. That copy is cleared within 30 days after the enquiry is
-          recorded or found to be a repeat. If a form needs our staff to check it first, the copy
+          while it records the enquiry. That copy is cleared 30 days after the enquiry is recorded,
+          found to be a repeat, or turned away. If a form needs our staff to check it first, the copy
           stays until they record it or set it aside; setting it aside clears it straight away.
           Technical logs of messages from Meta, which contain reference numbers but not your
           answers, are deleted after 90 days.
