@@ -23,6 +23,7 @@ export async function AdminShell({
     { href: "/admin/requirements", label: "Requirements" },
     { href: "/admin/properties", label: "Inventory" },
     { href: "/admin/contacts", label: "Contacts" },
+    ...(admin && can(admin.role, "integrations.view") ? [{ href: "/admin/integrations", label: "Integrations" }] : []),
     ...(admin && can(admin.role, "users.manage") ? [{ href: "/admin/team", label: "Team" }] : []),
   ];
 

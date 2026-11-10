@@ -7,6 +7,7 @@ export type IngestionStats = {
   byStatus: Record<IngestionStatus, number>;
   total: number;
   imported: number;
+  /** Leads already in the CRM when processed, plus import rows that were already queued. */
   duplicateLeads: number;
   webhookRedeliveries: number;
   existingContacts: number;
@@ -40,11 +41,12 @@ export async function ingestionStats(db: SqlDb): Promise<IngestionStats> {
     else if (status === "pending" || status === "processing" || status === "retry") form.open += n;
   }
   const total = Object.values(byStatus).reduce((sum, n) => sum + n, 0);
+  const overlaps = await db.prepare("SELECT COALESCE(SUM(duplicates), 0) AS n FROM meta_import_jobs").first<{ n: number }>();
   return {
     byStatus,
     total,
     imported: byStatus.done,
-    duplicateLeads: byStatus.duplicate,
+    duplicateLeads: byStatus.duplicate + Number(overlaps?.n ?? 0),
     webhookRedeliveries: redeliveries,
     existingContacts: existing,
     attention: ATTENTION.reduce((sum, status) => sum + byStatus[status], 0),

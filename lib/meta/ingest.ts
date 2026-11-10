@@ -10,37 +10,13 @@ import { changedRows, newId, type SqlDb } from "../db/sql";
 import { markTokenRejected, readPageToken, touchConnection } from "./connection";
 import { getStoredForm, upsertDiscoveredForms } from "./forms";
 import { MetaApiError, parseStoredLead, type GraphClient, type MetaLead } from "./graph";
+import type { IngestionStatus } from "./labels";
 import { mapLead, type MappedLead } from "./mapping";
 
 /** Recorded as the actor on everything the integration creates. */
 export const META_ACTOR: AuditActor = { id: "meta_lead_ads", email: "meta-lead-ads", role: "system" };
 
-export const INGESTION_STATUSES = [
-  "pending",
-  "processing",
-  "retry",
-  "waiting_token",
-  "needs_mapping",
-  "needs_review",
-  "done",
-  "duplicate",
-  "ignored",
-  "failed",
-] as const;
-export type IngestionStatus = (typeof INGESTION_STATUSES)[number];
-
-export const INGESTION_STATUS_LABEL: Record<IngestionStatus, string> = {
-  pending: "Queued",
-  processing: "Processing",
-  retry: "Retrying",
-  waiting_token: "Waiting for reconnection",
-  needs_mapping: "Form not classified",
-  needs_review: "Needs review",
-  done: "Imported",
-  duplicate: "Duplicate",
-  ignored: "Ignored form",
-  failed: "Failed",
-};
+export { INGESTION_STATUS_LABEL, INGESTION_STATUSES, type IngestionStatus } from "./labels";
 
 export type IngestionOriginKind = "webhook" | "import" | "reconcile";
 

@@ -126,7 +126,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
           <Card title="Follow-ups">
             <FollowupsPanel entity={entity} followups={followups} canManage={caps.manageFollowups} />
           </Card>
-          <SourceCard source={source} />
+          <SourceCard source={source} canViewPhone={caps.viewPhone} />
         </div>
       </div>
     </AdminShell>
