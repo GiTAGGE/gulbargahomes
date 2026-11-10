@@ -10,7 +10,10 @@ export type AuditEntity =
   | "requirement"
   | "followup"
   | "admin_user"
-  | "session";
+  | "session"
+  | "integration"
+  | "meta_form"
+  | "meta_import";
 
 export type FieldChanges = Record<string, [unknown, unknown]>;
 

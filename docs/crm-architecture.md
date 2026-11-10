@@ -104,10 +104,11 @@ runner lives in `lib/db/migrations.ts`, records each version in
 | 2 | `property_lifecycle` | 0 | lifecycle, ownership and audit columns on `properties`; stable `id`/`code`; backfill existing rows as Verified + Published; `public_properties` view |
 | 3 | `admin_and_audit` | 0 | `admin_users`, append-only `audit_log` (with UPDATE/DELETE-blocking triggers) |
 | 4 | `crm_core` | 1 | `lead_sources`, `contacts`, `owner_leads`, `demand_requirements`, `activities`, `followups` |
-| 5 | `matching` | 2 | `matches`, `match_runs` |
-| 6 | `visits_and_deals` | 3 | `site_visits`, `deals` |
-| 7 | `messaging` | 3 | `message_channels`, `messages` (WhatsApp Cloud API + Business App coexistence) |
-| 8 | `campaign_spend` | 4 | `campaigns`, `campaign_spend_daily`, `lead_imports`, `lead_import_rows` |
+| 5 | `meta_lead_ads` | 1 ext. | Meta connection, forms, webhook deliveries, ingestion queue + history, import jobs, `ad_entities`, `ad_spend_daily`, `campaign_lead_funnel` view; attribution columns on `lead_sources`. See [`meta-lead-ads.md`](meta-lead-ads.md) |
+| 6 | `matching` | 2 | `matches`, `match_runs` |
+| 7 | `visits_and_deals` | 3 | `site_visits`, `deals` |
+| 8 | `messaging` | 3 | `message_channels`, `messages` (WhatsApp Cloud API + Business App coexistence) |
+| 9 | `campaign_spend` | 4 | spend import into `ad_spend_daily`, CSV `lead_imports` / `lead_import_rows` |
 
 ### 3.1 `properties` (extended, Phase 0)
 
@@ -267,7 +268,9 @@ change and its audit row in a single D1 batch.
 | PATCH | `/api/admin/followups/[id]` | `followup.manage` | 1 |
 | GET / POST | `/api/admin/matches…` | `match.view` / `match.manage` | 2 |
 | POST | `/api/admin/imports/meta-csv` | `import.run` | 4 |
-| GET / POST | `/api/webhooks/meta-leads` | Meta signature (`X-Hub-Signature-256`) | 4 |
+| GET / POST | `/api/webhooks/meta-leads` | verify token / Meta signature (`X-Hub-Signature-256`) | 1 ext. |
+| GET / POST | `/api/admin/integrations/meta` (+ `connect`, `callback`, `forms/[formId]`, `imports`, `imports/[id]`, `ingestions/[id]`) | `integrations.view` / `integrations.manage` | 1 ext. |
+| POST | `/api/integrations/meta/sweep` | token derived from the app secret (cron only) | 1 ext. |
 | GET / POST | `/api/webhooks/whatsapp` | Meta signature | 3 |
 | GET | `/api/admin/analytics/funnel` | `analytics.view` | 4 |
 
@@ -462,5 +465,6 @@ ignores them and keeps serving every listing.
 | **1 CRM core** | contacts, owner leads, requirements, activities, follow-ups, explicit lead → draft conversion, Today / leads / requirements / contacts / team screens |
 | **2 Matching** | `matches`, scoring (intent score separate from match score), explanations, auto re-match on inventory/requirement changes, inventory-gap report |
 | **3 Conversion** | site visits, deals and outcomes, WhatsApp templates, coexistence webhook adapter, lead recycling |
-| **4 Attribution** | Meta CSV import, Lead Ads webhook, campaign spend, funnel analytics and cost metrics |
+| **1 ext. Meta Lead Ads** | Page connection, form discovery and mapping, signed webhook, durable queue with retries, historical import, reconciliation, attribution columns, funnel view ([`meta-lead-ads.md`](meta-lead-ads.md)) |
+| **4 Attribution** | Meta CSV import, campaign spend import, funnel analytics and cost metrics |
 | **5 Intelligence** | locality demand trends, owner-acquisition recommendations, forecasting |

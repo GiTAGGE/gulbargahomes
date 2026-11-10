@@ -1,7 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gulbargahomes",
-  "main": ".open-next/worker.js",
+  // worker.ts wraps .open-next/worker.js and adds the Meta Lead Ads cron sweep.
+  "main": "worker.ts",
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   // workers.dev stays as a rollback URL. Production traffic uses Custom Domains.
   "workers_dev": true,
   "routes": [

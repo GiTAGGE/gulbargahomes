@@ -57,6 +57,7 @@ Sign in at `/admin/properties` with a named staff account, or leave the email bl
   - Each change is written to an append-only history, with who made it and when.
 - **Availability checks** expire after 14 days for rentals and 30 days for sales. Until staff confirm with the owner again, the property stays out of matching.
 - **Contacts** hold one record per mobile number, with every call, message and note across their leads and requirements.
+- **Integrations → Meta Lead Ads** (`/admin/integrations/meta`) connects the Facebook Page. Owner, tenant and buyer Instant Form leads then arrive as owner leads and requirements automatically, without duplicates, and past leads can be imported. Only super admins can connect, map forms or import. Setup and the Meta app checklist are in [`docs/meta-lead-ads.md`](docs/meta-lead-ads.md).
 - **Team** (super admin only) adds named accounts with a role: Super admin, Inventory manager, Lead executive or Viewer. Viewers see masked phone numbers.
 
 Editing a property still supports price, locality, Vastu, bachelor/family rules, amenities, nearby places, FAQs, photo upload (set a cover, reorder), video upload and YouTube URLs.
@@ -103,6 +104,10 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 | `NEXT_PUBLIC_GA4_ID` | no | `G-47GFXYGBTL` unless the GA4 property changes |
 | `NEXT_PUBLIC_CLARITY_ID` | no | Optional Microsoft Clarity id |
 | `REVALIDATE_SECRET` | yes | Optional, for `POST /api/revalidate` |
+| `META_APP_SECRET` | yes | Meta app secret. Verifies Lead Ads webhooks and signs Graph calls |
+| `META_WEBHOOK_VERIFY_TOKEN` | yes | Random string, also entered in the Meta webhook settings |
+| `META_TOKEN_KEY` | yes | `openssl rand -hex 32`. Encrypts the stored Page token |
+| `META_APP_ID`, `META_GRAPH_VERSION`, `META_OAUTH_REDIRECT_URI` | no | Default to `2327104601371140`, `v27.0` and `https://<host>/api/admin/integrations/meta/callback` |
 
 Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does not wipe those secrets.
 

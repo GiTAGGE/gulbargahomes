@@ -1,9 +1,9 @@
 import Link from "next/link";
 
-import { formatDate } from "@/lib/admin/format";
+import { formatDate, formatDateTime } from "@/lib/admin/format";
 import type { Contact } from "@/lib/crm/contacts";
 import { LEAD_CHANNEL_LABEL } from "@/lib/crm/options";
-import { formatPhone, maskPhone, whatsappLink } from "@/lib/crm/phone";
+import { formatPhone, maskEmail, maskPhone, whatsappLink } from "@/lib/crm/phone";
 import type { LeadSource } from "@/lib/crm/sources";
 
 import { Card, Field } from "./ui";
@@ -41,7 +41,30 @@ export function ContactCard({ contact, canViewPhone, title = "Contact" }: { cont
   );
 }
 
-export function SourceCard({ source }: { source: LeadSource | null }) {
+const ORIGIN_LABEL: Record<LeadSource["ingestionOrigin"], string> = {
+  manual: "Entered by staff",
+  webhook: "Meta webhook",
+  historical_import: "Historical import",
+  reconciliation: "Reconciliation",
+};
+
+type StoredAnswer = { key: string; label?: string; value: string; target: string };
+
+function storedAnswers(source: LeadSource): StoredAnswer[] {
+  const answers = source.rawPayload.answers;
+  return Array.isArray(answers)
+    ? answers.filter((answer): answer is StoredAnswer => Boolean(answer) && typeof answer === "object" && typeof answer.key === "string")
+    : [];
+}
+
+function maskAnswer(answer: StoredAnswer, canViewPhone: boolean): string {
+  if (canViewPhone) return answer.value;
+  if (answer.target === "phone" || /phone/.test(answer.key)) return maskPhone(answer.value);
+  if (answer.target === "email" || /mail/.test(answer.key)) return maskEmail(answer.value);
+  return answer.value;
+}
+
+export function SourceCard({ source, canViewPhone = false }: { source: LeadSource | null; canViewPhone?: boolean }) {
   if (!source) {
     return (
       <Card title="Source">
@@ -65,8 +88,30 @@ export function SourceCard({ source }: { source: LeadSource | null }) {
         {(source.utmSource || source.utmCampaign) && (
           <Field label="UTM">{[source.utmSource, source.utmMedium, source.utmCampaign].filter(Boolean).join(" / ")}</Field>
         )}
-        <Field label="Submitted">{formatDate(source.submittedAt)}</Field>
+        <Field label="Submitted">{meta ? formatDateTime(source.submittedAt) : formatDate(source.submittedAt)}</Field>
+        {meta && source.ingestionOrigin !== "manual" && (
+          <Field label="Imported">
+            {ORIGIN_LABEL[source.ingestionOrigin]}
+            {source.receivedAt ? ` · ${formatDateTime(source.receivedAt)}` : ""}
+          </Field>
+        )}
       </dl>
+      {meta && storedAnswers(source).length > 0 && (
+        <div className="mt-3 border-t border-brand-50 pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Form answers</p>
+          <ul className="mt-1 space-y-1.5">
+            {storedAnswers(source).map((answer) => (
+              <li key={answer.key} className="text-sm">
+                <span className="text-ink-muted">{answer.label || answer.key}</span>
+                {!answer.target && (
+                  <span className="ml-1 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-800">not mapped</span>
+                )}
+                <span className="block break-words text-ink">{maskAnswer(answer, canViewPhone) || "—"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   );
 }
