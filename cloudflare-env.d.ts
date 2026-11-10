@@ -13,6 +13,7 @@ interface SqlStatement {
 
 interface ListingsDatabase {
   prepare(query: string): SqlStatement;
+  batch(statements: SqlStatement[]): Promise<unknown[]>;
   exec(query: string): Promise<unknown>;
 }
 

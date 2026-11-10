@@ -9,6 +9,7 @@
     "images": "node scripts/generate-property-media.mjs",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --no-warnings --import tsx --test \"tests/**/*.test.ts\"",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload -- --keep-vars",
@@ -35,6 +36,7 @@
     "postcss": "^8.4.47",
     "sharp": "^0.35.1",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "wrangler": "^4.155.0"
   }

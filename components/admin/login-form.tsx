@@ -10,11 +10,14 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
     event.preventDefault();
     setPending(true);
     setError("");
-    const password = String(new FormData(event.currentTarget).get("password") ?? "");
+    const form = new FormData(event.currentTarget);
     const response = await fetch("/api/admin/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({
+        email: String(form.get("email") ?? "").trim(),
+        password: String(form.get("password") ?? ""),
+      }),
     });
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
@@ -27,6 +30,19 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
   return (
     <form onSubmit={onSubmit} className="mt-6 space-y-4">
+      <label className="block text-sm font-semibold text-ink">
+        Work email
+        <input
+          name="email"
+          type="email"
+          autoComplete="username"
+          placeholder="you@gulbargahomes.com"
+          className="mt-1.5 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm outline-none ring-brand-600 focus:ring-2"
+        />
+        <span className="mt-1 block text-xs font-normal text-ink-faint">
+          Leave blank to use the shared listing-desk password.
+        </span>
+      </label>
       <label className="block text-sm font-semibold text-ink">
         Password
         <input
@@ -43,7 +59,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         </p>
       )}
       <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Signing in…" : "Enter listing desk"}
+        {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>
   );

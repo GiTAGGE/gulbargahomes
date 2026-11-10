@@ -44,7 +44,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export function adminSecretsConfigured(): boolean {
-  return Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET);
+  return Boolean(process.env.ADMIN_SESSION_SECRET);
 }
 
 export async function verifyAdminPassword(password: string): Promise<boolean> {
@@ -64,29 +64,69 @@ export async function verifyAdminPassword(password: string): Promise<boolean> {
   return diff === 0;
 }
 
-export async function createAdminSessionToken(): Promise<string | null> {
+/** Session subject for the shared ADMIN_PASSWORD login. */
+export const LEGACY_ADMIN_SUBJECT = "legacy";
+
+export type AdminSession = { subject: string; expiresAt: number };
+
+export function legacyLoginEnabled(): boolean {
+  return (
+    Boolean(process.env.ADMIN_PASSWORD) &&
+    (process.env.ADMIN_LEGACY_LOGIN ?? "").toLowerCase() !== "disabled"
+  );
+}
+
+export async function createAdminSessionToken(
+  subject: string = LEGACY_ADMIN_SUBJECT,
+): Promise<string | null> {
   const secret = process.env.ADMIN_SESSION_SECRET;
-  if (!secret) return null;
+  if (!secret || !/^[A-Za-z0-9_-]+$/.test(subject)) return null;
   const expiresAt = Date.now() + SESSION_HOURS * 60 * 60 * 1000;
-  const payload = String(expiresAt);
+  const payload = `v2.${expiresAt}.${subject}`;
   const signature = await hmacHex(secret, payload);
   return `${payload}.${signature}`;
+}
+
+/**
+ * Reads `v2.<expires>.<subject>.<sig>` tokens, and the earlier `<expires>.<sig>`
+ * shape, which maps to the shared-password admin until it expires.
+ */
+export async function readAdminSessionToken(
+  token: string | undefined,
+): Promise<AdminSession | null> {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (!token || !secret) return null;
+
+  const parts = token.split(".");
+  let payload: string;
+  let signature: string;
+  let expiresRaw: string;
+  let subject: string;
+
+  if (parts.length === 4 && parts[0] === "v2") {
+    [, expiresRaw, subject, signature] = parts;
+    payload = `v2.${expiresRaw}.${subject}`;
+  } else if (parts.length === 2) {
+    [expiresRaw, signature] = parts;
+    payload = expiresRaw;
+    subject = LEGACY_ADMIN_SUBJECT;
+  } else {
+    return null;
+  }
+
+  const expiresAt = Number(expiresRaw);
+  if (!subject || !Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
+
+  const expected = await hmacHex(secret, payload);
+  if (!safeEqual(signature, expected)) return null;
+  if (subject === LEGACY_ADMIN_SUBJECT && !legacyLoginEnabled()) return null;
+  return { subject, expiresAt };
 }
 
 export async function verifyAdminSessionToken(
   token: string | undefined,
 ): Promise<boolean> {
-  const secret = process.env.ADMIN_SESSION_SECRET;
-  if (!token || !secret) return false;
-
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
-
-  const expiresAt = Number(payload);
-  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
-
-  const expected = await hmacHex(secret, payload);
-  return safeEqual(signature, expected);
+  return (await readAdminSessionToken(token)) !== null;
 }
 
 export function adminSessionCookie(token: string) {
