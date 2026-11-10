@@ -5,7 +5,9 @@ import { PERMISSIONS, can, type Permission, type Role } from "../lib/admin/permi
 
 const MATRIX: Record<Role, Permission[]> = {
   super_admin: [...PERMISSIONS],
-  inventory_manager: PERMISSIONS.filter((permission) => permission !== "users.manage"),
+  inventory_manager: PERMISSIONS.filter(
+    (permission) => permission !== "users.manage" && permission !== "integrations.manage",
+  ),
   lead_executive: [
     "property.view",
     "property.confirm_availability",
@@ -40,6 +42,15 @@ describe("role permission matrix", () => {
       assert.equal(can("lead_executive", permission), false, permission);
       assert.equal(can("viewer", permission), false, permission);
     }
+  });
+
+  it("only super admins manage integration credentials", () => {
+    assert.equal(can("super_admin", "integrations.manage"), true);
+    for (const role of ["inventory_manager", "lead_executive", "viewer"] as Role[]) {
+      assert.equal(can(role, "integrations.manage"), false, role);
+    }
+    assert.equal(can("lead_executive", "integrations.view"), false);
+    assert.equal(can("viewer", "integrations.view"), false);
   });
 
   it("rejects unknown roles", () => {

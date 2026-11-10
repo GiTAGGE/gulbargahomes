@@ -280,6 +280,172 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_followups_entity ON followups (entity_type, entity_id)`,
     ],
   },
+  {
+    version: 5,
+    name: "meta_lead_ads",
+    statements: [
+      `ALTER TABLE lead_sources ADD COLUMN meta_page_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE lead_sources ADD COLUMN meta_is_organic INTEGER`,
+      `ALTER TABLE lead_sources ADD COLUMN ingestion_origin TEXT NOT NULL DEFAULT 'manual'`,
+      `ALTER TABLE lead_sources ADD COLUMN received_at TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_sources_form ON lead_sources (meta_form_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_sources_ad ON lead_sources (meta_ad_id)`,
+      // One row ('primary'). Tokens are AES-GCM ciphertext; the key is the META_TOKEN_KEY secret.
+      `CREATE TABLE IF NOT EXISTS meta_connection (
+         id TEXT PRIMARY KEY,
+         status TEXT NOT NULL DEFAULT 'disconnected',
+         page_id TEXT NOT NULL DEFAULT '',
+         page_name TEXT NOT NULL DEFAULT '',
+         meta_user_name TEXT NOT NULL DEFAULT '',
+         user_token_enc TEXT NOT NULL DEFAULT '',
+         user_token_expires_at TEXT,
+         page_token_enc TEXT NOT NULL DEFAULT '',
+         page_token_expires_at TEXT,
+         data_access_expires_at TEXT,
+         scopes_json TEXT NOT NULL DEFAULT '[]',
+         webhook_subscribed INTEGER NOT NULL DEFAULT 0,
+         connected_by TEXT,
+         connected_at TEXT,
+         last_checked_at TEXT,
+         last_error TEXT NOT NULL DEFAULT '',
+         last_webhook_at TEXT,
+         last_success_at TEXT,
+         updated_at TEXT NOT NULL,
+         row_version INTEGER NOT NULL DEFAULT 1
+       )`,
+      `CREATE TABLE IF NOT EXISTS meta_forms (
+         form_id TEXT PRIMARY KEY,
+         page_id TEXT NOT NULL,
+         name TEXT NOT NULL DEFAULT '',
+         status TEXT NOT NULL DEFAULT '',
+         locale TEXT NOT NULL DEFAULT '',
+         questions_json TEXT NOT NULL DEFAULT '[]',
+         classification TEXT NOT NULL DEFAULT 'unclassified',
+         owner_intent TEXT NOT NULL DEFAULT '',
+         mapping_json TEXT NOT NULL DEFAULT '{}',
+         leads_count INTEGER,
+         form_created_at TEXT,
+         discovered_at TEXT NOT NULL,
+         synced_at TEXT NOT NULL,
+         updated_at TEXT NOT NULL,
+         updated_by TEXT NOT NULL,
+         row_version INTEGER NOT NULL DEFAULT 1
+       )`,
+      `CREATE TABLE IF NOT EXISTS meta_webhook_deliveries (
+         id TEXT PRIMARY KEY,
+         received_at TEXT NOT NULL,
+         signature_valid INTEGER NOT NULL,
+         object TEXT NOT NULL DEFAULT '',
+         leadgen_count INTEGER NOT NULL DEFAULT 0,
+         new_count INTEGER NOT NULL DEFAULT 0,
+         repeat_count INTEGER NOT NULL DEFAULT 0,
+         note TEXT NOT NULL DEFAULT ''
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_deliveries_received ON meta_webhook_deliveries (received_at)`,
+      // The durable queue shared by webhook and historical imports. leadgen_id is the idempotency key.
+      `CREATE TABLE IF NOT EXISTS meta_lead_ingestions (
+         id TEXT PRIMARY KEY,
+         leadgen_id TEXT NOT NULL UNIQUE,
+         page_id TEXT NOT NULL DEFAULT '',
+         form_id TEXT NOT NULL DEFAULT '',
+         ad_id TEXT NOT NULL DEFAULT '',
+         origin TEXT NOT NULL,
+         import_job_id TEXT,
+         status TEXT NOT NULL DEFAULT 'pending',
+         attempts INTEGER NOT NULL DEFAULT 0,
+         next_attempt_at TEXT NOT NULL,
+         locked_until TEXT,
+         last_error TEXT NOT NULL DEFAULT '',
+         last_error_kind TEXT NOT NULL DEFAULT '',
+         deliveries INTEGER NOT NULL DEFAULT 1,
+         lead_created_at TEXT,
+         payload_json TEXT NOT NULL DEFAULT '',
+         entity_type TEXT,
+         entity_id TEXT,
+         contact_id TEXT,
+         contact_existing INTEGER,
+         received_at TEXT NOT NULL,
+         processed_at TEXT,
+         updated_at TEXT NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_ingestions_due ON meta_lead_ingestions (status, next_attempt_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_ingestions_form ON meta_lead_ingestions (form_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_ingestions_job ON meta_lead_ingestions (import_job_id, status)`,
+      `CREATE TABLE IF NOT EXISTS meta_ingestion_events (
+         id TEXT PRIMARY KEY,
+         ingestion_id TEXT NOT NULL,
+         occurred_at TEXT NOT NULL,
+         step TEXT NOT NULL,
+         outcome TEXT NOT NULL,
+         message TEXT NOT NULL DEFAULT ''
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_ingestion_events ON meta_ingestion_events (ingestion_id, occurred_at)`,
+      `CREATE TABLE IF NOT EXISTS meta_import_jobs (
+         id TEXT PRIMARY KEY,
+         form_ids_json TEXT NOT NULL,
+         since TEXT NOT NULL,
+         until TEXT NOT NULL,
+         status TEXT NOT NULL DEFAULT 'scanning',
+         cursor_json TEXT NOT NULL DEFAULT '{}',
+         found INTEGER NOT NULL DEFAULT 0,
+         queued INTEGER NOT NULL DEFAULT 0,
+         duplicates INTEGER NOT NULL DEFAULT 0,
+         last_error TEXT NOT NULL DEFAULT '',
+         created_by TEXT NOT NULL,
+         created_at TEXT NOT NULL,
+         updated_at TEXT NOT NULL,
+         finished_at TEXT
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_import_jobs_status ON meta_import_jobs (status, created_at)`,
+      `CREATE TABLE IF NOT EXISTS ad_entities (
+         platform TEXT NOT NULL,
+         level TEXT NOT NULL,
+         external_id TEXT NOT NULL,
+         name TEXT NOT NULL DEFAULT '',
+         parent_id TEXT NOT NULL DEFAULT '',
+         first_seen_at TEXT NOT NULL,
+         last_seen_at TEXT NOT NULL,
+         PRIMARY KEY (platform, level, external_id)
+       )`,
+      // Filled only from real spend reports. No row means spend is unknown, never zero.
+      `CREATE TABLE IF NOT EXISTS ad_spend_daily (
+         platform TEXT NOT NULL,
+         level TEXT NOT NULL,
+         external_id TEXT NOT NULL,
+         spend_date TEXT NOT NULL,
+         currency TEXT NOT NULL,
+         spend_minor INTEGER NOT NULL,
+         impressions INTEGER,
+         clicks INTEGER,
+         source TEXT NOT NULL,
+         imported_at TEXT NOT NULL,
+         imported_by TEXT NOT NULL,
+         PRIMARY KEY (platform, level, external_id, spend_date)
+       )`,
+      // Current-state funnel per Meta campaign. Cost metrics divide spend_minor by these counts
+      // and stay NULL while spend_minor is NULL.
+      `CREATE VIEW IF NOT EXISTS campaign_lead_funnel AS
+       SELECT s.meta_campaign_id AS campaign_id,
+         MAX(s.meta_campaign_name) AS campaign_name,
+         COUNT(*) AS leads,
+         SUM(CASE WHEN o.id IS NOT NULL THEN 1 ELSE 0 END) AS owner_leads,
+         SUM(CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END) AS requirements,
+         SUM(CASE WHEN r.status IN ('Qualified', 'Matched', 'Property shared', 'Visit scheduled', 'Visited', 'Negotiation', 'Converted')
+                    OR o.status = 'Converted' THEN 1 ELSE 0 END) AS qualified,
+         SUM(CASE WHEN r.status IN ('Visited', 'Negotiation', 'Converted') THEN 1 ELSE 0 END) AS visited,
+         SUM(CASE WHEN r.status = 'Converted' AND r.intent = 'Rent' THEN 1 ELSE 0 END) AS rentals,
+         SUM(CASE WHEN r.status = 'Converted' AND r.intent = 'Buy' THEN 1 ELSE 0 END) AS sales,
+         (SELECT SUM(d.spend_minor) FROM ad_spend_daily d
+           WHERE d.platform = 'meta' AND d.level = 'campaign' AND d.external_id = s.meta_campaign_id) AS spend_minor,
+         (SELECT MAX(d.currency) FROM ad_spend_daily d
+           WHERE d.platform = 'meta' AND d.level = 'campaign' AND d.external_id = s.meta_campaign_id) AS currency
+       FROM lead_sources s
+       LEFT JOIN owner_leads o ON o.source_id = s.id
+       LEFT JOIN demand_requirements r ON r.source_id = s.id
+       WHERE s.meta_campaign_id != ''
+       GROUP BY s.meta_campaign_id`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

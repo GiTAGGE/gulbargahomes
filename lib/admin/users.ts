@@ -48,9 +48,12 @@ export async function listAdminUsers(db: SqlDb): Promise<AdminUser[]> {
   return results.map(toUser);
 }
 
+/** Non-human actors that write CRM records. */
+const SYSTEM_ACTOR_NAMES: Record<string, string> = { meta_lead_ads: "Meta Lead Ads" };
+
 export async function adminNames(db: SqlDb): Promise<Record<string, string>> {
   const { results } = await db.prepare("SELECT id, name FROM admin_users").all<{ id: string; name: string }>();
-  return Object.fromEntries(results.map((row) => [row.id, row.name]));
+  return { ...SYSTEM_ACTOR_NAMES, ...Object.fromEntries(results.map((row) => [row.id, row.name])) };
 }
 
 /** Returns the user only when the email, password and active flag all check out. */

@@ -9,8 +9,8 @@ export const ROLE_LABEL: Record<Role, string> = {
 };
 
 export const ROLE_DESCRIPTION: Record<Role, string> = {
-  super_admin: "Everything, including team accounts.",
-  inventory_manager: "Creates, verifies, prices and publishes properties. Works leads.",
+  super_admin: "Everything, including team accounts and integrations.",
+  inventory_manager: "Creates, verifies, prices and publishes properties. Works leads. Sees integration status.",
   lead_executive: "Works owner leads and requirements, logs calls and confirms availability.",
   viewer: "Read-only. Phone numbers are masked.",
 };
@@ -35,12 +35,17 @@ export const PERMISSIONS = [
   "analytics.view",
   "audit.view",
   "users.manage",
+  "integrations.view",
+  "integrations.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
+/** Team accounts and integration credentials stay with super admins. */
+const SUPER_ADMIN_ONLY: readonly Permission[] = ["users.manage", "integrations.manage"];
+
 const INVENTORY_MANAGER: Permission[] = PERMISSIONS.filter(
-  (permission) => permission !== "users.manage",
+  (permission) => !SUPER_ADMIN_ONLY.includes(permission),
 );
 
 const LEAD_EXECUTIVE: Permission[] = [

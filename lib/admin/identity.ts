@@ -72,6 +72,8 @@ export function adminCapabilities(admin: AdminIdentity) {
     manageFollowups: check("followup.manage"),
     viewAudit: check("audit.view"),
     manageUsers: check("users.manage"),
+    viewIntegrations: check("integrations.view"),
+    manageIntegrations: check("integrations.manage"),
   };
 }
 

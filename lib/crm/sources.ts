@@ -22,8 +22,15 @@ export type LeadSource = {
   utmContent: string;
   utmTerm: string;
   submittedAt: string;
+  metaPageId: string;
+  metaIsOrganic: boolean | null;
+  ingestionOrigin: IngestionOrigin;
+  receivedAt: string | null;
   rawPayload: Record<string, unknown>;
 };
+
+export const INGESTION_ORIGINS = ["manual", "webhook", "historical_import", "reconciliation"] as const;
+export type IngestionOrigin = (typeof INGESTION_ORIGINS)[number];
 
 export type LeadSourceRow = {
   id: string;
@@ -44,6 +51,10 @@ export type LeadSourceRow = {
   utm_content: string;
   utm_term: string;
   submitted_at: string;
+  meta_page_id: string | null;
+  meta_is_organic: number | null;
+  ingestion_origin: string | null;
+  received_at: string | null;
   raw_payload_json: string;
 };
 
@@ -67,6 +78,10 @@ export function rowToSource(row: LeadSourceRow): LeadSource {
     utmContent: row.utm_content,
     utmTerm: row.utm_term,
     submittedAt: row.submitted_at,
+    metaPageId: row.meta_page_id ?? "",
+    metaIsOrganic: row.meta_is_organic === null || row.meta_is_organic === undefined ? null : Boolean(row.meta_is_organic),
+    ingestionOrigin: oneOf(row.ingestion_origin, INGESTION_ORIGINS, "manual"),
+    receivedAt: row.received_at ?? null,
     rawPayload: parseJson<Record<string, unknown>>(row.raw_payload_json, {}),
   };
 }
@@ -89,6 +104,11 @@ export type SourceInput = {
   utmContent: string;
   utmTerm: string;
   submittedAt: string | null;
+  metaPageId?: string;
+  metaIsOrganic?: boolean | null;
+  ingestionOrigin?: IngestionOrigin;
+  receivedAt?: string | null;
+  rawPayload?: Record<string, unknown>;
 };
 
 export function parseSourceInput(value: unknown): SourceInput {
@@ -127,8 +147,8 @@ export function insertSourceStatement(
     id,
     statement: db
       .prepare(
-        `INSERT INTO lead_sources (id, channel, platform, meta_lead_id, meta_form_id, meta_form_name, meta_campaign_id, meta_campaign_name, meta_adset_id, meta_adset_name, meta_ad_id, meta_ad_name, utm_source, utm_medium, utm_campaign, utm_content, utm_term, submitted_at, raw_payload_json, created_at, created_by)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)`,
+        `INSERT INTO lead_sources (id, channel, platform, meta_lead_id, meta_form_id, meta_form_name, meta_campaign_id, meta_campaign_name, meta_adset_id, meta_adset_name, meta_ad_id, meta_ad_name, utm_source, utm_medium, utm_campaign, utm_content, utm_term, submitted_at, raw_payload_json, created_at, created_by, meta_page_id, meta_is_organic, ingestion_origin, received_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)`,
       )
       .bind(
         id,
@@ -149,9 +169,13 @@ export function insertSourceStatement(
         source.utmContent,
         source.utmTerm,
         source.submittedAt ?? now,
-        JSON.stringify(rawPayload),
+        JSON.stringify(source.rawPayload ?? rawPayload),
         now,
         actor.id,
+        source.metaPageId ?? "",
+        source.metaIsOrganic === undefined || source.metaIsOrganic === null ? null : source.metaIsOrganic ? 1 : 0,
+        source.ingestionOrigin ?? "manual",
+        source.receivedAt ?? null,
       ),
   };
 }
