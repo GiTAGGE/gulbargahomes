@@ -9,7 +9,7 @@ import { sourceIdForMetaLead, type SourceInput } from "../crm/sources";
 import { changedRows, newId, type SqlDb } from "../db/sql";
 import { markTokenRejected, readPageToken, touchConnection } from "./connection";
 import { getStoredForm, upsertDiscoveredForms } from "./forms";
-import { MetaApiError, parseStoredLead, type GraphClient, type MetaLead } from "./graph";
+import { MetaApiError, parseStoredLead, redactTokens, type GraphClient, type MetaLead } from "./graph";
 import type { IngestionStatus } from "./labels";
 import { mapLead, type MappedLead } from "./mapping";
 
@@ -131,7 +131,7 @@ async function finish(
     )
     .bind(
       status,
-      (fields.error ?? "").slice(0, 500),
+      redactTokens(fields.error ?? "").slice(0, 500),
       fields.kind ?? "",
       fields.nextAttemptAt ?? at,
       fields.entityType ?? null,

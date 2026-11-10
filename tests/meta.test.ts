@@ -621,6 +621,17 @@ describe("form mapping and value parsing", () => {
     const headers = new Headers({ "x-business-use-case-usage": JSON.stringify({ "1": [{ estimated_time_to_regain_access: 30 }] }) });
     assert.equal(classifyMetaError(400, { error: { code: 80001, message: "x" } }, headers).retryAfterSeconds, 1800);
   });
+
+  it("strips tokens that Meta echoes back in error messages", () => {
+    const echoed = classifyMetaError(400, { error: { code: 190, message: "Malformed access token EAAGm0PX4ZCpsBAKZBj1ZBc2fXyz" } });
+    assert.equal(echoed.message, "Malformed access token [token]");
+    const keyed = classifyMetaError(400, { error: { code: 190, message: "Bad access_token=abcdefghijklmnopqrstuvwxyz0123" } });
+    assert.equal(keyed.message, "Bad access_token=[token]");
+    assert.equal(
+      classifyMetaError(401, { error: { code: 190, message: "Error validating access token: Session has expired" } }).message,
+      "Error validating access token: Session has expired",
+    );
+  });
 });
 
 describe("attribution reporting", () => {

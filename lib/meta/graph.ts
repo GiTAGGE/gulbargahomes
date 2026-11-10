@@ -12,6 +12,13 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
  */
 export type MetaErrorKind = "auth" | "permission" | "rate_limit" | "transient" | "permanent";
 
+/** Meta echoes malformed tokens back in error messages, and those messages are stored and shown. */
+export function redactTokens(message: string): string {
+  return message
+    .replace(/\bEAA[A-Za-z0-9_\-.|]{8,}/g, "[token]")
+    .replace(/(access[ _]?token[\s:="']+)[A-Za-z0-9_\-.|]{24,}/gi, "$1[token]");
+}
+
 export class MetaApiError extends Error {
   constructor(
     message: string,
@@ -21,7 +28,7 @@ export class MetaApiError extends Error {
     public subcode: number | null = null,
     public retryAfterSeconds: number | null = null,
   ) {
-    super(message);
+    super(redactTokens(message));
   }
 }
 

@@ -1,6 +1,7 @@
 import { auditStatement, type AuditActor } from "../admin/audit";
 import { parseJson, type SqlDb } from "../db/sql";
 import { decryptToken, encryptToken } from "./crypto";
+import { redactTokens } from "./graph";
 
 export const CONNECTION_ID = "primary";
 
@@ -211,7 +212,7 @@ export async function recordCheck(
     )
     .bind(
       input.now,
-      input.ok ? "" : (input.error ?? "Check failed").slice(0, 300),
+      input.ok ? "" : redactTokens(input.error ?? "Check failed").slice(0, 300),
       input.webhookSubscribed === undefined ? null : input.webhookSubscribed ? 1 : 0,
       input.pageTokenExpiresAt !== undefined || input.dataAccessExpiresAt !== undefined ? 1 : 0,
       input.pageTokenExpiresAt ?? null,
@@ -230,7 +231,7 @@ export async function markTokenRejected(db: SqlDb, message: string, now: string)
          row_version = row_version + 1
        WHERE id = ?3 AND status = 'connected'`,
     )
-    .bind(`Meta rejected the Page token: ${message}`.slice(0, 300), now, CONNECTION_ID)
+    .bind(`Meta rejected the Page token: ${redactTokens(message)}`.slice(0, 300), now, CONNECTION_ID)
     .run();
 }
 

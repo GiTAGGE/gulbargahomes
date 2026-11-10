@@ -3,7 +3,7 @@ import { HttpError } from "../admin/errors";
 import { newId, parseJson, type SqlDb } from "../db/sql";
 import { markTokenRejected, readPageToken } from "./connection";
 import { getStoredForm, listForms } from "./forms";
-import { MetaApiError } from "./graph";
+import { MetaApiError, redactTokens } from "./graph";
 import { enqueueLead, processDue, type MetaRuntime } from "./ingest";
 
 export const IMPORT_STATUSES = ["scanning", "processing", "paused", "completed", "cancelled"] as const;
@@ -161,7 +161,7 @@ async function updateJob(db: SqlDb, id: string, fields: Record<string, string | 
     .prepare(
       `UPDATE meta_import_jobs SET ${names.map((name, index) => `${name} = ?${index + 1}`).join(", ")}, updated_at = ?${names.length + 1} WHERE id = ?${names.length + 2}`,
     )
-    .bind(...names.map((name) => fields[name]), now, id)
+    .bind(...names.map((name) => (name === "last_error" ? redactTokens(String(fields[name] ?? "")) : fields[name])), now, id)
     .run();
 }
 
