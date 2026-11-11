@@ -456,6 +456,18 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE meta_lead_ingestions ADD COLUMN resolved_at TEXT`,
     ],
   },
+  {
+    // Version 7 is reserved for another feature and is intentionally unused.
+    // Production is on version 6. Do not renumber this or edit versions 1–6.
+    version: 8,
+    name: "owner_client_requirements",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN idempotency_key TEXT`,
+      `ALTER TABLE demand_requirements ADD COLUMN origin_owner_lead_id TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_requirements_idempotency ON demand_requirements (idempotency_key) WHERE idempotency_key IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_requirements_origin_owner ON demand_requirements (origin_owner_lead_id)`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

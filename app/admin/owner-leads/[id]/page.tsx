@@ -2,20 +2,24 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { AddClientRequirement } from "@/components/admin/add-client-requirement";
 import { ContactCard, SourceCard } from "@/components/admin/crm-cards";
 import { FollowupsPanel, TimelinePanel } from "@/components/admin/crm-panels";
 import { HistoryList } from "@/components/admin/history-list";
 import { OwnerLeadActions } from "@/components/admin/record-actions";
 import { Card, Empty, Field, Pill } from "@/components/admin/ui";
 import { listAudit } from "@/lib/admin/audit";
-import { availabilityTone, bandTone, formatDateTime, formatInr, ownerIntentPhrase, ownerPriceLabel, publicationTone, verificationTone } from "@/lib/admin/format";
+import { availabilityTone, bandTone, budgetLabel, formatDateTime, formatInr, ownerIntentPhrase, ownerPriceLabel, publicationTone, verificationTone } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
 import { getContact, redactContact } from "@/lib/crm/contacts";
 import { getOwnerLead } from "@/lib/crm/owner-leads";
+import { listRequirements } from "@/lib/crm/requirements";
 import { getSource } from "@/lib/crm/sources";
 import { listInventoryForOwnerLead } from "@/lib/inventory/repository";
+import { getLocalities } from "@/lib/properties";
+import { site } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +30,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
   if (!lead) notFound();
 
   const entity = { entityType: "owner_lead" as const, entityId: lead.id, contactId: lead.contactId };
-  const [contact, source, activities, followups, properties, history, names] = await Promise.all([
+  const [contact, source, activities, followups, properties, history, names, requirements, localities] = await Promise.all([
     getContact(db, lead.contactId),
     getSource(db, lead.sourceId),
     listActivities(db, { entityType: "owner_lead", entityId: lead.id }),
@@ -34,6 +38,8 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
     listInventoryForOwnerLead(db, lead.id, { includeDiscreet: caps.viewDiscreet }),
     caps.viewAudit ? listAudit(db, { entityType: "owner_lead", entityId: lead.id }) : [],
     adminNames(db),
+    listRequirements(db, { contactId: lead.contactId, limit: 100 }),
+    getLocalities(),
   ]);
   const converted = lead.status === "Converted";
 
@@ -68,6 +74,25 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
             </dl>
             {lead.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-surface-muted/60 p-3 text-sm text-ink">{lead.notes}</p>}
             {lead.statusReason && <p className="mt-2 text-xs text-ink-muted">Status note: {lead.statusReason}</p>}
+          </Card>
+
+          <Card
+            title="Convert / Add Client Requirement"
+            hint="Adds a buyer or tenant requirement for this person. It does not change this owner lead and does not create a listing."
+          >
+            <AddClientRequirement
+              ownerLeadId={lead.id}
+              canEdit={caps.editCrm}
+              localities={Array.from(new Set([...localities, ...site.localities])).sort()}
+              requirements={requirements.map((item) => ({
+                id: item.id,
+                code: item.code,
+                intent: item.intent,
+                status: item.status,
+                budgetLabel: budgetLabel(item.budgetMin, item.budgetMax, item.intent),
+                fromThisLead: item.originOwnerLeadId === lead.id,
+              }))}
+            />
           </Card>
 
           <Card title="Properties from this owner" hint="Created by staff from this lead. Drafts stay internal until verified and published.">
