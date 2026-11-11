@@ -1,12 +1,12 @@
 import { auditStatement, diffFields, type AuditActor } from "../admin/audit";
 import { HttpError, isUniqueViolation } from "../admin/errors";
 import type { InventoryProperty } from "../db/property-rows";
-import { changedRows, formatCode, newId, nextSequence, type SqlDb, type SqlValue } from "../db/sql";
+import { changedRows, formatCode, newId, nextSequence, type SqlDb, type SqlStatement, type SqlValue } from "../db/sql";
 import { createDraftProperty } from "../inventory/repository";
 import { canonicalLocalityName } from "../locality";
 import { emptyProperty, slugifyTitle } from "../property-input";
 import type { PropertyType } from "../types";
-import { resolveContact, type ContactInput } from "./contacts";
+import { getContact, resolveContact, type ContactInput } from "./contacts";
 import { assertVersion, optionalInt, text } from "./input";
 import {
   OWNER_INTENTS,
@@ -42,6 +42,8 @@ export type OwnerLead = {
   notes: string;
   status: OwnerLeadStatus;
   statusReason: string;
+  roleReview: "" | "misclassified";
+  roleReviewNote: string;
   priority: Priority;
   assignedTo: string | null;
   nextFollowupAt: string | null;
@@ -74,6 +76,8 @@ type OwnerLeadRow = {
   notes: string;
   status: string;
   status_reason: string;
+  role_review: string;
+  role_review_note: string;
   priority: string;
   assigned_to: string | null;
   next_followup_at: string | null;
@@ -115,6 +119,8 @@ function toLead(row: OwnerLeadRow): OwnerLead {
     notes: row.notes,
     status: oneOf(row.status, OWNER_LEAD_STATUSES, "New"),
     statusReason: row.status_reason,
+    roleReview: row.role_review === "misclassified" ? "misclassified" : "",
+    roleReviewNote: row.role_review_note ?? "",
     priority: oneOf(row.priority, PRIORITIES, "Warm"),
     assignedTo: row.assigned_to,
     nextFollowupAt: row.next_followup_at,
@@ -148,6 +154,9 @@ export async function listOwnerLeads(
   if (filter.status === "open") conditions.push("l.status IN ('New', 'Contacted', 'Details pending')");
   if (filter.status === "closed") {
     conditions.push("l.status IN ('Not interested', 'Unreachable', 'Duplicate', 'Invalid')");
+  }
+  if (status === "New" || status === "Contacted" || status === "Details pending" || filter.status === "open") {
+    conditions.push("l.role_review != 'misclassified'");
   }
   if (filter.contactId) add("l.contact_id = ?", filter.contactId);
   if (filter.formId) add("s.meta_form_id = ?", filter.formId);
@@ -322,6 +331,90 @@ export async function updateOwnerLead(
 }
 
 /**
+ * Records that the original owner classification was wrong, or restores it.
+ * The lead status, Meta source and any buyer or tenant requirement stay as they are.
+ * The Owner badge remains while any of this person's leads is still an owner lead.
+ */
+export async function setOwnerLeadRoleReview(
+  db: SqlDb,
+  actor: AuditActor,
+  lead: OwnerLead,
+  decision: "misclassified" | "owner",
+  noteInput: unknown,
+  options: { now: string; expectedVersion?: number },
+): Promise<OwnerLead> {
+  assertVersion(options.expectedVersion, lead.rowVersion);
+  const review = decision === "misclassified" ? "misclassified" : "";
+  const note = text(noteInput, 300);
+  if (note.length < 2) throw new HttpError(400, "Say why this classification changed.");
+  if (lead.roleReview === review && lead.roleReviewNote === note) return lead;
+
+  const contact = await getContact(db, lead.contactId);
+  if (!contact) throw new HttpError(404, "Contact not found.");
+  const others = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM owner_leads WHERE contact_id = ?1 AND id != ?2 AND role_review != 'misclassified'`,
+    )
+    .bind(lead.contactId, lead.id)
+    .first<{ n: number }>();
+  const staysOwner = review !== "misclassified" || Number(others?.n ?? 0) > 0;
+  const statements: SqlStatement[] = [
+    db
+      .prepare(
+        `UPDATE owner_leads SET role_review = ?1, role_review_note = ?2, updated_at = ?3, updated_by = ?4, row_version = row_version + 1
+         WHERE id = ?5 AND row_version = ?6`,
+      )
+      .bind(review, note, options.now, actor.id, lead.id, lead.rowVersion),
+    auditStatement(db, {
+      actor,
+      entityType: "owner_lead",
+      entityId: lead.id,
+      entityLabel: `${lead.code} ${lead.contactName}`,
+      action: review === "misclassified" ? "mark_not_owner" : "restore_owner_role",
+      changes: diffFields(
+        { role_review: lead.roleReview, role_review_note: lead.roleReviewNote },
+        { role_review: review, role_review_note: note },
+      ),
+      context: { contact_id: lead.contactId },
+      at: options.now,
+      onlyIfPreviousChanged: true,
+    }),
+    db
+      .prepare(
+        `UPDATE contacts SET is_owner = CASE WHEN EXISTS (
+           SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
+         ) THEN 1 ELSE 0 END,
+         updated_at = ?1, updated_by = ?2, row_version = row_version + 1
+         WHERE id = ?3 AND is_owner != CASE WHEN EXISTS (
+           SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
+         ) THEN 1 ELSE 0 END`,
+      )
+      .bind(options.now, actor.id, lead.contactId),
+  ];
+  if (contact.isOwner !== staysOwner) {
+    statements.push(
+      auditStatement(db, {
+        actor,
+        entityType: "contact",
+        entityId: contact.id,
+        entityLabel: `${contact.code} ${contact.name}`,
+        action: "update",
+        changes: { is_owner: [contact.isOwner ? 1 : 0, staysOwner ? 1 : 0] },
+        context: { owner_lead_id: lead.id },
+        at: options.now,
+        onlyIfPreviousChanged: true,
+      }),
+    );
+  }
+
+  const results = await db.batch(statements);
+  if (changedRows(results[0]) === 0) {
+    throw new HttpError(409, "Someone else changed this lead. Reload to see the latest version.");
+  }
+  return (await getOwnerLead(db, lead.id))!;
+}
+
+/**
  * Explicit admin action: creates an unpublished, unverified draft linked to the
  * owner. A lead can be converted more than once when one owner has several
  * properties.
@@ -332,6 +425,9 @@ export async function convertOwnerLead(
   lead: OwnerLead,
   options: { now: string; title?: string; listing?: "Rent" | "Sale" },
 ): Promise<InventoryProperty> {
+  if (lead.roleReview === "misclassified") {
+    throw new HttpError(400, "This person is marked not an owner. The lead stays on file and cannot become a property.");
+  }
   if (["Not interested", "Duplicate", "Invalid"].includes(lead.status)) {
     throw new HttpError(400, `Reopen this lead before converting it (it is marked ${lead.status}).`);
   }

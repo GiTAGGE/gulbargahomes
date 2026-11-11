@@ -44,7 +44,7 @@ export function erasureStatements(code: string, by: string, at: string): string[
     `UPDATE followups SET reason = 'Erased', outcome_note = '',
        status = CASE WHEN status = 'Open' THEN 'Cancelled' ELSE status END
      WHERE contact_id IN ${target} OR entity_id IN ${owned}`,
-    `UPDATE owner_leads SET notes = '', location_text = '', status_reason = '${ERASED_REASON}', next_followup_at = NULL,
+    `UPDATE owner_leads SET notes = '', location_text = '', status_reason = '${ERASED_REASON}', role_review_note = '', next_followup_at = NULL,
        status = CASE WHEN status IN ('New', 'Contacted', 'Details pending') THEN 'Not interested' ELSE status END,
        updated_at = '${at}', updated_by = '${ERASURE_ACTOR}', row_version = row_version + 1
      WHERE contact_id IN ${target}`,

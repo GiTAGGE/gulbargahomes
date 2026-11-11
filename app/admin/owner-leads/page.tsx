@@ -81,6 +81,7 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted sm:justify-end">
                     <span>{caps.viewPhone ? formatPhone(lead.contactPhone) : maskPhone(lead.contactPhone)}</span>
                     <Pill tone={lead.status === "New" ? "amber" : lead.status === "Converted" ? "green" : "stone"}>{lead.status}</Pill>
+                    {lead.roleReview === "misclassified" && <Pill tone="stone">Not an owner</Pill>}
                     <span>{LEAD_CHANNEL_LABEL[lead.channel as LeadChannel] ?? lead.channel}</span>
                     <span>
                       {lead.nextFollowupAt ? `Follow up ${relativeTime(lead.nextFollowupAt, now)}` : `Added ${relativeTime(lead.createdAt, now)}`}

@@ -24,6 +24,8 @@ export function OwnerLeadActions({
   priority,
   intent,
   rowVersion,
+  roleReview,
+  roleReviewNote,
   canEdit,
   canConvert,
   converted,
@@ -33,6 +35,8 @@ export function OwnerLeadActions({
   priority: string;
   intent: string;
   rowVersion: number;
+  roleReview: "" | "misclassified";
+  roleReviewNote: string;
   canEdit: boolean;
   canConvert: boolean;
   converted: boolean;
@@ -40,6 +44,7 @@ export function OwnerLeadActions({
   const router = useRouter();
   const [nextStatus, setNextStatus] = useState(status);
   const [reason, setReason] = useState("");
+  const [classificationNote, setClassificationNote] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -68,7 +73,23 @@ export function OwnerLeadActions({
     router.push(`/admin/properties/${data.property.slug}/edit`);
   }
 
+  async function classify(decision: "misclassified" | "owner") {
+    setPending(decision);
+    setError("");
+    const response = await fetch(`/api/admin/owner-leads/${id}/classification`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision, note: classificationNote, rowVersion }),
+    });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    setPending("");
+    if (!response.ok) return setError(data.error || "That classification was not saved.");
+    setClassificationNote("");
+    router.refresh();
+  }
+
   const closing = ["Not interested", "Unreachable", "Duplicate", "Invalid"].includes(nextStatus);
+  const notOwner = roleReview === "misclassified";
 
   return (
     <div className="space-y-4">
@@ -142,6 +163,33 @@ export function OwnerLeadActions({
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="space-y-2 border-t border-brand-50 pt-3">
+          <p className="text-sm font-semibold text-ink">{notOwner ? "Not an owner" : "Misclassified?"}</p>
+          <p className="text-xs text-ink-muted">
+            {notOwner
+              ? "This lead is kept, including its status and Meta source. It is not treated as a property owner."
+              : "Use this when the person wants to rent or buy, and is not listing a property. The lead, its status and the Meta source stay as they are."}
+          </p>
+          {notOwner && roleReviewNote && <p className="text-xs text-ink-muted">Note: {roleReviewNote}</p>}
+          <textarea
+            value={classificationNote}
+            onChange={(event) => setClassificationNote(event.target.value)}
+            placeholder={notOwner ? "Why should this be an owner lead again?" : "What did the person confirm?"}
+            rows={2}
+            className={inputClass}
+          />
+          <button
+            type="button"
+            className="btn-ghost w-full"
+            disabled={Boolean(pending)}
+            onClick={() => void classify(notOwner ? "owner" : "misclassified")}
+          >
+            {pending === "misclassified" || pending === "owner" ? "Saving…" : notOwner ? "Restore owner classification" : "Mark as not an owner"}
+          </button>
         </div>
       )}
 

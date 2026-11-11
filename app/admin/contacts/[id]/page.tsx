@@ -50,6 +50,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                       {lead.code} · {ownerIntentPhrase(lead.intent)} {lead.propertyType} in {lead.locality || lead.locationText}
                     </Link>
                     <Pill tone="stone">{lead.status}</Pill>
+                    {lead.roleReview === "misclassified" && <Pill tone="stone">Not an owner</Pill>}
                   </li>
                 ))}
               </ul>

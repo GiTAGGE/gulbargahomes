@@ -20,6 +20,8 @@ const ACTION_LABEL: Record<string, string> = {
   set_discreet: "Discreet matching changed",
   link_owner: "Owner linked",
   convert: "Converted to draft property",
+  mark_not_owner: "Marked not an owner",
+  restore_owner_role: "Owner classification restored",
   convert_additional: "Another property created from this lead",
   followup_done: "Follow-up done",
   followup_cancelled: "Follow-up cancelled",
@@ -30,6 +32,8 @@ const ACTION_LABEL: Record<string, string> = {
 
 const FIELD_LABEL: Record<string, string> = {
   status: "status",
+  role_review: "classification",
+  role_review_note: "classification note",
   verification_status: "verification",
   publication_status: "publication",
   price: "price",
