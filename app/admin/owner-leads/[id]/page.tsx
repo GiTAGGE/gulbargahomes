@@ -60,6 +60,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
               <span className="flex flex-wrap items-center gap-2">
                 Wants to {ownerIntentPhrase(lead.intent).toLowerCase()}
                 <Pill tone={converted ? "green" : lead.status === "New" ? "amber" : "stone"}>{lead.status}</Pill>
+                {lead.roleReview === "misclassified" && <Pill tone="stone">Not an owner</Pill>}
                 <Pill tone={bandTone(lead.priority)}>{lead.priority}</Pill>
               </span>
             }
@@ -74,6 +75,9 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
             </dl>
             {lead.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-surface-muted/60 p-3 text-sm text-ink">{lead.notes}</p>}
             {lead.statusReason && <p className="mt-2 text-xs text-ink-muted">Status note: {lead.statusReason}</p>}
+            {lead.roleReview === "misclassified" && (
+              <p className="mt-2 text-xs text-ink-muted">Not an owner. {lead.roleReviewNote}</p>
+            )}
           </Card>
 
           <Card
@@ -142,13 +146,26 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
                 priority={lead.priority}
                 intent={lead.intent}
                 rowVersion={lead.rowVersion}
+                roleReview={lead.roleReview}
+                roleReviewNote={lead.roleReviewNote}
                 canEdit={caps.editCrm}
-                canConvert={caps.editCrm && caps.createProperty && !["Not interested", "Duplicate", "Invalid"].includes(lead.status)}
+                canConvert={
+                  caps.editCrm &&
+                  caps.createProperty &&
+                  lead.roleReview !== "misclassified" &&
+                  !["Not interested", "Duplicate", "Invalid"].includes(lead.status)
+                }
                 converted={converted}
               />
             </Card>
           )}
-          {contact && <ContactCard title="Owner" contact={redactContact(contact, caps.viewPhone)} canViewPhone={caps.viewPhone} />}
+          {contact && (
+            <ContactCard
+              title={lead.roleReview === "misclassified" ? "Contact" : "Owner"}
+              contact={redactContact(contact, caps.viewPhone)}
+              canViewPhone={caps.viewPhone}
+            />
+          )}
           <Card title="Follow-ups">
             <FollowupsPanel entity={entity} followups={followups} names={names} canManage={caps.manageFollowups} />
           </Card>

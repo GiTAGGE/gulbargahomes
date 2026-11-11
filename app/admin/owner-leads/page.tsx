@@ -16,6 +16,7 @@ const TABS = [
   { key: "Details pending", label: "Details pending" },
   { key: "Converted", label: "Converted" },
   { key: "closed", label: "Closed" },
+  { key: "not_owner", label: "Not an owner" },
   { key: "all", label: "All" },
 ];
 
@@ -24,7 +25,8 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const active = TABS.some((tab) => tab.key === params.status) ? params.status! : "open";
   const leads = await listOwnerLeads(db, {
-    status: active === "all" ? undefined : active,
+    status: active === "all" || active === "not_owner" ? undefined : active,
+    roleReview: active === "all" ? "any" : active === "not_owner" ? "misclassified" : undefined,
     q: params.q,
     limit: 500,
   });
@@ -81,6 +83,7 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted sm:justify-end">
                     <span>{caps.viewPhone ? formatPhone(lead.contactPhone) : maskPhone(lead.contactPhone)}</span>
                     <Pill tone={lead.status === "New" ? "amber" : lead.status === "Converted" ? "green" : "stone"}>{lead.status}</Pill>
+                    {lead.roleReview === "misclassified" && <Pill tone="stone">Not an owner</Pill>}
                     <span>{LEAD_CHANNEL_LABEL[lead.channel as LeadChannel] ?? lead.channel}</span>
                     <span>
                       {lead.nextFollowupAt ? `Follow up ${relativeTime(lead.nextFollowupAt, now)}` : `Added ${relativeTime(lead.createdAt, now)}`}

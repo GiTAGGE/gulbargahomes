@@ -468,6 +468,15 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_requirements_origin_owner ON demand_requirements (origin_owner_lead_id)`,
     ],
   },
+  {
+    // Version 7 stays unused. Production is on version 8. Do not renumber this or edit versions 1–8.
+    version: 9,
+    name: "owner_lead_role_review",
+    statements: [
+      `ALTER TABLE owner_leads ADD COLUMN role_review TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE owner_leads ADD COLUMN role_review_note TEXT NOT NULL DEFAULT ''`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

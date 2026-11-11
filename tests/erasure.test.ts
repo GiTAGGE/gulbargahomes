@@ -36,6 +36,7 @@ async function seed() {
     { ...parseSourceInput({ channel: "meta_lead_form", metaLeadId: "lead-erase" }), rawPayload: { full_name: person.name, phone_number: "9845077777" } },
     NOW,
   );
+  db.raw.prepare("UPDATE owner_leads SET role_review_note = 'Shanta is not the owner' WHERE id = ?").run(lead.id);
   const requirement = await createRequirement(
     db,
     actor,
