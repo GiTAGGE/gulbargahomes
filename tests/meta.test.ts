@@ -139,6 +139,7 @@ async function ingestion(db: ReturnType<typeof createTestDb>, leadgenId: string)
       contact_existing: number;
       intent_override: string;
       resolved_by: string;
+      resolved_at: string | null;
     }>();
 }
 
@@ -1242,5 +1243,72 @@ describe("owner sell, rent and lease", () => {
     );
     assert.equal(mapped.kind, "owner");
     if (mapped.kind === "owner") assert.equal(mapped.owner.intent, "Sale");
+  });
+
+  it("does not let a free-text mention of sale override an assume-Rent form", () => {
+    const mapped = mapLead(
+      {
+        formId: "rent-only",
+        name: "Rent only",
+        classification: "owner",
+        ownerIntent: "Rent",
+        mapping: { full_name: "name", phone_number: "phone", note: "preferences" },
+        questions: [
+          { key: "full_name", label: "Full name", type: "FULL_NAME", options: [] },
+          { key: "phone_number", label: "Phone", type: "PHONE", options: [] },
+          { key: "note", label: "Anything else", type: "CUSTOM", options: [] },
+        ],
+      },
+      {
+        id: "2",
+        formId: "rent-only",
+        createdTime: "2026-11-10T09:30:00.000Z",
+        adId: "",
+        adName: "",
+        adsetId: "",
+        adsetName: "",
+        campaignId: "",
+        campaignName: "",
+        platform: "fb",
+        isOrganic: false,
+        fieldData: [
+          { name: "full_name", values: ["Landlord"] },
+          { name: "phone_number", values: ["9899999995"] },
+          { name: "note", values: ["not for sale"] },
+        ],
+      },
+    );
+    assert.equal(mapped.kind, "owner");
+    if (mapped.kind === "owner") assert.equal(mapped.owner.intent, "Rent");
+  });
+
+  it("keeps the staff decision when a later attempt finishes the import", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const lead = addLead(ctx.meta, MIXED_FORM, { full_name: "Retry", phone: "9800000001", "nimge_yen_beku?": "buy or rent" });
+    await deliver(ctx, webhookBody(lead));
+    const held = (await ingestion(ctx.db, lead.id))!;
+    const decision = await resolveIngestionIntent(ctx.db, admin, held.id, "Buy", ctx.clock.iso());
+    assert.equal(decision.ready, true);
+    await ctx.db
+      .prepare("UPDATE meta_lead_ingestions SET status = 'retry', attempts = 4, last_error = 'Meta was down' WHERE id = ?1")
+      .bind(held.id)
+      .run();
+    assert.equal(await processIngestion(ctx.runtime, held.id), "done");
+    assert.equal(await processIngestion(ctx.runtime, held.id), "skipped");
+    const row = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(row.intent_override, "Buy");
+    assert.equal(row.resolved_by, admin.id);
+    assert.ok(row.resolved_at);
+    const requirement = (await getRequirement(ctx.db, row.entity_id))!;
+    assert.equal(requirement.intent, "Buy");
+    const requirements = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    assert.equal(requirements?.n, 1);
+    const audit = await ctx.db
+      .prepare("SELECT actor_id, context_json FROM audit_log WHERE action = 'decide_intent' AND entity_id = ?1")
+      .bind(requirement.id)
+      .first<{ actor_id: string; context_json: string }>();
+    assert.equal(audit?.actor_id, admin.id);
+    assert.match(audit?.context_json ?? "", /resolved_at/);
   });
 });

@@ -88,6 +88,34 @@ describe("migrations", () => {
     assert.ok(!columns.results.some((column) => column.name === "verification_status"));
   });
 
+  it("adds intent columns to a version 5 database and leaves existing queue rows alone", async () => {
+    const db = createTestDb();
+    await db
+      .prepare("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+      .run();
+    for (const migration of MIGRATIONS.filter((item) => item.version < 6)) {
+      await db.batch([
+        ...migration.statements.map((sql) => db.prepare(sql)),
+        db
+          .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)")
+          .bind(migration.version, migration.name, "2026-11-10T00:00:00.000Z"),
+      ]);
+    }
+    await db
+      .prepare(
+        `INSERT INTO meta_lead_ingestions (id, leadgen_id, origin, status, next_attempt_at, received_at, updated_at)
+         VALUES ('mli_existing', '999', 'webhook', 'needs_review', 't', 't', 't')`,
+      )
+      .run();
+
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6]);
+    const row = await db
+      .prepare("SELECT status, intent_override, resolved_by, resolved_at FROM meta_lead_ingestions WHERE id = 'mli_existing'")
+      .first<{ status: string; intent_override: string; resolved_by: string; resolved_at: string | null }>();
+    assert.deepEqual({ ...row }, { status: "needs_review", intent_override: "", resolved_by: "", resolved_at: null });
+    assert.deepEqual(await applyMigrations(db), []);
+  });
+
   it("keeps the audit log append-only", async () => {
     const db = createTestDb();
     await applyMigrations(db);

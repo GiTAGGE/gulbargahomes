@@ -8,7 +8,7 @@ import { HistoryList } from "@/components/admin/history-list";
 import { OwnerLeadActions } from "@/components/admin/record-actions";
 import { Card, Empty, Field, Pill } from "@/components/admin/ui";
 import { listAudit } from "@/lib/admin/audit";
-import { availabilityTone, bandTone, formatDateTime, formatInr, publicationTone, verificationTone } from "@/lib/admin/format";
+import { availabilityTone, bandTone, formatDateTime, formatInr, ownerIntentPhrase, ownerPriceLabel, publicationTone, verificationTone } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
@@ -52,7 +52,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
           <Card
             title={
               <span className="flex flex-wrap items-center gap-2">
-                {lead.intent === "Rent" ? "Wants to rent out" : "Wants to sell"}
+                Wants to {ownerIntentPhrase(lead.intent).toLowerCase()}
                 <Pill tone={converted ? "green" : lead.status === "New" ? "amber" : "stone"}>{lead.status}</Pill>
                 <Pill tone={bandTone(lead.priority)}>{lead.priority}</Pill>
               </span>
@@ -61,7 +61,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
             <dl className="grid gap-3 sm:grid-cols-3">
               <Field label="Property type">{lead.propertyType || "Not known yet"}</Field>
               <Field label="Locality">{lead.locality}</Field>
-              <Field label="Expected price">{formatInr(lead.expectedPrice)}</Field>
+              <Field label={ownerPriceLabel(lead.intent)}>{formatInr(lead.expectedPrice)}</Field>
               <Field label="Location as given">{lead.locationText}</Field>
               <Field label="Last contacted">{formatDateTime(lead.lastContactedAt)}</Field>
               <Field label="Added">{formatDateTime(lead.createdAt)}</Field>

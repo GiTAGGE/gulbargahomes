@@ -96,6 +96,20 @@ export function formatInr(value: number | null | undefined): string {
  * monthly rent. Callers that know the intent must pass it, so a screen, a
  * filter and a future match never treat the two as the same kind of money.
  */
+export function ownerIntentPhrase(intent: string): string {
+  if (intent === "Rent") return "Rent out";
+  if (intent === "Lease") return "Lease";
+  if (intent === "Sale") return "Sell";
+  return intent;
+}
+
+export function ownerPriceLabel(intent: string): string {
+  if (intent === "Rent") return "Expected monthly rent";
+  if (intent === "Lease") return "Expected lease amount";
+  if (intent === "Sale") return "Expected sale price";
+  return "Expected price";
+}
+
 export function budgetLabel(min: number | null, max: number | null, intent?: "Rent" | "Buy"): string {
   const prefix = intent === "Buy" ? "Purchase " : intent === "Rent" ? "Monthly rent " : "";
   const empty = intent === "Buy" ? "Purchase budget not given" : intent === "Rent" ? "Monthly rent not given" : "Budget not given";

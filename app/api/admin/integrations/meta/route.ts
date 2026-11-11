@@ -110,20 +110,9 @@ export async function POST(request: Request) {
         }
         const outcome = await processIngestion(runtime, id);
         const saved = await auth.db
-          .prepare("SELECT entity_type, entity_id, leadgen_id FROM meta_lead_ingestions WHERE id = ?1")
+          .prepare("SELECT entity_type, entity_id FROM meta_lead_ingestions WHERE id = ?1")
           .bind(id)
-          .first<{ entity_type: string | null; entity_id: string | null; leadgen_id: string }>();
-        if (saved?.entity_id && (saved.entity_type === "requirement" || saved.entity_type === "owner_lead")) {
-          await auditStatement(auth.db, {
-            actor: auth.admin,
-            entityType: saved.entity_type,
-            entityId: saved.entity_id,
-            action: "decide_intent",
-            changes: { intent: ["", intent] },
-            context: { leadgen_id: saved.leadgen_id, ingestion_id: id },
-            at: now,
-          }).run();
-        }
+          .first<{ entity_type: string | null; entity_id: string | null }>();
         return NextResponse.json({ ok: true, outcome, entityType: saved?.entity_type ?? null, entityId: saved?.entity_id ?? null });
       }
       case "dismiss": {

@@ -270,7 +270,14 @@ export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice =
     const staffIntent = (OWNER_INTENTS as readonly string[]).includes(choice.intent ?? "") ? (choice.intent as OwnerIntent) : null;
     const parsed = intentAnswer ? parseOwnerIntent(intentAnswer) : null;
     const fromUnmapped = answers
-      .filter((answer) => answer.target === "" && answer.value)
+      .filter((answer) => {
+        if (answer.target !== "" || !answer.value) return false;
+        const question = form.questions.find((item) => item.key === answer.key);
+        const options = question?.options.map((option) => `${option.key} ${option.value}`).join(" ") ?? "";
+        // Only an unmapped choice question can set the intent. A note that mentions
+        // "sale" must not override the form's assume-Rent default.
+        return ownerIntentsIn(options).length > 1;
+      })
       .flatMap((answer) => ownerIntentsIn(answer.value).map((intent) => ({ intent, answer })));
     const uniqueUnmapped = [...new Set(fromUnmapped.map((item) => item.intent))];
     let intent: OwnerIntent | null = staffIntent ?? parsed;

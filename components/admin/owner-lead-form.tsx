@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { ownerPriceLabel } from "@/lib/admin/format";
 import { PRIORITIES, PROPERTY_TYPES, type Priority } from "@/lib/crm/options";
 
 import {
@@ -115,7 +116,7 @@ export function OwnerLeadForm({ localities }: { localities: string[] }) {
               </datalist>
             </label>
             <label className={labelClass}>
-              Expected rent or price (₹)
+              {ownerPriceLabel(lead.intent)} (₹)
               <input
                 type="number"
                 min={0}

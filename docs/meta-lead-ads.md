@@ -512,7 +512,11 @@ later deploy:
     such as `mixed` as `unclassified`, so those forms wait instead of importing
     with the wrong intent. Do not apply migration 6 in production until this
     code is deployed. Do not roll the code forward onto a database that has not
-    run it: the queue claim reads the new columns.
+    run it: the queue claim reads the new columns. A row still queued with a
+    staff override, on a form the previous Worker already understands, can be
+    imported by that Worker without the override. Let that import finish before
+    rolling back. Mixed forms wait, because the previous Worker does not
+    recognise that classification.
   - To restore the database to before a deploy:
 
     ```bash

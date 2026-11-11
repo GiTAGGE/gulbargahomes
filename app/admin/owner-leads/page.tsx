@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Card, Empty, Pill, Tabs } from "@/components/admin/ui";
-import { bandTone, formatInr, relativeTime } from "@/lib/admin/format";
+import { bandTone, formatInr, ownerIntentPhrase, ownerPriceLabel, relativeTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { LEAD_CHANNEL_LABEL, type LeadChannel } from "@/lib/crm/options";
 import { listOwnerLeads } from "@/lib/crm/owner-leads";
@@ -74,8 +74,8 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
                       <Pill tone={bandTone(lead.priority)}>{lead.priority}</Pill>
                     </div>
                     <p className="mt-0.5 truncate text-sm text-ink-muted">
-                      {lead.intent === "Rent" ? "To rent out" : "To sell"} · {lead.propertyType || "Type not known"} ·{" "}
-                      {lead.locality || lead.locationText} · {formatInr(lead.expectedPrice)}
+                      {ownerIntentPhrase(lead.intent)} · {lead.propertyType || "Type not known"} ·{" "}
+                      {lead.locality || lead.locationText} · {ownerPriceLabel(lead.intent)} {formatInr(lead.expectedPrice)}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted sm:justify-end">

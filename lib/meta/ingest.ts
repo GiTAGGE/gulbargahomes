@@ -115,6 +115,7 @@ type IngestionRow = {
   received_at: string;
   intent_override: string;
   resolved_by: string;
+  resolved_at: string | null;
 };
 
 async function finish(
@@ -162,7 +163,7 @@ async function claim(db: SqlDb, id: string, now: Date): Promise<IngestionRow | n
          (status IN ('pending', 'retry') AND next_attempt_at <= ?2)
          OR (status = 'processing' AND locked_until < ?2)
        )
-       RETURNING id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, attempts, payload_json, received_at, intent_override, resolved_by`,
+       RETURNING id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, attempts, payload_json, received_at, intent_override, resolved_by, resolved_at`,
     )
     .bind(plusMinutes(now, LOCK_MINUTES), at, id)
     .first<IngestionRow>();
@@ -334,7 +335,7 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
     }
     if (form.classification === "unclassified") {
       await finish(db, row, at, "needs_mapping", {
-        error: `Classify form “${form.name}” as owner, tenant or buyer to import its leads.`,
+        error: `Classify form “${form.name}” to import its leads.`,
         kind: "mapping",
         payload,
       });
@@ -388,6 +389,22 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
         return scheduleRetry(db, row, now, "Contact was being created at the same moment. Retrying.", "conflict");
       }
       throw error;
+    }
+
+    if (row.resolved_by) {
+      const staff = await db
+        .prepare("SELECT id, email, role FROM admin_users WHERE id = ?1")
+        .bind(row.resolved_by)
+        .first<{ id: string; email: string; role: string }>();
+      await auditStatement(db, {
+        actor: staff ?? { id: row.resolved_by, email: "", role: "" },
+        entityType,
+        entityId,
+        action: "decide_intent",
+        changes: { intent: ["", mapped.decision.intent] },
+        context: { leadgen_id: row.leadgen_id, ingestion_id: row.id, resolved_at: row.resolved_at },
+        at,
+      }).run();
     }
 
     await recordAdEntities(db, lead, at);
