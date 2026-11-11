@@ -44,8 +44,10 @@ Reconciliation (last 48 h, every 6 h) ──────────────
   (`*/5 * * * *` in `wrangler.jsonc`). It calls `/api/integrations/meta/sweep`
   with a token derived from the app secret. Any other caller gets a 404. Each
   sweep processes due retries, advances an open import, and every six hours
-  re-reads the last 48 hours of leads from each mapped form, in case a webhook
-  never arrived.
+  re-reads the last 48 hours of leads from each owner, tenant, buyer and mixed
+  form, in case a webhook never arrived. Unclassified and Ignore forms are not
+  read. That scan is reconciliation. It is not a historical import: a historical
+  import is a staff-started job and accepts only owner, tenant and buyer forms.
 - **Every step is recorded** in `meta_ingestion_events` (received, fetch,
   process, duplicate, retry, waiting for token, done) and shown on the admin page.
 
@@ -206,13 +208,20 @@ The integration requests only these. The table lists every Graph call it makes.
 
 ## Historical import
 
-Choose classified forms and a date range (Meta keeps lead answers for 90 days).
-The job reads each form's leads page by page with a `time_created` filter and
-queues them in the **same** `meta_lead_ingestions` queue. The page shows found,
-queued, duplicate, done, held and failed counts. Only one import runs at a
-time. It advances while the page is open and through the cron sweep when it
-isn't. An expired token pauses it; **Resume** continues from the saved cursor.
-Failed rows are retried from the attention list.
+Choose owner, tenant or buyer forms and a date range (Meta keeps lead answers
+for 90 days). Mixed, unclassified and Ignore forms are rejected by the import
+job and are not listed on the historical-import card. A mixed form's recent
+leads are covered by reconciliation instead, which reads the last 48 hours.
+Leads older than that stay on Meta until a later import is approved for that
+form.
+
+The job reads each selected form's leads page by page with a `time_created`
+filter and queues them in the **same** `meta_lead_ingestions` queue the webhook
+and reconciliation use. The page shows found, queued, duplicate, done, held and
+failed counts. Only one import runs at a time. It advances while the page is
+open and through the cron sweep when it isn't. An expired token pauses it;
+**Resume** continues from the saved cursor. Failed rows are retried from the
+attention list.
 
 ## Attribution and reporting
 
@@ -244,6 +253,8 @@ disconnect is written to `audit_log`. Leads created by the integration show
 A requirement has one intent and one budget range (`budget_min`, `budget_max`, integer rupees). **Buy** means a purchase price. **Rent** means a monthly rent. There is no second pair of columns. `matchableBudget()` returns `{ basis: "purchase" | "monthly", unit, min, max }` so a future matcher compares a purchase budget with a sale price and a monthly budget with a monthly rent, and does not compare across those. CRM screens prefix the range “Purchase” or “Monthly rent”. The budget answer that does not match the intent stays in `lead_sources.raw_payload_json` and is never written into the range.
 
 Classification `mixed` (“Buyer or tenant, from the answer”) reads the intent answer. A missing or ambiguous answer (including “buy or rent”) is held as `needs_review` with `last_error_kind = intent_demand`. Nothing is created. Staff use **Import as Buy** or **Import as Rent**. That stores `intent_override`, `resolved_by` and `resolved_at` on the queue row (migration 6) and only then imports. The update matches only a row still waiting for that decision, and the unique Meta lead id still blocks a second CRM record. The original answers, campaign attribution and both audit rows (the import, and the staff decision) are kept.
+
+Reconciliation includes every form classified as mixed and runs those leads through the same queue. It does not create owner leads. Historical import does not include mixed forms, so classifying a form as mixed does not put its older leads into a date-range import. Unclassified forms stay out of both.
 
 Owner intent is `Rent`, `Sale` or `Lease` on the existing `owner_leads.intent` text column. Sell is `Sale`. It is never stored as `Rent`. An answer that names more than one of sell, rent and lease is held (`intent_owner`) for **Import as Sale**, **Import as Rent** or **Import as Lease**. A rent-only owner form can still assume Rent, but a form whose options include more than one of those cannot be saved until that question is mapped to intent.
 
@@ -282,7 +293,7 @@ leads and URLs are untouched.
   - picks up `pending` and `retry` rows that are due, and `processing` rows
     whose lock expired
   - advances imports
-  - reconciles the last 48 hours every six hours
+  - reconciles the last 48 hours of owner, tenant, buyer and mixed forms every six hours. Unclassified and Ignore forms are skipped. Historical import is a separate staff job and still accepts only owner, tenant and buyer forms
   - applies retention
 
   Verified locally: a stale `processing` row was claimed and processed by the
@@ -445,8 +456,11 @@ D1 and R2. Production data is never touched.
 7. Check the ad fields on the lead's Source card. If Meta refused ad fields, the
    campaign id is blank but the answers are present. Tick `ads_read`, reconnect,
    send another test lead, and the campaign names should appear.
-8. Run a historical import for the last 7 days. Expect "found" to equal Meta's
-   count, with earlier test leads counted as duplicates.
+8. Run a historical import for the last 7 days on the owner, tenant and buyer
+   forms. Mixed forms are not offered on that card. Expect "found" to equal
+   Meta's count, with earlier test leads counted as duplicates. A mixed form's
+   leads from the last 48 hours are picked up by reconciliation, not by this
+   import.
 9. Set staging's `META_APP_SECRET` to a wrong value, send a test lead, and expect
    a rejected delivery (401) in Webhook activity. Restore the value. Meta retries
    for up to 36 hours.
