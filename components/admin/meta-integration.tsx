@@ -15,7 +15,9 @@ import {
   FORM_CLASSIFICATIONS,
   MAPPING_TARGETS,
   TARGET_LABEL,
+  alignBudgetTargets,
   suggestMapping,
+  suggestOwnerIntent,
   type FieldMapping,
   type FormClassification,
 } from "@/lib/meta/mapping";
@@ -397,7 +399,7 @@ function FormRow({
   act,
 }: {
   form: StoredForm;
-  counts?: { imported: number; open: number; attention: number };
+  counts?: { imported: number; open: number; attention: number; waiting: number };
   canManage: boolean;
   open: boolean;
   toggle: () => void;
@@ -406,11 +408,17 @@ function FormRow({
 }) {
   const [classification, setClassification] = useState<FormClassification>(form.classification);
   const [ownerIntent, setOwnerIntent] = useState(form.ownerIntent);
-  const initialMapping = useMemo<FieldMapping>(
-    () => (Object.keys(form.mapping).length ? form.mapping : suggestMapping(form.questions, form.classification === "unclassified" ? "tenant" : form.classification)),
-    [form],
-  );
+  const initialMapping = useMemo<FieldMapping>(() => {
+    const saved = Object.keys(form.mapping).length ? form.mapping : suggestMapping(form.questions, form.classification);
+    return alignBudgetTargets(form.questions, form.classification, saved);
+  }, [form]);
   const [mapping, setMapping] = useState<FieldMapping>(initialMapping);
+  const asksOwnerIntent = form.questions.some((question) => {
+    const options = question.options.map((option) => `${option.key} ${option.value}`).join(" ");
+    return /sell|rent|lease|sale|madbeku|kodbeku/.test(options.toLowerCase()) && question.options.length > 1;
+  });
+  const budgetsCorrected = form.questions.some((question) => form.mapping[question.key] === "budget" && mapping[question.key] !== "budget");
+  const waiting = counts?.waiting ?? 0;
   const dirty =
     classification !== form.classification ||
     ownerIntent !== form.ownerIntent ||
@@ -434,7 +442,12 @@ function FormRow({
             aria-label={`What ${form.name} collects`}
             value={classification}
             disabled={!canManage}
-            onChange={(event) => setClassification(event.target.value as FormClassification)}
+            onChange={(event) => {
+              const next = event.target.value as FormClassification;
+              setClassification(next);
+              setMapping(suggestMapping(form.questions, next));
+              if (next === "owner") setOwnerIntent(suggestOwnerIntent(form.questions));
+            }}
             className={controlClass}
           >
             {FORM_CLASSIFICATIONS.map((item) => (
@@ -451,14 +464,32 @@ function FormRow({
       {open && (
         <div className="mt-3 space-y-3 rounded-xl bg-surface-muted/50 p-3">
           {classification === "owner" && (
-            <label className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-semibold">If the form does not ask rent or sale, assume</span>
-              <select value={ownerIntent} disabled={!canManage} onChange={(event) => setOwnerIntent(event.target.value as typeof ownerIntent)} className={controlClass}>
-                <option value="">Rent, and flag it for the call</option>
-                <option value="Rent">Rent</option>
-                <option value="Sale">Sale</option>
-              </select>
-            </label>
+            <div className="space-y-1 text-sm">
+              <label className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">When the form does not say sell, rent or lease</span>
+                <select value={ownerIntent} disabled={!canManage} onChange={(event) => setOwnerIntent(event.target.value as typeof ownerIntent)} className={controlClass}>
+                  <option value="">Do not guess — hold the lead</option>
+                  <option value="Rent">Assume rent</option>
+                  <option value="Sale">Assume sale</option>
+                  <option value="Lease">Assume lease</option>
+                </select>
+              </label>
+              <p className="text-xs text-ink-muted">
+                {asksOwnerIntent
+                  ? "This form asks sell, rent or lease. The selected answer is used, and lease stays lease. The assumption is only for a blank answer."
+                  : "Assume rent only for a form that is only about rent, such as a rental-owner form. A form that offers sell, rent and lease must not assume one of them."}
+              </p>
+            </div>
+          )}
+          {classification === "mixed" && (
+            <p className="text-xs text-ink-muted">
+              Purchase budget is the total price. Monthly rental budget is the rent per month. Budget (single-purpose form) cannot be used here.
+            </p>
+          )}
+          {budgetsCorrected && (
+            <p className="text-xs font-semibold text-ink">
+              Budget rows that were “Budget (single-purpose form)” now follow the question: purchase price, monthly rent, or the owner’s expected price. Check them before you save.
+            </p>
           )}
           {form.questions.length === 0 ? (
             <p className="text-sm text-ink-muted">Meta did not return the questions for this form.</p>
@@ -505,7 +536,10 @@ function FormRow({
               <button
                 type="button"
                 className="btn-ghost"
-                onClick={() => setMapping(suggestMapping(form.questions, classification === "unclassified" ? "tenant" : classification))}
+                onClick={() => {
+                  setMapping(suggestMapping(form.questions, classification));
+                  if (classification === "owner") setOwnerIntent(suggestOwnerIntent(form.questions));
+                }}
               >
                 Suggest again
               </button>
@@ -519,18 +553,29 @@ function FormRow({
             type="button"
             className="btn-primary"
             disabled={Boolean(busy)}
-            onClick={() =>
+            onClick={() => {
+              const importing = ["owner", "tenant", "buyer", "mixed"].includes(classification);
+              if (importing && waiting > 0) {
+                const proceed = window.confirm(
+                  `${waiting} lead${waiting === 1 ? "" : "s"} waiting on “${form.name}” will be imported with this mapping. Save only if the rows above are right.`,
+                );
+                if (!proceed) return;
+              }
               void act(`form-${form.formId}`, `${API}/forms/${form.formId}`, "PATCH", {
                 classification,
                 ownerIntent,
                 mapping,
                 rowVersion: form.rowVersion,
-              })
-            }
+              });
+            }}
           >
             {busy === `form-${form.formId}` ? "Saving…" : "Save form settings"}
           </button>
-          <span className="text-xs text-ink-muted">Leads waiting on this form are imported after saving.</span>
+          <span className="text-xs text-ink-muted">
+            {waiting > 0
+              ? `${waiting} lead${waiting === 1 ? "" : "s"} waiting on this form will be imported when you save.`
+              : "New leads use this mapping. Leads already imported stay as they are."}
+          </span>
         </div>
       )}
     </li>
