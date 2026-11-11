@@ -119,7 +119,7 @@ Production deployments happen automatically when a change is merged into `main`.
 
 Cloudflare preserves the existing Worker secrets and resource bindings on each deployment. `wrangler.jsonc` sets `keep_vars: true`, and the deploy command passes `--keep-vars`.
 
-Build command: `npx opennextjs-cloudflare build`. Deploy command: `npx opennextjs-cloudflare deploy -- --keep-vars`. Node 20 (see `.nvmrc`).
+Build command: `npx opennextjs-cloudflare build`. Deploy command: `npx opennextjs-cloudflare deploy -- --keep-vars`. Node 22 (see `.nvmrc`). Wrangler 4.155 refuses to run the publish step on Node 20.
 
 Custom domains in `wrangler.jsonc`: `gulbargahomes.com` and `www.gulbargahomes.com`. `www` redirects to the apex in the app. `workers.dev` stays available as a rollback URL.
 
