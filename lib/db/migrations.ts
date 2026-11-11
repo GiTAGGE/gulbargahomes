@@ -477,6 +477,16 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE owner_leads ADD COLUMN role_review_note TEXT NOT NULL DEFAULT ''`,
     ],
   },
+  {
+    // Version 7 stays unused. Production is on version 9. Do not renumber this or edit versions 1–9.
+    // Empty quality_review means pending. It is never backfilled to genuine.
+    version: 10,
+    name: "lead_quality_review",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN quality_review TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE demand_requirements ADD COLUMN quality_review_note TEXT NOT NULL DEFAULT ''`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

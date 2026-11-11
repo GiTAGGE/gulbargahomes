@@ -128,16 +128,27 @@ describe("owner lead role review", () => {
     const contacted = await updateOwnerLead(db, executive, again, { status: "Contacted", statusReason: "Called" }, { now: NOW });
     assert.equal(contacted.status, "Contacted");
     assert.equal(contacted.roleReview, "misclassified");
-    const restored = await setOwnerLeadRoleReview(db, executive, contacted, "owner", "He does have a house to let", {
+    const restored = await setOwnerLeadRoleReview(db, executive, contacted, "genuine", "He does have a house to let", {
       now: NOW,
       expectedVersion: contacted.rowVersion,
     });
-    assert.equal(restored.roleReview, "");
+    assert.equal(restored.roleReview, "genuine");
     assert.equal(restored.status, "Contacted");
     assert.equal((await findContactByPhone(db, "9845011111"))?.isOwner, true);
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n, 0);
-    const restoredAudit = (await listAudit(db, { entityType: "owner_lead", entityId: lead.id })).find((entry) => entry.action === "restore_owner_role");
+    const restoredAudit = (await listAudit(db, { entityType: "owner_lead", entityId: lead.id })).find((entry) => entry.action === "confirm_owner");
     assert.equal(restoredAudit?.actorId, executive.id);
+    assert.equal(restoredAudit?.changes.role_review?.[0], "misclassified");
+    assert.equal(restoredAudit?.changes.role_review?.[1], "genuine");
+    const earlier = (await listAudit(db, { entityType: "owner_lead", entityId: lead.id })).find((entry) => entry.action === "mark_not_owner");
+    assert.equal(earlier?.changes.role_review?.[1], "misclassified");
+    const pending = await setOwnerLeadRoleReview(db, executive, restored, "pending", "Check the papers again", {
+      now: NOW,
+      expectedVersion: restored.rowVersion,
+    });
+    assert.equal(pending.roleReview, "");
+    assert.equal(pending.status, "Contacted");
+    assert.notEqual(pending.roleReview, "genuine");
   });
 
   it("keeps the owner badge while another owner lead for the same person remains", async () => {

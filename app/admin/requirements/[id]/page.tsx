@@ -14,6 +14,7 @@ import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
 import { getContact, redactContact } from "@/lib/crm/contacts";
 import { getRequirement } from "@/lib/crm/requirements";
+import { reviewLabel } from "@/lib/crm/review";
 import { getSource } from "@/lib/crm/sources";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,9 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
               <span className="flex flex-wrap items-center gap-2">
                 Looking to {requirement.intent === "Rent" ? "rent" : "buy"}
                 <Pill tone={requirement.status === "New" ? "amber" : "stone"}>{requirement.status}</Pill>
+                <Pill tone={requirement.qualityReview === "genuine" ? "green" : requirement.qualityReview === "" ? "amber" : "stone"}>
+                  {reviewLabel(requirement.intent === "Buy" ? "buyer" : "tenant", requirement.qualityReview)}
+                </Pill>
               </span>
             }
           >
@@ -84,6 +88,9 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
               <p className="mt-3 whitespace-pre-line rounded-xl bg-surface-muted/60 p-3 text-sm text-ink">{requirement.notes}</p>
             )}
             {requirement.outcome && <p className="mt-2 text-sm text-ink">Outcome: {requirement.outcome}</p>}
+            {requirement.qualityReviewNote && (
+              <p className="mt-2 text-xs text-ink-muted">Classification note: {requirement.qualityReviewNote}</p>
+            )}
           </Card>
 
           <Card title="Matching properties" hint="Coming in the next phase.">
@@ -139,6 +146,9 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
                 status={requirement.status}
                 priorityOverride={requirement.priorityOverride}
                 rowVersion={requirement.rowVersion}
+                intent={requirement.intent}
+                qualityReview={requirement.qualityReview}
+                qualityReviewNote={requirement.qualityReviewNote}
               />
             </Card>
           )}

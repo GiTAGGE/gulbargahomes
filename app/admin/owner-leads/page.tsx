@@ -6,6 +6,7 @@ import { bandTone, formatInr, ownerIntentPhrase, ownerPriceLabel, relativeTime }
 import { requirePageAdmin } from "@/lib/admin/page";
 import { LEAD_CHANNEL_LABEL, type LeadChannel } from "@/lib/crm/options";
 import { listOwnerLeads } from "@/lib/crm/owner-leads";
+import { reviewLabel } from "@/lib/crm/review";
 import { formatPhone, maskPhone } from "@/lib/crm/phone";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ const TABS = [
   { key: "Converted", label: "Converted" },
   { key: "closed", label: "Closed" },
   { key: "not_owner", label: "Not an owner" },
+  { key: "not_genuine", label: "Not genuine" },
   { key: "all", label: "All" },
 ];
 
@@ -26,7 +28,8 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
   const active = TABS.some((tab) => tab.key === params.status) ? params.status! : "open";
   const leads = await listOwnerLeads(db, {
     status: active === "all" || active === "not_owner" ? undefined : active,
-    roleReview: active === "all" ? "any" : active === "not_owner" ? "misclassified" : undefined,
+    roleReview:
+      active === "all" ? "any" : active === "not_owner" ? "misclassified" : active === "not_genuine" ? "unqualified" : undefined,
     q: params.q,
     limit: 500,
   });
@@ -83,7 +86,9 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted sm:justify-end">
                     <span>{caps.viewPhone ? formatPhone(lead.contactPhone) : maskPhone(lead.contactPhone)}</span>
                     <Pill tone={lead.status === "New" ? "amber" : lead.status === "Converted" ? "green" : "stone"}>{lead.status}</Pill>
-                    {lead.roleReview === "misclassified" && <Pill tone="stone">Not an owner</Pill>}
+                    {lead.roleReview !== "" && (
+                      <Pill tone={lead.roleReview === "genuine" ? "green" : "stone"}>{reviewLabel("owner", lead.roleReview)}</Pill>
+                    )}
                     <span>{LEAD_CHANNEL_LABEL[lead.channel as LeadChannel] ?? lead.channel}</span>
                     <span>
                       {lead.nextFollowupAt ? `Follow up ${relativeTime(lead.nextFollowupAt, now)}` : `Added ${relativeTime(lead.createdAt, now)}`}
