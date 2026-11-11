@@ -5,7 +5,7 @@ import { listAudit } from "../lib/admin/audit";
 import { createFollowup, listFollowups, logActivity, parseActivityInput, updateFollowup } from "../lib/crm/activity";
 import { findContactByPhone } from "../lib/crm/contacts";
 import { intentScore } from "../lib/crm/intent-score";
-import { convertOwnerLead, createOwnerLead, getOwnerLead, updateOwnerLead } from "../lib/crm/owner-leads";
+import { convertOwnerLead, createOwnerLead, getOwnerLead, setOwnerLeadRoleReview, updateOwnerLead } from "../lib/crm/owner-leads";
 import { createRequirement, getRequirement, parseRequirementInput } from "../lib/crm/requirements";
 import { parseSourceInput } from "../lib/crm/sources";
 import { endOfIstDay } from "../lib/crm/today";
@@ -34,6 +34,13 @@ function ownerLead(db: ReturnType<typeof createTestDb>, source: Record<string, u
   );
 }
 
+function confirmOwner(db: Awaited<ReturnType<typeof setup>>, lead: Awaited<ReturnType<typeof ownerLead>>) {
+  return setOwnerLeadRoleReview(db, actor, lead, "genuine", "Confirmed owner", {
+    now: NOW,
+    expectedVersion: lead.rowVersion,
+  });
+}
+
 describe("owner leads", () => {
   it("dedupes the contact by mobile number and refuses a re-imported Meta lead", async () => {
     const db = await setup();
@@ -46,7 +53,7 @@ describe("owner leads", () => {
 
   it("converts only by explicit action, into a hidden draft, and allows a second property", async () => {
     const db = await setup();
-    const lead = await ownerLead(db);
+    const lead = await confirmOwner(db, await ownerLead(db));
     await assert.rejects(updateOwnerLead(db, actor, lead, { status: "Converted" }, { now: NOW }), /Convert to draft/);
 
     const property = await convertOwnerLead(db, actor, lead, { now: NOW });
@@ -76,7 +83,7 @@ describe("owner leads", () => {
       parseSourceInput({ channel: "phone" }),
       NOW,
     );
-    const sold = await convertOwnerLead(db, actor, sale, { now: NOW, listing: "Rent" });
+    const sold = await convertOwnerLead(db, actor, await confirmOwner(db, sale), { now: NOW, listing: "Rent" });
     assert.equal(sold.listing, "Sale");
     assert.equal(sold.priceSuffix, "");
 
@@ -88,10 +95,11 @@ describe("owner leads", () => {
       parseSourceInput({ channel: "phone" }),
       NOW,
     );
-    await assert.rejects(convertOwnerLead(db, actor, lease, { now: NOW }), /lease/);
+    const confirmedLease = await confirmOwner(db, lease);
+    await assert.rejects(convertOwnerLead(db, actor, confirmedLease, { now: NOW }), /lease/);
     assert.equal((await getOwnerLead(db, lease.id))?.intent, "Lease");
     assert.equal((await getOwnerLead(db, lease.id))?.status, "New");
-    const drafted = await convertOwnerLead(db, actor, lease, { now: NOW, listing: "Rent" });
+    const drafted = await convertOwnerLead(db, actor, confirmedLease, { now: NOW, listing: "Rent" });
     assert.equal(drafted.listing, "Rent");
     assert.equal(drafted.priceSuffix, "/month");
     assert.match(drafted.internalNotes, /lease/);
@@ -102,7 +110,7 @@ describe("owner leads", () => {
 
   it("will not convert a lead marked not interested", async () => {
     const db = await setup();
-    const lead = await ownerLead(db);
+    const lead = await confirmOwner(db, await ownerLead(db));
     const closed = await updateOwnerLead(db, actor, lead, { status: "Not interested" }, { now: NOW });
     await assert.rejects(convertOwnerLead(db, actor, closed, { now: NOW }), /Reopen/);
   });

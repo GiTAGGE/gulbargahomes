@@ -422,11 +422,14 @@ export async function convertOwnerLead(
   lead: OwnerLead,
   options: { now: string; title?: string; listing?: "Rent" | "Sale" },
 ): Promise<InventoryProperty> {
-  if (lead.roleReview === "misclassified") {
-    throw new HttpError(400, "This person is marked not an owner. The lead stays on file and cannot become a property.");
-  }
-  if (lead.roleReview === "unqualified") {
-    throw new HttpError(400, "This lead is marked not a genuine enquiry. It stays on file and cannot become a property.");
+  if (lead.roleReview !== "genuine") {
+    const reason =
+      lead.roleReview === "misclassified"
+        ? "This person is marked not an owner. The lead stays on file and cannot become a property."
+        : lead.roleReview === "unqualified"
+          ? "This lead is marked not a genuine enquiry. It stays on file and cannot become a property."
+          : "This lead is still pending review. Confirm the person is a genuine owner before creating a property.";
+    throw new HttpError(400, reason);
   }
   if (["Not interested", "Duplicate", "Invalid"].includes(lead.status)) {
     throw new HttpError(400, `Reopen this lead before converting it (it is marked ${lead.status}).`);

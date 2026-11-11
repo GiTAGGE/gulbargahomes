@@ -480,19 +480,196 @@ describe("campaign quality", () => {
     assert.equal(source?.metaCampaignId, "camp-rev");
   });
 
-  it("still lets staff draft a property from a pending or confirmed owner, and blocks an unqualified one", async () => {
+  it("creates a property draft only after the lead is confirmed as a genuine owner", async () => {
     const db = await setup();
-    const pending = await metaOwner(db, { name: "Draft Me", phone: "9845014141" }, { metaLeadId: "meta-draft", metaCampaignId: "camp-draft" });
-    const draft = await convertOwnerLead(db, executive, pending, { now: NOW });
-    assert.equal(draft.publicationStatus, "Unpublished");
-    assert.equal((await getOwnerLead(db, pending.id))?.status, "Converted");
-    const blocked = await metaOwner(db, { name: "Junk", phone: "9845014142" }, { metaLeadId: "meta-junk", metaCampaignId: "camp-draft" });
-    const unqualified = await setOwnerLeadRoleReview(db, executive, blocked, "unqualified", "Spam", {
+    const pending = await metaOwner(db, { name: "Still Pending", phone: "9845014141" }, { metaLeadId: "meta-pending", metaCampaignId: "camp-draft" });
+    const wrong = await metaOwner(db, { name: "Not Owner", phone: "9845014142" }, { metaLeadId: "meta-wrong", metaCampaignId: "camp-draft" });
+    const junk = await metaOwner(db, { name: "Junk", phone: "9845014143" }, { metaLeadId: "meta-junk", metaCampaignId: "camp-draft" });
+    const real = await metaOwner(db, { name: "Real Owner", phone: "9845014144" }, { metaLeadId: "meta-real", metaCampaignId: "camp-draft" });
+    const misclassified = await setOwnerLeadRoleReview(db, executive, wrong, "misclassified", "He wants a rental house", {
       now: NOW,
-      expectedVersion: blocked.rowVersion,
+      expectedVersion: wrong.rowVersion,
     });
+    const unqualified = await setOwnerLeadRoleReview(db, executive, junk, "unqualified", "Spam", {
+      now: NOW,
+      expectedVersion: junk.rowVersion,
+    });
+    const genuine = await setOwnerLeadRoleReview(db, executive, real, "genuine", "He has a house to let", {
+      now: NOW,
+      expectedVersion: real.rowVersion,
+    });
+    const before = await db.prepare("SELECT id, title, publication_status, updated_at FROM properties").all<{
+      id: string;
+      title: string;
+      publication_status: string;
+      updated_at: string;
+    }>();
+
+    await assert.rejects(convertOwnerLead(db, executive, pending, { now: NOW }), /pending review/);
+    await assert.rejects(convertOwnerLead(db, executive, misclassified, { now: NOW }), /not an owner/);
     await assert.rejects(convertOwnerLead(db, executive, unqualified, { now: NOW }), /not a genuine enquiry/);
-    assert.equal((await getOwnerLead(db, blocked.id))?.status, "New");
-    assert.equal((await findContactByPhone(db, "9845014142"))?.isOwner, false);
+
+    const afterRejects = await db.prepare("SELECT id, title, publication_status, updated_at FROM properties").all();
+    assert.deepEqual(afterRejects.results, before.results);
+    assert.equal((await getOwnerLead(db, pending.id))?.status, "New");
+    assert.equal((await getOwnerLead(db, wrong.id))?.status, "New");
+    assert.equal((await getOwnerLead(db, junk.id))?.status, "New");
+    assert.equal(
+      (
+        await db
+          .prepare("SELECT COUNT(*) AS n FROM properties WHERE source_owner_lead_id IN (?1, ?2, ?3)")
+          .bind(pending.id, wrong.id, junk.id)
+          .first<{ n: number }>()
+      )?.n,
+      0,
+    );
+
+    const draft = await convertOwnerLead(db, executive, genuine, { now: NOW });
+    assert.equal(draft.publicationStatus, "Unpublished");
+    assert.equal(draft.verificationStatus, "Draft");
+    assert.equal((await getOwnerLead(db, real.id))?.status, "Converted");
+    assert.equal(
+      (await db.prepare("SELECT COUNT(*) AS n FROM properties WHERE source_owner_lead_id = ?1").bind(real.id).first<{ n: number }>())?.n,
+      1,
+    );
+    const untouched = await db.prepare("SELECT id, title, publication_status, updated_at FROM properties WHERE id != ?1").bind(draft.id).all();
+    assert.deepEqual(untouched.results, before.results);
+  });
+
+  it("keeps the Meta submission count when the intent filter changes and when a delivery has no CRM record", async () => {
+    const db = await setup();
+    await metaOwner(db, { name: "Owner Form", phone: "9845015151" }, {
+      metaLeadId: "meta-sub-owner",
+      metaCampaignId: "camp-sub",
+      metaCampaignName: "Submissions",
+      metaFormId: "form-sub",
+      metaFormName: "Shared form",
+    });
+    await createRequirement(
+      db,
+      executive,
+      { name: "Buyer Form", phone: "9845015152" },
+      parseRequirementInput({ intent: "Buy", budgetMax: 4000000, localities: ["Sedam Road"] }),
+      parseSourceInput({
+        channel: "meta_lead_form",
+        metaLeadId: "meta-sub-buyer",
+        metaCampaignId: "camp-sub",
+        metaCampaignName: "Submissions",
+        metaFormId: "form-sub",
+        metaFormName: "Shared form",
+        submittedAt: NOV,
+      }),
+      NOW,
+    );
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, meta_lead_id, meta_campaign_id, meta_campaign_name, meta_form_id, meta_form_name, submitted_at, created_at, created_by)
+         VALUES ('src_orphan', 'meta_lead_form', 'meta-sub-orphan', 'camp-sub', 'Submissions', 'form-sub', 'Shared form', ?1, ?2, 'x')`,
+      )
+      .bind(NOV, NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, meta_lead_id, meta_campaign_id, meta_campaign_name, meta_form_id, submitted_at, created_at, created_by)
+         VALUES ('src_other', 'meta_lead_form', 'meta-sub-other', 'camp-other', 'Other', 'form-other', ?1, ?2, 'x')`,
+      )
+      .bind(NOV, NOW)
+      .run();
+
+    const all = await campaignQuality(db, parseQualityQuery({ campaign: "camp-sub" }));
+    const buyers = await campaignQuality(db, parseQualityQuery({ campaign: "camp-sub", intent: "buyer" }));
+    const owners = await campaignQuality(db, parseQualityQuery({ campaign: "camp-sub", intent: "owner" }));
+    assert.equal(all.summary.submissions, 3);
+    assert.equal(buyers.summary.submissions, 3);
+    assert.equal(owners.summary.submissions, 3);
+    assert.equal(all.groups[0]?.submissions, 3);
+    assert.equal(buyers.groups[0]?.submissions, 3);
+    assert.equal(buyers.summary.genuineBuyers, 0);
+    assert.equal(buyers.summary.pending, 1);
+    assert.equal(owners.summary.pending, 1);
+    const form = await campaignQuality(db, parseQualityQuery({ form: "form-sub" }));
+    assert.equal(form.summary.submissions, 3);
+    const otherForm = await campaignQuality(db, parseQualityQuery({ form: "form-other" }));
+    assert.equal(otherForm.summary.submissions, 1);
+    const everywhere = await campaignQuality(db, parseQualityQuery({}));
+    assert.equal(everywhere.summary.submissions, 4);
+  });
+
+  it("does not show a partial ad set or ad spend as the campaign total", async () => {
+    const db = await setup();
+    await metaOwner(db, { name: "Ad One", phone: "9845016161" }, {
+      metaLeadId: "meta-ad-1",
+      metaCampaignId: "camp-part",
+      metaCampaignName: "Partial",
+      metaAdsetId: "set-a",
+      metaAdsetName: "Set A",
+      metaAdId: "ad-1",
+      metaAdName: "Ad 1",
+    });
+    await metaOwner(db, { name: "Ad Two", phone: "9845016162" }, {
+      metaLeadId: "meta-ad-2",
+      metaCampaignId: "camp-part",
+      metaCampaignName: "Partial",
+      metaAdsetId: "set-a",
+      metaAdsetName: "Set A",
+      metaAdId: "ad-2",
+      metaAdName: "Ad 2",
+    });
+    await metaOwner(db, { name: "Ad Three", phone: "9845016163" }, {
+      metaLeadId: "meta-ad-3",
+      metaCampaignId: "camp-part",
+      metaCampaignName: "Partial",
+      metaAdsetId: "set-b",
+      metaAdsetName: "Set B",
+      metaAdId: "ad-3",
+      metaAdName: "Ad 3",
+    });
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES ('meta', 'ad', 'ad-1', '2026-11-02', 'INR', 50000, 'test', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+
+    const campaign = await campaignQuality(db, parseQualityQuery({ campaign: "camp-part" }));
+    assert.equal(campaign.summary.spendLabel, "Incomplete");
+    assert.equal(campaign.summary.costPerLead, "N/A");
+    assert.equal(campaign.summary.costPerOpportunity, "N/A");
+    const setA = campaign.groups.find((group) => group.id === "set-a");
+    const setB = campaign.groups.find((group) => group.id === "set-b");
+    assert.equal(setA?.spendLabel, "Incomplete");
+    assert.equal(setA?.spendMinor, null);
+    assert.equal(setB?.spendLabel, "Not imported");
+    assert.notEqual(campaign.summary.spendLabel, "₹500");
+
+    const ads = await campaignQuality(db, parseQualityQuery({ campaign: "camp-part", adset: "set-a" }));
+    assert.equal(ads.summary.spendLabel, "Incomplete");
+    assert.equal(ads.groups.find((group) => group.id === "ad-1")?.spendLabel, "₹500");
+    assert.equal(ads.groups.find((group) => group.id === "ad-1")?.spendMinor, 50000);
+    assert.equal(ads.groups.find((group) => group.id === "ad-2")?.spendLabel, "Not imported");
+
+    const all = await campaignQuality(db, parseQualityQuery({}));
+    const row = all.groups.find((group) => group.id === "camp-part");
+    assert.equal(row?.spendLabel, "Incomplete");
+    assert.equal(row?.spendMinor, null);
+    assert.equal(all.summary.spendLabel, "Incomplete");
+    assert.equal(all.summary.costPerLead, "N/A");
+
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES
+           ('meta', 'ad', 'ad-2', '2026-11-02', 'INR', 50000, 'test', ?1, 'x'),
+           ('meta', 'adset', 'set-b', '2026-11-02', 'INR', 50000, 'test', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    const stillPartial = await campaignQuality(db, parseQualityQuery({ campaign: "camp-part" }));
+    assert.equal(stillPartial.summary.spendLabel, "Incomplete");
+    assert.equal(stillPartial.groups.find((group) => group.id === "set-a")?.spendMinor, null);
+    assert.equal(stillPartial.groups.find((group) => group.id === "set-b")?.spendLabel, "₹500");
+    assert.notEqual(stillPartial.summary.spendLabel, "₹1,000");
+    assert.notEqual(stillPartial.summary.spendLabel, "₹1,500");
   });
 });

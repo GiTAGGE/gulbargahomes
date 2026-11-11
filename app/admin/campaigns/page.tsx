@@ -112,7 +112,7 @@ export default async function CampaignsPage({
         </div>
       </form>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
         <Stat label="Meta submissions" value={report.summary.submissions} />
         <Stat label="Genuine owners" value={report.summary.genuineOwners} />
         <Stat label="Genuine buyers" value={report.summary.genuineBuyers} />
@@ -122,6 +122,10 @@ export default async function CampaignsPage({
         <Stat label="Pending review" value={report.summary.pending} />
         <Stat label="Buyer and tenant" value={report.summary.buyerAndTenant} />
       </div>
+      <p className="mb-4 text-xs text-ink-muted">
+        Meta submissions are every original form delivery in the selected dates, campaign and form. An intent filter does
+        not change this count, and a delivery with no CRM record is still included.
+      </p>
 
       <Card
         className="mb-4"
@@ -153,6 +157,11 @@ export default async function CampaignsPage({
         {!report.costComparable && (
           <p className="mt-3 text-xs text-ink-muted">
             Spend and cost are N/A while a form or intent filter is on. Imported spend covers the whole campaign, ad set or ad.
+          </p>
+        )}
+        {report.costComparable && report.summary.spendLabel === "Incomplete" && (
+          <p className="mt-3 text-xs text-ink-muted">
+            Spend is incomplete. A partial ad set or ad import is not shown as the campaign, ad set or overall total.
           </p>
         )}
       </Card>
@@ -197,7 +206,7 @@ export default async function CampaignsPage({
                 <thead className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
                   <tr>
                     <th className="py-2 pr-3 font-semibold">{levelLabel(report.groupLevel)}</th>
-                    <th className="py-2 pr-3 font-semibold">Leads</th>
+                    <th className="py-2 pr-3 font-semibold">Submissions</th>
                     <th className="py-2 pr-3 font-semibold">
                       <Link href={sortLink("opportunities")} className="hover:text-brand-800">
                         Genuine opportunities
@@ -283,8 +292,17 @@ export default async function CampaignsPage({
           <li>Not a genuine enquiry is an explicit mark. It is not guessed from a missing call or an old status.</li>
           <li>Quality is genuine opportunities divided by reviewed opportunities. Pending is written beside the rate and left out of it.</li>
           <li>One person can have several opportunities. Contacts are counted once. Leads and requirements are counted on their own.</li>
+          <li>
+            Meta submissions are original form deliveries in the selected dates, campaign and form. They are not counted
+            from CRM rows. A delivery with no linked lead or requirement is still included. Filtering by intent does not
+            change this count.
+          </li>
           <li>A requirement added from an owner lead keeps that lead’s campaign and does not add another submission.</li>
-          <li>Cost uses imported spend, in paise for INR. Zero spend, missing spend, or no genuine opportunities is N/A. Nothing is estimated.</li>
+          <li>
+            Cost uses imported spend, in paise for INR. Zero spend, missing spend, or no genuine opportunities is N/A.
+            A campaign total uses only campaign-level spend. If spend is imported for only some ad sets or ads, the total
+            stays Incomplete rather than a partial sum. Nothing is estimated.
+          </li>
           <li>A lead with no campaign id is Unattributed. It is not given another campaign.</li>
           <li>Dates are the original Meta submission time in India Standard Time.</li>
           <li>Buyer and tenant, and owner and seeker, follow the date, campaign and form. The other cards also follow the intent filter.</li>

@@ -102,6 +102,13 @@ export function OwnerLeadActions({
 
   return (
     <div className="space-y-4">
+      {canEdit && roleReview !== "genuine" && (
+        <p className="rounded-xl bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+          Confirm this person is a genuine owner before creating a property draft. Pending, not-an-owner and not-genuine
+          leads stay on file.
+        </p>
+      )}
+
       {canConvert && (
         <div className="rounded-xl bg-brand-50 p-3">
           <p className="text-sm font-semibold text-brand-900">{converted ? "Add another property" : "Ready to list?"}</p>

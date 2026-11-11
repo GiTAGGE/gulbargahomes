@@ -153,8 +153,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
                 canConvert={
                   caps.editCrm &&
                   caps.createProperty &&
-                  lead.roleReview !== "misclassified" &&
-                  lead.roleReview !== "unqualified" &&
+                  lead.roleReview === "genuine" &&
                   !["Not interested", "Duplicate", "Invalid"].includes(lead.status)
                 }
                 converted={converted}

@@ -105,7 +105,7 @@ export type QualityReport = {
   costComparable: boolean;
 };
 
-type Spend = { imported: boolean; minor: number | null; currency: string; mixed: boolean };
+type Spend = { imported: boolean; minor: number | null; currency: string; mixed: boolean; incomplete: boolean };
 
 const OPPORTUNITIES = `WITH meta_sources AS (
   SELECT id,
@@ -217,13 +217,16 @@ function money(minor: number, currency: string): string {
 
 export function spendLabel(spend: Spend, comparable: boolean): string {
   if (!comparable) return "N/A";
-  if (!spend.imported || spend.minor === null || spend.mixed) return spend.imported && spend.mixed ? "N/A" : "Not imported";
-  if (spend.minor <= 0) return "N/A";
+  if (spend.incomplete) return "Incomplete";
+  if (!spend.imported || spend.minor === null) return "Not imported";
+  if (spend.mixed || spend.minor <= 0) return "N/A";
   return money(spend.minor, spend.currency);
 }
 
 export function costLabel(spend: Spend, comparable: boolean, opportunities: number): string {
-  if (!comparable || !spend.imported || spend.mixed || spend.minor === null || spend.minor <= 0 || opportunities <= 0) return "N/A";
+  if (!comparable || spend.incomplete || !spend.imported || spend.mixed || spend.minor === null || spend.minor <= 0 || opportunities <= 0) {
+    return "N/A";
+  }
   return money(Math.round(spend.minor / opportunities), spend.currency);
 }
 
@@ -333,33 +336,64 @@ async function spendMap(db: SqlDb, level: "campaign" | "adset" | "ad", query: Qu
         minor: Number(row.spend_minor),
         currency: row.currency || "INR",
         mixed: Number(row.currencies) > 1,
+        incomplete: false,
       },
     ]),
   );
 }
 
-const UNKNOWN_SPEND: Spend = { imported: false, minor: null, currency: "INR", mixed: false };
+const UNKNOWN_SPEND: Spend = { imported: false, minor: null, currency: "INR", mixed: false, incomplete: false };
+const INCOMPLETE_SPEND: Spend = { imported: false, minor: null, currency: "INR", mixed: false, incomplete: true };
 
-function spendFor(map: Map<string, Spend>, id: string | null, ids?: string[]): Spend {
-  if (id !== null) return map.get(id) ?? UNKNOWN_SPEND;
-  const wanted = ids ?? [];
-  if (wanted.length === 0) return UNKNOWN_SPEND;
-  const chosen = wanted.map((item) => map.get(item) ?? null);
-  if (chosen.some((item) => !item)) return UNKNOWN_SPEND;
-  const known = chosen.filter((item): item is Spend => item !== null);
+type ScopeNode = { campaignId: string; adsetId: string; adId: string };
+
+/** A parent total is only a parent-level import. Child rows are never added up. */
+function resolveSpend(
+  level: "campaign" | "adset" | "ad",
+  id: string,
+  nodes: ScopeNode[],
+  maps: { campaign: Map<string, Spend>; adset: Map<string, Spend>; ad: Map<string, Spend> },
+): Spend {
+  const own = (map: Map<string, Spend>) => (id ? map.get(id) : undefined);
+  if (level === "ad") return own(maps.ad) ?? UNKNOWN_SPEND;
+  if (level === "adset") {
+    const known = own(maps.adset);
+    if (known) return known;
+    const ads = nodes.filter((node) => node.adsetId === id).map((node) => node.adId);
+    return ads.some((adId) => adId && maps.ad.has(adId)) ? INCOMPLETE_SPEND : UNKNOWN_SPEND;
+  }
+  const known = own(maps.campaign);
+  if (known) return known;
+  const related = nodes.filter((node) => node.campaignId === id);
+  const partial =
+    related.some((node) => node.adsetId && maps.adset.has(node.adsetId)) ||
+    related.some((node) => node.adId && maps.ad.has(node.adId));
+  return partial ? INCOMPLETE_SPEND : UNKNOWN_SPEND;
+}
+
+function combineSpend(spends: Spend[]): Spend {
+  if (spends.length === 0) return UNKNOWN_SPEND;
+  if (spends.some((item) => item.incomplete)) return INCOMPLETE_SPEND;
+  const known = spends.filter((item) => item.imported && item.minor !== null);
+  if (known.length !== spends.length) return known.length > 0 ? INCOMPLETE_SPEND : UNKNOWN_SPEND;
   const currencies = new Set(known.map((item) => item.currency));
   return {
     imported: true,
     minor: known.reduce((sum, item) => sum + (item.minor ?? 0), 0),
     currency: known[0]?.currency || "INR",
-    mixed: currencies.size > 1,
+    mixed: currencies.size > 1 || known.some((item) => item.mixed),
+    incomplete: false,
   };
 }
 
 /**
  * Meta lead quality for Gulbarga (Kalaburagi).
+ * Submissions are original Meta deliveries in the date, campaign and form scope. They are not
+ * derived from CRM opportunities, so a delivery with no linked lead is still counted, and an
+ * intent filter does not change the count.
  * A requirement created from an owner lead uses that lead's campaign and is not a second submission.
  * Repeated webhook rows are ignored because only lead_sources are counted, and meta_lead_id is unique.
+ * Campaign spend is the campaign-level import only. A partial ad set or ad import stays Incomplete.
  */
 export async function campaignQuality(db: SqlDb, query: QualityQuery, options: { includePhone?: boolean } = {}): Promise<QualityReport> {
   const includePhone = options.includePhone === true;
@@ -371,8 +405,7 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     ? await db
         .prepare(
           `${OPPORTUNITIES}
-           SELECT ${GROUP_COLUMNS[level].id} AS group_id, MAX(${GROUP_COLUMNS[level].name}) AS group_name,
-             COUNT(DISTINCT source_id) AS submissions, ${METRICS}
+           SELECT ${GROUP_COLUMNS[level].id} AS group_id, MAX(${GROUP_COLUMNS[level].name}) AS group_name, ${METRICS}
            FROM opportunities
            WHERE ${where}
            GROUP BY ${GROUP_COLUMNS[level].id}`,
@@ -382,27 +415,41 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     : { results: [] as MetricRow[] };
 
   const submissionValues: SqlValue[] = [];
-  const submissionWhere = query.intent === "all" ? whereClause({ ...query, intent: "all" }, submissionValues, "s.") : where;
-  const submissionSql =
-    query.intent === "all"
-      ? `${OPPORTUNITIES}
+  const submissionWhere = whereClause({ ...query, intent: "all" }, submissionValues, "s.");
+  const submissionRows = (
+    await db
+      .prepare(
+        `${OPPORTUNITIES}
          SELECT ${level ? `${GROUP_COLUMNS[level].id} AS group_id, MAX(${GROUP_COLUMNS[level].name}) AS group_name,` : ""} COUNT(*) AS submissions
          FROM meta_sources s
          WHERE ${submissionWhere}
-         ${level ? `GROUP BY ${GROUP_COLUMNS[level].id}` : ""}`
-      : null;
-  const submissionRows = submissionSql
-    ? (await db.prepare(submissionSql).bind(...submissionValues).all<MetricRow>()).results
-    : [];
+         ${level ? `GROUP BY ${GROUP_COLUMNS[level].id}` : ""}`,
+      )
+      .bind(...submissionValues)
+      .all<MetricRow>()
+  ).results;
+
+  const scopeValues: SqlValue[] = [];
+  const scopeWhere = whereClause({ ...query, intent: "all" }, scopeValues, "s.");
+  const scopeRows = await db
+    .prepare(
+      `${OPPORTUNITIES}
+       SELECT DISTINCT campaign_id, adset_id, ad_id
+       FROM meta_sources s
+       WHERE ${scopeWhere}`,
+    )
+    .bind(...scopeValues)
+    .all<{ campaign_id: string; adset_id: string; ad_id: string }>();
+  const nodes: ScopeNode[] = scopeRows.results.map((row) => ({
+    campaignId: row.campaign_id ?? "",
+    adsetId: row.adset_id ?? "",
+    adId: row.ad_id ?? "",
+  }));
 
   const summaryValues: SqlValue[] = [];
   const summaryWhere = whereClause(query, summaryValues);
   const summaryRow = await db
-    .prepare(
-      `${OPPORTUNITIES}
-       SELECT COUNT(DISTINCT source_id) AS submissions, ${METRICS}
-       FROM opportunities WHERE ${summaryWhere}`,
-    )
+    .prepare(`${OPPORTUNITIES} SELECT ${METRICS} FROM opportunities WHERE ${summaryWhere}`)
     .bind(...summaryValues)
     .first<MetricRow>();
 
@@ -445,10 +492,11 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     .all<{ level: string; external_id: string; name: string }>();
   const entities = new Map(entityRows.results.map((row) => [`${row.level}:${row.external_id}`, row.name]));
 
-  const spendLevel: "campaign" | "adset" | "ad" =
-    query.adId !== null ? "ad" : query.adsetId !== null ? "adset" : "campaign";
-  const spend = await spendMap(db, spendLevel, query);
-  const rowSpend = level ? await spendMap(db, level, query) : spend;
+  const spendMaps = {
+    campaign: await spendMap(db, "campaign", query),
+    adset: await spendMap(db, "adset", query),
+    ad: await spendMap(db, "ad", query),
+  };
 
   const submissionById = new Map(submissionRows.map((row) => [row.group_id ?? "", row]));
   const ids = new Set<string>([
@@ -460,11 +508,11 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     ? [...ids].map((id) => {
         const metrics = grouped.results.find((row) => (row.group_id ?? "") === id);
         const submitted = submissionById.get(id);
-        const submissions = query.intent === "all" ? num(submitted?.submissions) : num(metrics?.submissions);
+        const submissions = num(submitted?.submissions);
         const genuine = num(metrics?.genuine_opportunities);
         const reviewed = num(metrics?.reviewed);
         const pending = num(metrics?.pending);
-        const rowSpendValue = spendFor(rowSpend, id);
+        const rowSpendValue = resolveSpend(level, id, nodes, spendMaps);
         const costMinor =
           comparable && rowSpendValue.imported && !rowSpendValue.mixed && rowSpendValue.minor && rowSpendValue.minor > 0 && genuine > 0
             ? Math.round(rowSpendValue.minor / genuine)
@@ -508,19 +556,17 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     return b.genuineOpportunities - a.genuineOpportunities || b.submissions - a.submissions || a.name.localeCompare(b.name);
   });
 
+  const summaryLevel: "campaign" | "adset" | "ad" =
+    query.adId !== null ? "ad" : query.adsetId !== null ? "adset" : "campaign";
   const summarySpendId = query.adId ?? query.adsetId ?? query.campaignId;
-  const summarySpend = spendFor(
-    spend,
-    summarySpendId,
-    summarySpendId === null ? groups.map((group) => group.id) : undefined,
-  );
+  const summarySpend =
+    summarySpendId !== null
+      ? resolveSpend(summaryLevel, summarySpendId, nodes, spendMaps)
+      : combineSpend(groups.map((group) => resolveSpend("campaign", group.id, nodes, spendMaps)));
   const genuine = num(summaryRow?.genuine_opportunities);
   const reviewed = num(summaryRow?.reviewed);
   const pending = num(summaryRow?.pending);
-  const submissions =
-    query.intent === "all"
-      ? num(submissionRows.reduce((sum, row) => sum + num(row.submissions), 0))
-      : num(summaryRow?.submissions);
+  const submissions = num(submissionRows.reduce((sum, row) => sum + num(row.submissions), 0));
 
   const drilled = query.campaignId !== null || query.adsetId !== null || query.adId !== null;
   const recordValues: SqlValue[] = [];
