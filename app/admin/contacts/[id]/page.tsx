@@ -26,7 +26,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
   if (!contact) notFound();
 
   const [leads, requirements, properties, activities, history, names] = await Promise.all([
-    listOwnerLeads(db, { contactId: id }),
+    listOwnerLeads(db, { contactId: id, roleReview: "any" }),
     listRequirements(db, { contactId: id }),
     caps.viewOwnerContact ? listInventoryForContact(db, id, { includeDiscreet: caps.viewDiscreet }) : [],
     listActivities(db, { contactId: id }),

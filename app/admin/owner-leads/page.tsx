@@ -16,6 +16,7 @@ const TABS = [
   { key: "Details pending", label: "Details pending" },
   { key: "Converted", label: "Converted" },
   { key: "closed", label: "Closed" },
+  { key: "not_owner", label: "Not an owner" },
   { key: "all", label: "All" },
 ];
 
@@ -24,7 +25,8 @@ export default async function OwnerLeadsPage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const active = TABS.some((tab) => tab.key === params.status) ? params.status! : "open";
   const leads = await listOwnerLeads(db, {
-    status: active === "all" ? undefined : active,
+    status: active === "all" || active === "not_owner" ? undefined : active,
+    roleReview: active === "all" ? "any" : active === "not_owner" ? "misclassified" : undefined,
     q: params.q,
     limit: 500,
   });

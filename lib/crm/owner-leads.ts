@@ -6,7 +6,7 @@ import { createDraftProperty } from "../inventory/repository";
 import { canonicalLocalityName } from "../locality";
 import { emptyProperty, slugifyTitle } from "../property-input";
 import type { PropertyType } from "../types";
-import { getContact, resolveContact, type ContactInput } from "./contacts";
+import { resolveContact, type ContactInput } from "./contacts";
 import { assertVersion, optionalInt, text } from "./input";
 import {
   OWNER_INTENTS,
@@ -141,7 +141,16 @@ export async function getOwnerLead(db: SqlDb, id: string): Promise<OwnerLead | n
 
 export async function listOwnerLeads(
   db: SqlDb,
-  filter: { status?: string; q?: string; contactId?: string; formId?: string; limit?: number; offset?: number } = {},
+  filter: {
+    status?: string;
+    q?: string;
+    contactId?: string;
+    formId?: string;
+    /** "misclassified" is the dedicated list. "any" keeps marked leads in a history view. */
+    roleReview?: "misclassified" | "any";
+    limit?: number;
+    offset?: number;
+  } = {},
 ): Promise<OwnerLead[]> {
   const conditions: string[] = [];
   const values: SqlValue[] = [];
@@ -155,7 +164,9 @@ export async function listOwnerLeads(
   if (filter.status === "closed") {
     conditions.push("l.status IN ('Not interested', 'Unreachable', 'Duplicate', 'Invalid')");
   }
-  if (status === "New" || status === "Contacted" || status === "Details pending" || filter.status === "open") {
+  if (filter.roleReview === "misclassified") {
+    conditions.push("l.role_review = 'misclassified'");
+  } else if (filter.roleReview !== "any" && !filter.q?.trim()) {
     conditions.push("l.role_review != 'misclassified'");
   }
   if (filter.contactId) add("l.contact_id = ?", filter.contactId);
@@ -349,15 +360,9 @@ export async function setOwnerLeadRoleReview(
   if (note.length < 2) throw new HttpError(400, "Say why this classification changed.");
   if (lead.roleReview === review && lead.roleReviewNote === note) return lead;
 
-  const contact = await getContact(db, lead.contactId);
-  if (!contact) throw new HttpError(404, "Contact not found.");
-  const others = await db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM owner_leads WHERE contact_id = ?1 AND id != ?2 AND role_review != 'misclassified'`,
-    )
-    .bind(lead.contactId, lead.id)
-    .first<{ n: number }>();
-  const staysOwner = review !== "misclassified" || Number(others?.n ?? 0) > 0;
+  const stillOwner = `CASE WHEN EXISTS (
+    SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
+  ) THEN 1 ELSE 0 END`;
   const statements: SqlStatement[] = [
     db
       .prepare(
@@ -381,31 +386,21 @@ export async function setOwnerLeadRoleReview(
     }),
     db
       .prepare(
-        `UPDATE contacts SET is_owner = CASE WHEN EXISTS (
-           SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
-         ) THEN 1 ELSE 0 END,
-         updated_at = ?1, updated_by = ?2, row_version = row_version + 1
-         WHERE id = ?3 AND is_owner != CASE WHEN EXISTS (
-           SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
-         ) THEN 1 ELSE 0 END`,
+        `UPDATE contacts SET is_owner = ${stillOwner}, updated_at = ?1, updated_by = ?2, row_version = row_version + 1
+         WHERE id = ?3 AND changes() > 0 AND is_owner != ${stillOwner}`,
       )
       .bind(options.now, actor.id, lead.contactId),
+    db
+      .prepare(
+        `INSERT INTO audit_log (id, occurred_at, actor_id, actor_email, actor_role, entity_type, entity_id, entity_label, action, changes_json, context_json)
+         SELECT ?1, ?2, ?3, ?4, ?5, 'contact', c.id, c.code || ' ' || c.name, 'update',
+           json_object('is_owner', json_array(CASE WHEN c.is_owner = 1 THEN 0 ELSE 1 END, c.is_owner)),
+           json_object('owner_lead_id', ?6)
+         FROM contacts c
+         WHERE c.id = ?7 AND changes() > 0`,
+      )
+      .bind(newId("aud"), options.now, actor.id, actor.email, actor.role, lead.id, lead.contactId),
   ];
-  if (contact.isOwner !== staysOwner) {
-    statements.push(
-      auditStatement(db, {
-        actor,
-        entityType: "contact",
-        entityId: contact.id,
-        entityLabel: `${contact.code} ${contact.name}`,
-        action: "update",
-        changes: { is_owner: [contact.isOwner ? 1 : 0, staysOwner ? 1 : 0] },
-        context: { owner_lead_id: lead.id },
-        at: options.now,
-        onlyIfPreviousChanged: true,
-      }),
-    );
-  }
 
   const results = await db.batch(statements);
   if (changedRows(results[0]) === 0) {

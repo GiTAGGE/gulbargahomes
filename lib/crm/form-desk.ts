@@ -107,7 +107,7 @@ export async function formDesk(
       const requirement = listPage(requested?.requirement, requirementTotal);
       const held = listPage(requested?.held, counts.held);
       const [ownerLeads, requirements, heldRows, retryable] = await Promise.all([
-        listOwnerLeads(db, { formId: form.formId, limit: FORM_RECORD_PAGE, offset: owner.offset }),
+        listOwnerLeads(db, { formId: form.formId, roleReview: "any", limit: FORM_RECORD_PAGE, offset: owner.offset }),
         listRequirements(db, { formId: form.formId, limit: FORM_RECORD_PAGE, offset: requirement.offset }),
         listIngestions(db, {
           formId: form.formId,

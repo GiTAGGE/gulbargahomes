@@ -115,7 +115,8 @@ describe("owner lead role review", () => {
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n, 0);
     assert.equal((await todayQueue(db, { includeDiscreet: false }, new Date(NOW))).newOwnerLeads.some((item) => item.id === lead.id), false);
     assert.equal((await listOwnerLeads(db, { status: "open" })).some((item) => item.id === lead.id), false);
-    assert.equal((await listOwnerLeads(db, {})).some((item) => item.id === lead.id), true);
+    assert.equal((await listOwnerLeads(db, {})).some((item) => item.id === lead.id), false);
+    assert.equal((await listOwnerLeads(db, { roleReview: "any" })).some((item) => item.id === lead.id), true);
 
     const again = await setOwnerLeadRoleReview(db, executive, marked, "misclassified", marked.roleReviewNote, {
       now: NOW,
@@ -196,6 +197,87 @@ describe("owner lead role review", () => {
     assert.equal(saved.phone, contact.phone);
     assert.equal(saved.isOwner, false);
     assert.equal(saved.isSeeker, true);
+  });
+
+  it("hides a misclassified lead from the default list and Today, and keeps it searchable", async () => {
+    const db = await setup();
+    const { lead, requirementId } = await ownerWithRequirement(db);
+    const openLead = await createOwnerLead(
+      db,
+      executive,
+      { name: "Other Owner", phone: "9845022222" },
+      { intent: "Sale", propertyType: "Plot", locality: "Alang Road", locationText: "", expectedPrice: 2000000, notes: "", priority: "Warm" },
+      parseSourceInput({ channel: "phone" }),
+      NOW,
+    );
+    await setOwnerLeadRoleReview(db, executive, lead, "misclassified", "He wants a rental house", {
+      now: NOW,
+      expectedVersion: lead.rowVersion,
+    });
+
+    const ids = async (filter: Parameters<typeof listOwnerLeads>[1]) => (await listOwnerLeads(db, filter)).map((item) => item.id);
+    assert.deepEqual(await ids({}), [openLead.id]);
+    assert.deepEqual(await ids({ status: "open" }), [openLead.id]);
+    assert.deepEqual(await ids({ status: "New" }), [openLead.id]);
+    assert.equal((await ids({ q: "Akhil" })).includes(lead.id), true);
+    assert.deepEqual(await ids({ roleReview: "misclassified" }), [lead.id]);
+    assert.equal((await ids({ contactId: lead.contactId, roleReview: "any" })).includes(lead.id), true);
+    const today = await todayQueue(db, { includeDiscreet: false }, new Date(NOW));
+    assert.deepEqual(
+      today.newOwnerLeads.map((item) => item.id),
+      [openLead.id],
+    );
+    assert.equal((await getOwnerLead(db, lead.id))?.status, "New");
+    assert.equal((await getRequirement(db, requirementId))?.intent, "Rent");
+  });
+
+  it("recalculates the owner flag after two leads for the same person are classified together", async () => {
+    const db = await setup();
+    const { lead, requirementId } = await ownerWithRequirement(db);
+    const sourceBefore = await getSource(db, lead.sourceId);
+    const second = await createOwnerLead(
+      db,
+      executive,
+      { name: "Akhil Ahmed Khan", phone: "9845011111" },
+      { intent: "Sale", propertyType: "Plot", locality: "Alang Road", locationText: "", expectedPrice: 2000000, notes: "", priority: "Warm" },
+      parseSourceInput({ channel: "meta_lead_form", metaLeadId: "meta-owner-role-3", metaCampaignId: "camp-owner" }),
+      NOW,
+    );
+    const other = { id: "adm_other", email: "desk@example.com", role: "inventory_manager" };
+    await Promise.all([
+      setOwnerLeadRoleReview(db, executive, lead, "misclassified", "The rental form was his own search", {
+        now: NOW,
+        expectedVersion: lead.rowVersion,
+      }),
+      setOwnerLeadRoleReview(db, other, second, "misclassified", "The sale form was not an owner enquiry", {
+        now: NOW,
+        expectedVersion: second.rowVersion,
+      }),
+    ]);
+
+    const contact = await findContactByPhone(db, "9845011111");
+    assert.equal(contact?.isOwner, false);
+    assert.equal(contact?.isSeeker, true);
+    assert.equal((await getOwnerLead(db, lead.id))?.status, "New");
+    assert.equal((await getOwnerLead(db, second.id))?.status, "New");
+    assert.deepEqual(await getSource(db, lead.sourceId), sourceBefore);
+    assert.equal((await getRequirement(db, requirementId))?.status, "New");
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n, 0);
+    const funnel = await db
+      .prepare("SELECT owner_leads FROM campaign_lead_funnel WHERE campaign_id = 'camp-owner'")
+      .first<{ owner_leads: number }>();
+    assert.equal(funnel?.owner_leads, 2);
+
+    const flips = (await listAudit(db, { entityType: "contact", entityId: lead.contactId })).filter(
+      (entry) => Array.isArray(entry.changes.is_owner) && entry.changes.is_owner[0] === 1 && entry.changes.is_owner[1] === 0,
+    );
+    assert.equal(flips.length, 1);
+    const flip = flips[0];
+    const markedLeadId = String(flip?.context.owner_lead_id);
+    const markedBy = (await listAudit(db, { entityType: "owner_lead", entityId: markedLeadId })).find((entry) => entry.action === "mark_not_owner");
+    assert.equal(flip?.actorId, markedBy?.actorId);
+    assert.equal(flip?.actorEmail, markedBy?.actorEmail);
+    assert.ok(flip?.actorId === executive.id || flip?.actorId === other.id);
   });
 
   it("requires a reason and keeps viewers from editing the CRM", async () => {
