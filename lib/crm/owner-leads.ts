@@ -32,6 +32,8 @@ export type OwnerLead = {
   sourceId: string | null;
   channel: string;
   campaignName: string;
+  formId: string;
+  formName: string;
   intent: OwnerIntent;
   propertyType: PropertyType | "";
   locality: string;
@@ -62,6 +64,8 @@ type OwnerLeadRow = {
   source_id: string | null;
   channel: string | null;
   campaign_name: string | null;
+  form_id: string | null;
+  form_name: string | null;
   intent: string;
   property_type: string;
   locality: string;
@@ -83,7 +87,7 @@ type OwnerLeadRow = {
 };
 
 const SELECT = `SELECT l.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
-  s.channel AS channel, s.meta_campaign_name AS campaign_name
+  s.channel AS channel, s.meta_campaign_name AS campaign_name, s.meta_form_id AS form_id, s.meta_form_name AS form_name
   FROM owner_leads l
   JOIN contacts c ON c.id = l.contact_id
   LEFT JOIN lead_sources s ON s.id = l.source_id`;
@@ -99,6 +103,8 @@ function toLead(row: OwnerLeadRow): OwnerLead {
     sourceId: row.source_id,
     channel: row.channel ?? "manual",
     campaignName: row.campaign_name ?? "",
+    formId: row.form_id ?? "",
+    formName: row.form_name ?? "",
     intent: oneOf(row.intent, OWNER_INTENTS, "Rent"),
     propertyType: (PROPERTY_TYPES as string[]).includes(row.property_type)
       ? (row.property_type as PropertyType)
@@ -129,7 +135,7 @@ export async function getOwnerLead(db: SqlDb, id: string): Promise<OwnerLead | n
 
 export async function listOwnerLeads(
   db: SqlDb,
-  filter: { status?: string; q?: string; contactId?: string; limit?: number } = {},
+  filter: { status?: string; q?: string; contactId?: string; formId?: string; limit?: number; offset?: number } = {},
 ): Promise<OwnerLead[]> {
   const conditions: string[] = [];
   const values: SqlValue[] = [];
@@ -144,6 +150,7 @@ export async function listOwnerLeads(
     conditions.push("l.status IN ('Not interested', 'Unreachable', 'Duplicate', 'Invalid')");
   }
   if (filter.contactId) add("l.contact_id = ?", filter.contactId);
+  if (filter.formId) add("s.meta_form_id = ?", filter.formId);
   if (filter.q?.trim()) {
     const q = `%${filter.q.trim()}%`;
     values.push(q);
@@ -153,11 +160,12 @@ export async function listOwnerLeads(
     );
   }
   values.push(Math.min(Math.max(filter.limit ?? 200, 1), 500));
+  values.push(Math.max(0, Math.floor(filter.offset ?? 0)));
   const { results } = await db
     .prepare(
       `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
-       ORDER BY CASE l.priority WHEN 'Hot' THEN 0 WHEN 'Warm' THEN 1 ELSE 2 END, l.created_at DESC
-       LIMIT ?${values.length}`,
+       ORDER BY CASE l.priority WHEN 'Hot' THEN 0 WHEN 'Warm' THEN 1 ELSE 2 END, l.created_at DESC, l.id
+       LIMIT ?${values.length - 1} OFFSET ?${values.length}`,
     )
     .bind(...values)
     .all<OwnerLeadRow>();

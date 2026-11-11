@@ -8,12 +8,10 @@ import { listForms } from "@/lib/meta/forms";
 import { listImportJobs } from "@/lib/meta/imports";
 import {
   dismissIngestions,
-  INGESTION_STATUSES,
   processDue,
   processIngestion,
   resolveIngestionIntent,
   requeueIngestions,
-  type IngestionStatus,
 } from "@/lib/meta/ingest";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
 import { metaRuntime } from "@/lib/meta/runtime";
@@ -38,12 +36,6 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
-
-function statusList(value: unknown): IngestionStatus[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is IngestionStatus => (INGESTION_STATUSES as readonly string[]).includes(item as string))
-    : [];
 }
 
 function idList(value: unknown): string[] {
@@ -82,22 +74,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, processed: await processDue(runtime, { limit: 25, budgetMs: 20_000 }) });
       case "retry": {
         const ids = idList(body.ids);
-        const statuses = statusList(body.statuses);
-        const requeued = await requeueIngestions(
-          auth.db,
-          { ids, statuses: statuses.length ? statuses : ["failed", "needs_review", "waiting_token", "retry"] },
-          now,
-        );
+        const formId = typeof body.formId === "string" && /^\d{5,40}$/.test(body.formId) ? body.formId : "";
+        if (!ids.length || !formId) throw new HttpError(400, "Choose one form and the leads on it to retry.");
+        const requeued = await requeueIngestions(auth.db, { ids, formId }, now);
         await auditStatement(auth.db, {
           actor: auth.admin,
           entityType: "integration",
           entityId: "meta",
           entityLabel: "Meta Lead Ads",
           action: "retry_ingestions",
-          context: { requeued, selected: ids.length },
+          context: { requeued, selected: ids.length, form_id: formId },
           at: now,
         }).run();
-        const processed = await processDue(runtime, { limit: 25, budgetMs: 20_000, ...(ids.length ? { ids } : {}) });
+        const processed = await processDue(runtime, { limit: 25, budgetMs: 20_000, ids });
         return NextResponse.json({ ok: true, requeued, processed });
       }
       case "import_as": {

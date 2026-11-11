@@ -161,6 +161,50 @@ describe("activities and follow-ups", () => {
     const due = await listFollowups(db, { openDueBefore: "2026-12-01T00:00:00.000Z" });
     assert.equal(due.length, 0);
   });
+
+  it("assigns a follow-up to a teammate and records that person", async () => {
+    const db = await setup();
+    const staffId = "adm_meena0000000000001";
+    await db
+      .prepare(
+        `INSERT INTO admin_users (id, email, name, role, password_hash, password_salt, password_iterations, active, created_at, created_by, updated_at)
+         VALUES (?1, 'meena@example.com', 'Meena', 'lead_executive', 'x', 'y', 1, 1, ?2, 'adm_test', ?2)`,
+      )
+      .bind(staffId, NOW)
+      .run();
+    const lead = await ownerLead(db);
+    const followup = await createFollowup(
+      db,
+      actor,
+      { entityType: "owner_lead", entityId: lead.id, reason: "Call the owner", dueAt: "2026-11-11T05:00:00.000Z", assignedTo: staffId },
+      NOW,
+    );
+    assert.equal(followup.assignedTo, staffId);
+    const audit = await listAudit(db, { entityType: "followup", entityId: followup.id });
+    assert.equal(audit[0]?.action, "create");
+    assert.deepEqual(audit[0]?.changes.assigned_to, [null, staffId]);
+    assert.deepEqual(audit[0]?.changes.due_at, [null, "2026-11-11T05:00:00.000Z"]);
+
+    const own = await createFollowup(
+      db,
+      actor,
+      { entityType: "owner_lead", entityId: lead.id, reason: "Send photos", dueAt: "2026-11-12T05:00:00.000Z" },
+      NOW,
+    );
+    assert.equal(own.assignedTo, actor.id);
+
+    await assert.rejects(
+      createFollowup(
+        db,
+        actor,
+        { entityType: "owner_lead", entityId: lead.id, reason: "Missing person", dueAt: "2026-11-12T05:00:00.000Z", assignedTo: "adm_missing00000000001" },
+        NOW,
+      ),
+      /member of the team/,
+    );
+    const saved = await listFollowups(db, { entityType: "owner_lead", entityId: lead.id });
+    assert.equal(saved.length, 2);
+  });
 });
 
 describe("requirements", () => {

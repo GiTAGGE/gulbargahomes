@@ -19,6 +19,7 @@ export async function AdminShell({
   const admin = await getCurrentAdmin();
   const items: NavItem[] = [
     { href: "/admin/today", label: "Today" },
+    { href: "/admin/forms", label: "Forms" },
     { href: "/admin/owner-leads", label: "Owner leads" },
     { href: "/admin/requirements", label: "Requirements" },
     { href: "/admin/properties", label: "Inventory" },

@@ -125,7 +125,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
           )}
           {contact && <ContactCard title="Owner" contact={redactContact(contact, caps.viewPhone)} canViewPhone={caps.viewPhone} />}
           <Card title="Follow-ups">
-            <FollowupsPanel entity={entity} followups={followups} canManage={caps.manageFollowups} />
+            <FollowupsPanel entity={entity} followups={followups} names={names} canManage={caps.manageFollowups} />
           </Card>
           <SourceCard source={source} canViewPhone={caps.viewPhone} />
         </div>

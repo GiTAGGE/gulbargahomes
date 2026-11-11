@@ -540,37 +540,44 @@ export async function resolveIngestionIntent(
   return { ready: true, entityType: null, entityId: null };
 }
 
-/** Retry from the admin: failed, needs-review and waiting rows go back to the queue. */
+/** Statuses a scoped retry may move. Review holds stay put until someone resolves them one by one. */
+const RETRYABLE_STATUSES = ["failed", "needs_mapping", "waiting_token", "retry"] as const;
+
+/**
+ * Put selected queue rows back to pending. Requires the lead ids and the one form they belong to.
+ * An empty selection, a held review row, or an id from another form updates nothing.
+ * The check and the write are one statement, so a status that changes at the same time does not leave a partial retry.
+ */
 export async function requeueIngestions(
   db: SqlDb,
-  filter: { ids?: string[]; statuses: IngestionStatus[] },
+  filter: { ids: string[]; formId: string },
   now: string,
 ): Promise<number> {
-  const statuses = filter.statuses.filter((status) => ["failed", "needs_review", "needs_mapping", "waiting_token", "retry"].includes(status));
-  if (statuses.length === 0) return 0;
-  const statusList = statuses.map((status) => `'${status}'`).join(", ");
-  if (filter.ids?.length) {
-    let total = 0;
-    for (const id of filter.ids.slice(0, 200)) {
-      const result = await db
-        .prepare(
-          `UPDATE meta_lead_ingestions SET status = 'pending', attempts = 0, next_attempt_at = ?1, updated_at = ?1
-           WHERE id = ?2 AND status IN (${statusList})`,
-        )
-        .bind(now, id)
-        .run();
-      total += changedRows(result);
-    }
-    return total;
-  }
+  const ids = [...new Set(filter.ids)].filter((id) => /^mli_[0-9a-f]{20}$/.test(id)).slice(0, 200);
+  if (ids.length === 0) throw new HttpError(400, "Choose the leads to retry.");
+  if (!/^\d{5,40}$/.test(filter.formId)) throw new HttpError(400, "Choose one form.");
+
+  const statusList = RETRYABLE_STATUSES.map((status) => `'${status}'`).join(", ");
+  const idPlaceholders = ids.map((_, index) => `?${index + 3}`).join(", ");
+  const countPlaceholder = ids.length + 3;
   const result = await db
     .prepare(
-      `UPDATE meta_lead_ingestions SET status = 'pending', attempts = 0, next_attempt_at = ?1, updated_at = ?1
-       WHERE status IN (${statusList})`,
+      `WITH chosen AS (
+         SELECT id FROM meta_lead_ingestions
+         WHERE form_id = ?2 AND id IN (${idPlaceholders}) AND status IN (${statusList})
+       )
+       UPDATE meta_lead_ingestions
+       SET status = 'pending', attempts = 0, next_attempt_at = ?1, updated_at = ?1
+       WHERE id IN (SELECT id FROM chosen)
+         AND (SELECT COUNT(*) FROM chosen) = ?${countPlaceholder}`,
     )
-    .bind(now)
+    .bind(now, filter.formId, ...ids, ids.length)
     .run();
-  return changedRows(result);
+  const changed = changedRows(result);
+  if (changed !== ids.length) {
+    throw new HttpError(400, "Those leads are not all failed leads on this form. Nothing was retried.");
+  }
+  return changed;
 }
 
 /** Staff decided not to import these. The queue's copy of the answers is dropped at once. */

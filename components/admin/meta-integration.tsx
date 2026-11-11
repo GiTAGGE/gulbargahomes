@@ -582,29 +582,43 @@ function FormRow({
   );
 }
 
+const RETRYABLE_ATTENTION = new Set<IngestionStatus>(["failed", "needs_mapping", "waiting_token", "retry"]);
+
 function AttentionCard({ canManage, attention, busy, act }: Props & { busy: string; act: Act }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [detail, setDetail] = useState<IngestionDetail | null>(null);
   const toggle = (id: string) => setSelected(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+  const chosen = attention.filter((item) => selected.includes(item.id));
+  const formIds = [...new Set(chosen.map((item) => item.formId).filter(Boolean))];
+  const heldSelected = chosen.some((item) => !RETRYABLE_ATTENTION.has(item.status));
+  const canRetry = chosen.length > 0 && formIds.length === 1 && !heldSelected;
+  const retryLabel = heldSelected
+    ? "Held leads stay in review"
+    : formIds.length > 1
+      ? "One form at a time"
+      : `Retry ${chosen.length} selected`;
 
   return (
     <Card
       title="Failed and held leads"
-      hint="Leads that could not be imported yet. Nothing here is lost: fix the mapping or reconnect, then retry."
+      hint="Leads that could not be imported yet. Retry only the failed leads you select, and only when they all belong to one form. Held leads stay in review."
       action={
         canManage && attention.length > 0 ? (
           <div className="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              className="btn-ghost"
-              disabled={Boolean(busy)}
-              onClick={async () => {
-                await act("retry", API, "POST", { action: "retry", ids: selected });
-                setSelected([]);
-              }}
-            >
-              {busy === "retry" ? "Retrying…" : selected.length ? `Retry ${selected.length} selected` : "Retry all"}
-            </button>
+            {chosen.length > 0 && (
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={Boolean(busy) || !canRetry}
+                onClick={async () => {
+                  if (!canRetry) return;
+                  await act("retry", API, "POST", { action: "retry", ids: selected, formId: formIds[0] });
+                  setSelected([]);
+                }}
+              >
+                {busy === "retry" ? "Retrying…" : retryLabel}
+              </button>
+            )}
             {selected.length > 0 && (
               <button
                 type="button"

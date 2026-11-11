@@ -1,5 +1,5 @@
 import { maskEmail, maskPhone } from "../crm/phone";
-import type { SqlDb } from "../db/sql";
+import type { SqlDb, SqlValue } from "../db/sql";
 import { parseStoredLead } from "./graph";
 import { INGESTION_STATUSES, type IngestionStatus } from "./ingest";
 
@@ -159,13 +159,22 @@ const LIST_SELECT = `SELECT i.*, f.name AS form_name FROM meta_lead_ingestions i
 
 export async function listIngestions(
   db: SqlDb,
-  filter: { statuses?: IngestionStatus[]; limit?: number; canViewPhone: boolean },
+  filter: { statuses?: IngestionStatus[]; formId?: string; limit?: number; offset?: number; canViewPhone: boolean },
 ): Promise<IngestionSummary[]> {
   const statuses = (filter.statuses ?? []).filter((status) => (INGESTION_STATUSES as readonly string[]).includes(status));
-  const where = statuses.length ? `WHERE i.status IN (${statuses.map((status) => `'${status}'`).join(", ")})` : "";
+  const clauses: string[] = [];
+  const binds: SqlValue[] = [];
+  if (statuses.length) clauses.push(`i.status IN (${statuses.map((status) => `'${status}'`).join(", ")})`);
+  if (filter.formId) {
+    binds.push(filter.formId);
+    clauses.push(`i.form_id = ?${binds.length}`);
+  }
+  binds.push(Math.min(Math.max(filter.limit ?? 50, 1), 200));
+  binds.push(Math.max(0, Math.floor(filter.offset ?? 0)));
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const { results } = await db
-    .prepare(`${LIST_SELECT} ${where} ORDER BY i.updated_at DESC LIMIT ?1`)
-    .bind(Math.min(Math.max(filter.limit ?? 50, 1), 200))
+    .prepare(`${LIST_SELECT} ${where} ORDER BY i.updated_at DESC, i.id LIMIT ?${binds.length - 1} OFFSET ?${binds.length}`)
+    .bind(...binds)
     .all<IngestionListRow>();
   return results.map((row) => toSummary(row, filter.canViewPhone));
 }

@@ -50,6 +50,8 @@ export type Requirement = {
   sourceId: string | null;
   channel: string;
   campaignName: string;
+  formId: string;
+  formName: string;
   intent: DemandIntent;
   propertyTypes: PropertyType[];
   bhkMin: number | null;
@@ -91,6 +93,8 @@ type RequirementRow = {
   source_id: string | null;
   channel: string | null;
   campaign_name: string | null;
+  form_id: string | null;
+  form_name: string | null;
   intent: string;
   property_types_json: string;
   bhk_min: number | null;
@@ -122,7 +126,7 @@ type RequirementRow = {
 };
 
 const SELECT = `SELECT r.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
-  s.channel AS channel, s.meta_campaign_name AS campaign_name
+  s.channel AS channel, s.meta_campaign_name AS campaign_name, s.meta_form_id AS form_id, s.meta_form_name AS form_name
   FROM demand_requirements r
   JOIN contacts c ON c.id = r.contact_id
   LEFT JOIN lead_sources s ON s.id = r.source_id`;
@@ -144,6 +148,8 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     sourceId: row.source_id,
     channel: row.channel ?? "manual",
     campaignName: row.campaign_name ?? "",
+    formId: row.form_id ?? "",
+    formName: row.form_name ?? "",
     intent: oneOf(row.intent, DEMAND_INTENTS, "Rent"),
     propertyTypes,
     bhkMin: row.bhk_min,
@@ -200,7 +206,7 @@ const BAND_RANK = { High: 0, Medium: 1, Low: 2 } as const;
 /** Open requirements sorted as a priority queue: band, then score, then age. */
 export async function listRequirements(
   db: SqlDb,
-  filter: { status?: string; timeline?: string; intent?: string; q?: string; contactId?: string; limit?: number } = {},
+  filter: { status?: string; timeline?: string; intent?: string; q?: string; contactId?: string; formId?: string; limit?: number; offset?: number } = {},
   now = new Date(),
 ): Promise<Requirement[]> {
   const conditions: string[] = [];
@@ -222,15 +228,17 @@ export async function listRequirements(
   const intent = strictOneOf(filter.intent, DEMAND_INTENTS);
   if (intent) add("r.intent = ?", intent);
   if (filter.contactId) add("r.contact_id = ?", filter.contactId);
+  if (filter.formId) add("s.meta_form_id = ?", filter.formId);
   if (filter.q?.trim()) {
     values.push(`%${filter.q.trim()}%`);
     const n = values.length;
     conditions.push(`(c.name LIKE ?${n} OR r.code LIKE ?${n} OR r.localities_json LIKE ?${n} OR c.phone_e164 LIKE ?${n})`);
   }
   values.push(Math.min(Math.max(filter.limit ?? 300, 1), 1000));
+  values.push(Math.max(0, Math.floor(filter.offset ?? 0)));
   const { results } = await db
     .prepare(
-      `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY r.created_at DESC LIMIT ?${values.length}`,
+      `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY r.created_at DESC, r.id LIMIT ?${values.length - 1} OFFSET ?${values.length}`,
     )
     .bind(...values)
     .all<RequirementRow>();
