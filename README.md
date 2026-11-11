@@ -115,7 +115,11 @@ Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does no
 
 ### Workers Builds
 
-Connect this GitHub repo. Build command: `npm run deploy`. Node 20 (see `.nvmrc`).
+Production deployments happen automatically when a change is merged into `main`. Feature branches and pull requests do not deploy. The Cloudflare production branch is `main`, and preview builds are turned off.
+
+Cloudflare preserves the existing Worker secrets and resource bindings on each deployment. `wrangler.jsonc` sets `keep_vars: true`, and the deploy command passes `--keep-vars`.
+
+Build command: `npx opennextjs-cloudflare build`. Deploy command: `npx opennextjs-cloudflare deploy -- --keep-vars`. Node 20 (see `.nvmrc`).
 
 Custom domains in `wrangler.jsonc`: `gulbargahomes.com` and `www.gulbargahomes.com`. `www` redirects to the apex in the app. `workers.dev` stays available as a rollback URL.
 
