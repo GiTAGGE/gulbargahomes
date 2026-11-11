@@ -59,6 +59,7 @@ export function TimelinePanel({
   const [body, setBody] = useState("");
   const [nextAt, setNextAt] = useState("");
   const [nextReason, setNextReason] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -79,6 +80,7 @@ export function TimelinePanel({
         ...entity,
         dueAt: fromIstInput(nextAt),
         reason: nextReason || `Follow up after ${ACTIVITY_KIND_LABEL[kind].toLowerCase()}`,
+        ...(assignedTo ? { assignedTo } : {}),
       });
       if (followupProblem) setError(`Activity saved, but the follow-up was not: ${followupProblem}`);
     }
@@ -90,6 +92,7 @@ export function TimelinePanel({
     setBody("");
     setNextAt("");
     setNextReason("");
+    setAssignedTo("");
     router.refresh();
   }
 
@@ -146,7 +149,7 @@ export function TimelinePanel({
             <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={2} className={inputClass} />
           </label>
           {canFollowUp && (
-            <div className="grid gap-2 sm:grid-cols-[auto_1fr]">
+            <div className="grid gap-2 sm:grid-cols-2">
               <label className={labelClass}>
                 Next follow-up (IST)
                 <input
@@ -166,6 +169,7 @@ export function TimelinePanel({
                   className={inputClass}
                 />
               </label>
+              <StaffField names={names} value={assignedTo} onChange={setAssignedTo} />
             </div>
           )}
           {error && (
@@ -213,15 +217,18 @@ export function TimelinePanel({
 export function FollowupsPanel({
   entity,
   followups,
+  names,
   canManage,
 }: {
   entity: EntityRef;
   followups: Followup[];
+  names: Record<string, string>;
   canManage: boolean;
 }) {
   const router = useRouter();
   const [dueAt, setDueAt] = useState("");
   const [reason, setReason] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const now = new Date();
@@ -229,11 +236,17 @@ export function FollowupsPanel({
   async function add() {
     setPending("add");
     setError("");
-    const problem = await send("/api/admin/followups", "POST", { ...entity, dueAt: fromIstInput(dueAt), reason });
+    const problem = await send("/api/admin/followups", "POST", {
+      ...entity,
+      dueAt: fromIstInput(dueAt),
+      reason,
+      ...(assignedTo ? { assignedTo } : {}),
+    });
     setPending("");
     if (problem) return setError(problem);
     setDueAt("");
     setReason("");
+    setAssignedTo("");
     router.refresh();
   }
 
@@ -260,6 +273,7 @@ export function FollowupsPanel({
               <p className="text-sm font-semibold text-ink">{item.reason}</p>
               <p className={`text-xs ${overdue ? "font-semibold text-red-800" : "text-ink-muted"}`}>
                 {formatDateTime(item.dueAt)} · {relativeTime(item.dueAt, now)}
+                {item.assignedTo ? ` · ${names[item.assignedTo] ?? "Staff"}` : ""}
               </p>
               {canManage && (
                 <div className="mt-1.5 flex gap-2">
@@ -311,6 +325,7 @@ export function FollowupsPanel({
             aria-label="Follow-up reason"
             className={inputClass}
           />
+          <StaffField names={names} value={assignedTo} onChange={setAssignedTo} />
           <button
             type="button"
             className="btn-ghost w-full"
@@ -327,5 +342,32 @@ export function FollowupsPanel({
         </p>
       )}
     </div>
+  );
+}
+
+function StaffField({
+  names,
+  value,
+  onChange,
+}: {
+  names: Record<string, string>;
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const staff = Object.entries(names)
+    .filter(([id]) => id.startsWith("adm_"))
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  return (
+    <label className={labelClass}>
+      Assign to
+      <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClass} aria-label="Assign to">
+        <option value="">Me</option>
+        {staff.map(([id, name]) => (
+          <option key={id} value={id}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

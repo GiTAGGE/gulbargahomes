@@ -61,6 +61,7 @@ export default async function TodayPage() {
                         </span>
                       </div>
                       <p className="truncate text-xs text-ink-muted">{item.reason}</p>
+                      {item.formName ? <p className="truncate text-[11px] font-medium text-brand-800">{item.formName}</p> : null}
                     </Link>
                   </li>
                 );
@@ -83,6 +84,7 @@ export default async function TodayPage() {
                         {item.code} · {item.contactName}
                       </span>
                       <span className="block truncate text-xs text-ink-muted">
+                        {item.formName ? `${item.formName} · ` : ""}
                         {item.intent} · {item.propertyTypes.join(", ") || "Any"} · {budgetLabel(item.budgetMin, item.budgetMax, item.intent)} ·{" "}
                         {item.localities.join(", ") || "Any area"}
                       </span>
@@ -109,6 +111,7 @@ export default async function TodayPage() {
                         {lead.code} · {lead.contactName}
                       </span>
                       <span className="block truncate text-xs text-ink-muted">
+                        {lead.formName ? `${lead.formName} · ` : ""}
                         {ownerIntentPhrase(lead.intent)} · {lead.propertyType || "Type?"} · {lead.locality || lead.locationText}
                       </span>
                     </span>
@@ -129,8 +132,11 @@ export default async function TodayPage() {
                 <li key={item.id}>
                   <Link href={`/admin/requirements/${item.id}`} className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-brand-50/50">
                     <Pill tone={bandTone(item.intentScore.band)}>{item.intentScore.score}</Pill>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                      {item.code} · {item.contactName}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        {item.code} · {item.contactName}
+                      </span>
+                      {item.formName ? <span className="block truncate text-[11px] font-medium text-brand-800">{item.formName}</span> : null}
                     </span>
                     <span className="shrink-0 text-xs text-ink-muted">{item.timeline}</span>
                   </Link>

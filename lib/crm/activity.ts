@@ -218,6 +218,7 @@ export type Followup = {
   createdAt: string;
   createdBy: string;
   label?: string;
+  formName?: string;
 };
 
 type FollowupRow = {
@@ -236,6 +237,7 @@ type FollowupRow = {
   created_at: string;
   created_by: string;
   label?: string | null;
+  form_name?: string | null;
 };
 
 function toFollowup(row: FollowupRow): Followup {
@@ -255,6 +257,7 @@ function toFollowup(row: FollowupRow): Followup {
     createdAt: row.created_at,
     createdBy: row.created_by,
     label: row.label ?? undefined,
+    formName: row.form_name ?? "",
   };
 }
 
@@ -285,6 +288,17 @@ export async function createFollowup(
   if (!dueAt) throw new HttpError(400, "Choose when to follow up.");
   if (!reason) throw new HttpError(400, "Say what the follow-up is for.");
 
+  const requested = text(data.assignedTo, 40);
+  let assignedTo = actor.id;
+  if (requested && requested !== actor.id) {
+    const staff = await db
+      .prepare("SELECT id FROM admin_users WHERE id = ?1 AND active = 1")
+      .bind(requested)
+      .first<{ id: string }>();
+    if (!staff) throw new HttpError(400, "Choose a member of the team.");
+    assignedTo = staff.id;
+  }
+
   const id = newId("fol");
   const statements: SqlStatement[] = [
     db
@@ -300,7 +314,7 @@ export async function createFollowup(
         dueAt,
         reason,
         oneOf(data.priority, FOLLOWUP_PRIORITIES, "Normal"),
-        text(data.assignedTo, 40) || actor.id,
+        assignedTo,
         now,
         actor.id,
       ),
@@ -310,7 +324,7 @@ export async function createFollowup(
       entityId: id,
       entityLabel: reason,
       action: "create",
-      changes: { due_at: [null, dueAt] },
+      changes: { due_at: [null, dueAt], assigned_to: [null, assignedTo] },
       context: { entity_type: entityType, entity_id: entityId },
       at: now,
     }),
@@ -387,6 +401,12 @@ const FOLLOWUP_LABEL = `CASE f.entity_type
     WHEN 'contact' THEN (SELECT c.code || ' · ' || c.name FROM contacts c WHERE c.id = f.entity_id)
   END AS label`;
 
+const FOLLOWUP_FORM = `CASE f.entity_type
+    WHEN 'owner_lead' THEN (SELECT COALESCE(s.meta_form_name, '') FROM owner_leads l LEFT JOIN lead_sources s ON s.id = l.source_id WHERE l.id = f.entity_id)
+    WHEN 'requirement' THEN (SELECT COALESCE(s.meta_form_name, '') FROM demand_requirements r LEFT JOIN lead_sources s ON s.id = r.source_id WHERE r.id = f.entity_id)
+    ELSE ''
+  END AS form_name`;
+
 export async function listFollowups(
   db: SqlDb,
   filter: { entityType?: string; entityId?: string; openDueBefore?: string; limit?: number },
@@ -395,7 +415,7 @@ export async function listFollowups(
   if (filter.openDueBefore) {
     const { results } = await db
       .prepare(
-        `SELECT f.*, ${FOLLOWUP_LABEL} FROM followups f WHERE f.status = 'Open' AND f.due_at <= ?1 ORDER BY f.due_at LIMIT ?2`,
+        `SELECT f.*, ${FOLLOWUP_LABEL}, ${FOLLOWUP_FORM} FROM followups f WHERE f.status = 'Open' AND f.due_at <= ?1 ORDER BY f.due_at LIMIT ?2`,
       )
       .bind(filter.openDueBefore, limit)
       .all<FollowupRow>();
@@ -403,7 +423,7 @@ export async function listFollowups(
   }
   const { results } = await db
     .prepare(
-      `SELECT f.*, ${FOLLOWUP_LABEL} FROM followups f WHERE f.entity_type = ?1 AND f.entity_id = ?2
+      `SELECT f.*, ${FOLLOWUP_LABEL}, ${FOLLOWUP_FORM} FROM followups f WHERE f.entity_type = ?1 AND f.entity_id = ?2
        ORDER BY CASE f.status WHEN 'Open' THEN 0 ELSE 1 END, f.due_at LIMIT ?3`,
     )
     .bind(filter.entityType ?? "", filter.entityId ?? "", limit)
