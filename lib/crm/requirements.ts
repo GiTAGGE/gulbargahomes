@@ -206,7 +206,7 @@ const BAND_RANK = { High: 0, Medium: 1, Low: 2 } as const;
 /** Open requirements sorted as a priority queue: band, then score, then age. */
 export async function listRequirements(
   db: SqlDb,
-  filter: { status?: string; timeline?: string; intent?: string; q?: string; contactId?: string; formId?: string; limit?: number } = {},
+  filter: { status?: string; timeline?: string; intent?: string; q?: string; contactId?: string; formId?: string; limit?: number; offset?: number } = {},
   now = new Date(),
 ): Promise<Requirement[]> {
   const conditions: string[] = [];
@@ -235,9 +235,10 @@ export async function listRequirements(
     conditions.push(`(c.name LIKE ?${n} OR r.code LIKE ?${n} OR r.localities_json LIKE ?${n} OR c.phone_e164 LIKE ?${n})`);
   }
   values.push(Math.min(Math.max(filter.limit ?? 300, 1), 1000));
+  values.push(Math.max(0, Math.floor(filter.offset ?? 0)));
   const { results } = await db
     .prepare(
-      `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY r.created_at DESC LIMIT ?${values.length}`,
+      `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY r.created_at DESC, r.id LIMIT ?${values.length - 1} OFFSET ?${values.length}`,
     )
     .bind(...values)
     .all<RequirementRow>();

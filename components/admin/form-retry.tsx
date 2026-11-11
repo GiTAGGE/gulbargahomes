@@ -44,7 +44,7 @@ export function FormRetry({
 
   return (
     <div className="mt-4 border-t border-brand-50 pt-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Failed on this form</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Needs attention — retryable</p>
       <ul className="mt-2 divide-y divide-brand-50">
         {rows.map((row) => (
           <li key={row.id} className="flex gap-3 py-2">

@@ -135,7 +135,7 @@ export async function getOwnerLead(db: SqlDb, id: string): Promise<OwnerLead | n
 
 export async function listOwnerLeads(
   db: SqlDb,
-  filter: { status?: string; q?: string; contactId?: string; formId?: string; limit?: number } = {},
+  filter: { status?: string; q?: string; contactId?: string; formId?: string; limit?: number; offset?: number } = {},
 ): Promise<OwnerLead[]> {
   const conditions: string[] = [];
   const values: SqlValue[] = [];
@@ -160,11 +160,12 @@ export async function listOwnerLeads(
     );
   }
   values.push(Math.min(Math.max(filter.limit ?? 200, 1), 500));
+  values.push(Math.max(0, Math.floor(filter.offset ?? 0)));
   const { results } = await db
     .prepare(
       `${SELECT} ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
-       ORDER BY CASE l.priority WHEN 'Hot' THEN 0 WHEN 'Warm' THEN 1 ELSE 2 END, l.created_at DESC
-       LIMIT ?${values.length}`,
+       ORDER BY CASE l.priority WHEN 'Hot' THEN 0 WHEN 'Warm' THEN 1 ELSE 2 END, l.created_at DESC, l.id
+       LIMIT ?${values.length - 1} OFFSET ?${values.length}`,
     )
     .bind(...values)
     .all<OwnerLeadRow>();

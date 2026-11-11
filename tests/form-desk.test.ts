@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { can } from "../lib/admin/permissions";
 import { createFollowup } from "../lib/crm/activity";
-import { formDesk, formDeskCounts } from "../lib/crm/form-desk";
+import { FORM_RECORD_PAGE, formDesk, formDeskCounts } from "../lib/crm/form-desk";
 import { createOwnerLead } from "../lib/crm/owner-leads";
 import { createRequirement, parseRequirementInput } from "../lib/crm/requirements";
 import { parseSourceInput } from "../lib/crm/sources";
@@ -182,6 +182,58 @@ describe("form desk counts", () => {
     const visible = await formDesk(db, { canViewPhone: true });
     const owner = visible.find((section) => section.form.formId === OWNER);
     assert.equal(owner?.held[0]?.preview.phone.includes("9876543210"), true);
+  });
+
+  it("pages owner leads and requirements without changing the form totals", async () => {
+    const db = await setup();
+    await insertForm(db, { id: RENTAL, name: "Gulbarga Rental Property Owner", classification: "owner", ownerIntent: "Rent", leads: 41 });
+    await insertIngestion(db, "mli_10000000000000000011", RENTAL, "done");
+    const total = FORM_RECORD_PAGE + 1;
+    for (let index = 0; index < total; index += 1) {
+      await createOwnerLead(
+        db,
+        actor,
+        { name: `Owner ${index}`, phone: `9${String(index).padStart(9, "0")}` },
+        { intent: "Rent", propertyType: "House", locality: "Sedam Road", locationText: "", expectedPrice: 14000, notes: "", priority: "Warm" },
+        parseSourceInput({ channel: "meta_lead_form", metaFormId: RENTAL, metaFormName: "Gulbarga Rental Property Owner", metaLeadId: `rent-${index}` }),
+        NOW,
+      );
+    }
+    await createRequirement(
+      db,
+      actor,
+      { name: "Asha K", phone: "9900011122" },
+      parseRequirementInput({ intent: "Rent", propertyTypes: ["House"], budgetMin: 10000, budgetMax: 15000, localities: ["Sedam Road"], timeline: "Immediate" }),
+      parseSourceInput({ channel: "meta_lead_form", metaFormId: RENTAL, metaFormName: "Gulbarga Rental Property Owner", metaLeadId: "req-1" }),
+      NOW,
+    );
+    await createRequirement(
+      db,
+      actor,
+      { name: "Kiran", phone: "9900011133" },
+      parseRequirementInput({ intent: "Buy", propertyTypes: ["Plot"], budgetMin: 1000000, budgetMax: 2000000, localities: ["Kotnoor"], timeline: "Exploring" }),
+      parseSourceInput({ channel: "meta_lead_form", metaFormId: RENTAL, metaFormName: "Gulbarga Rental Property Owner", metaLeadId: "req-2" }),
+      NOW,
+    );
+
+    const first = (await formDesk(db, { canViewPhone: true, pages: { formId: RENTAL, owner: 1, requirement: 1 } })).find(
+      (section) => section.form.formId === RENTAL,
+    )!;
+    assert.equal(first.counts.imported, 1);
+    assert.equal(first.ownerLeadTotal, total);
+    assert.equal(first.ownerLeads.length, FORM_RECORD_PAGE);
+    assert.equal(first.requirementTotal, 2);
+    assert.equal(first.requirements.length, 2);
+
+    const second = (await formDesk(db, { canViewPhone: true, pages: { formId: RENTAL, owner: 2 } })).find(
+      (section) => section.form.formId === RENTAL,
+    )!;
+    assert.equal(second.counts.imported, 1);
+    assert.equal(second.ownerLeadTotal, total);
+    assert.equal(second.ownerLeadPage, 2);
+    assert.equal(second.ownerLeads.length, 1);
+    assert.equal(first.ownerLeads.some((lead) => lead.id === second.ownerLeads[0]?.id), false);
+    assert.equal(second.requirementTotal, 2);
   });
 });
 

@@ -4,7 +4,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { FormRetry } from "@/components/admin/form-retry";
 import { Card, Empty, Pill } from "@/components/admin/ui";
 import { requirePageAdmin } from "@/lib/admin/page";
-import { formDesk, type FormDeskCounts } from "@/lib/crm/form-desk";
+import { FORM_RECORD_PAGE, formDesk, type FormDeskCounts } from "@/lib/crm/form-desk";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +16,18 @@ const COUNT_LABEL: { key: keyof FormDeskCounts; label: string }[] = [
   { key: "notFetched", label: "On Meta, not fetched" },
 ];
 
-export default async function FormsPage() {
+export default async function FormsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ form?: string; leads?: string; requirements?: string }>;
+}) {
   const { db, caps } = await requirePageAdmin("crm.view");
-  const sections = await formDesk(db, { canViewPhone: caps.viewPhone });
+  const params = await searchParams;
+  const formId = typeof params.form === "string" && /^\d{5,40}$/.test(params.form) ? params.form : "";
+  const sections = await formDesk(db, {
+    canViewPhone: caps.viewPhone,
+    pages: formId ? { formId, owner: pageNumber(params.leads), requirement: pageNumber(params.requirements) } : undefined,
+  });
 
   return (
     <AdminShell
@@ -73,6 +82,9 @@ export default async function FormsPage() {
               <RecordList
                 title="Owner leads"
                 empty="No owner leads from this form."
+                total={section.ownerLeadTotal}
+                page={section.ownerLeadPage}
+                pageHref={(page) => formsHref(section.form.formId, page, section.requirementPage)}
                 rows={section.ownerLeads.map((lead) => ({
                   id: lead.id,
                   href: `/admin/owner-leads/${lead.id}`,
@@ -83,6 +95,9 @@ export default async function FormsPage() {
               <RecordList
                 title="Requirements"
                 empty="No requirements from this form."
+                total={section.requirementTotal}
+                page={section.requirementPage}
+                pageHref={(page) => formsHref(section.form.formId, section.ownerLeadPage, page)}
                 rows={section.requirements.map((item) => ({
                   id: item.id,
                   href: `/admin/requirements/${item.id}`,
@@ -129,18 +144,43 @@ export default async function FormsPage() {
   );
 }
 
+function pageNumber(value: string | undefined): number {
+  const page = Number(value);
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function formsHref(formId: string, leads: number, requirements: number) {
+  const params = new URLSearchParams();
+  params.set("form", formId);
+  if (leads > 1) params.set("leads", String(leads));
+  if (requirements > 1) params.set("requirements", String(requirements));
+  return `/admin/forms?${params.toString()}`;
+}
+
 function RecordList({
   title,
   empty,
+  total,
+  page,
+  pageHref,
   rows,
 }: {
   title: string;
   empty: string;
+  total: number;
+  page: number;
+  pageHref: (page: number) => string;
   rows: { id: string; href: string; label: string; detail: string }[];
 }) {
+  const pages = Math.max(1, Math.ceil(total / FORM_RECORD_PAGE));
+  const start = rows.length === 0 ? 0 : (page - 1) * FORM_RECORD_PAGE + 1;
+  const end = (page - 1) * FORM_RECORD_PAGE + rows.length;
   return (
     <div className="mt-4 border-t border-brand-50 pt-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        {title}
+        {total > 0 ? ` · ${total}` : ""}
+      </p>
       {rows.length === 0 ? (
         <p className="mt-1 text-sm text-ink-muted">{empty}</p>
       ) : (
@@ -154,6 +194,25 @@ function RecordList({
             </li>
           ))}
         </ul>
+      )}
+      {total > rows.length && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
+          <p>
+            Showing {start}–{end} of {total}.
+          </p>
+          <p className="flex gap-3 font-semibold">
+            {page > 1 ? (
+              <Link href={pageHref(page - 1)} className="text-brand-800 hover:underline">
+                Previous
+              </Link>
+            ) : null}
+            {page < pages ? (
+              <Link href={pageHref(page + 1)} className="text-brand-800 hover:underline">
+                Next
+              </Link>
+            ) : null}
+          </p>
+        </div>
       )}
     </div>
   );
