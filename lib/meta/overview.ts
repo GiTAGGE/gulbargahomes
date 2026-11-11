@@ -12,7 +12,7 @@ export type IngestionStats = {
   webhookRedeliveries: number;
   existingContacts: number;
   attention: number;
-  byForm: Record<string, { imported: number; open: number; attention: number }>;
+  byForm: Record<string, { imported: number; open: number; attention: number; waiting: number }>;
 };
 
 const ATTENTION: IngestionStatus[] = ["failed", "needs_review", "needs_mapping", "waiting_token"];
@@ -35,10 +35,11 @@ export async function ingestionStats(db: SqlDb): Promise<IngestionStats> {
     if (status in byStatus) byStatus[status] += n;
     redeliveries += Number(row.redeliveries ?? 0);
     existing += Number(row.existing ?? 0);
-    const form = (byForm[row.form_id] ??= { imported: 0, open: 0, attention: 0 });
+    const form = (byForm[row.form_id] ??= { imported: 0, open: 0, attention: 0, waiting: 0 });
     if (status === "done") form.imported += n;
     else if (ATTENTION.includes(status)) form.attention += n;
     else if (status === "pending" || status === "processing" || status === "retry") form.open += n;
+    if (status === "needs_mapping" || status === "ignored") form.waiting += n;
   }
   const total = Object.values(byStatus).reduce((sum, n) => sum + n, 0);
   const overlaps = await db.prepare("SELECT COALESCE(SUM(duplicates), 0) AS n FROM meta_import_jobs").first<{ n: number }>();

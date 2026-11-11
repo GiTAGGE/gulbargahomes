@@ -21,7 +21,7 @@ import {
   resolveIngestionIntent,
   type MetaRuntime,
 } from "../lib/meta/ingest";
-import { mapLead, suggestMapping, type FormClassification } from "../lib/meta/mapping";
+import { alignBudgetTargets, mapLead, suggestMapping, suggestOwnerIntent, type FormClassification } from "../lib/meta/mapping";
 import { getIngestionDetail, ingestionStats } from "../lib/meta/overview";
 import { selectPage, testConnection } from "../lib/meta/setup";
 import { parseBhk, parseDemandIntent, parseMoney, parseOwnerIntent, parseTimeline, splitLocalities } from "../lib/meta/values";
@@ -608,6 +608,76 @@ describe("form mapping and value parsing", () => {
     });
     assert.equal(suggestMapping(OWNER_FORM.questions, "owner")["expected_rent_or_price"], "expected_price");
     assert.equal(suggestMapping(OWNER_FORM.questions, "owner")["do_you_want_to_rent_or_sell?"], "intent");
+  });
+
+  it("separates purchase and monthly budgets, and does not turn an owner's rent into a buyer budget", () => {
+    const question = (key: string, label: string, options: { key: string; value: string }[] = []) => ({ key, label, type: "CUSTOM", options });
+    const mixed = suggestMapping(
+      [
+        question("nimge_yen_beku?", "Nimge yen beku?", [
+          { key: "buy_madbeku", value: "Buy madbeku" },
+          { key: "rent_ge_beku", value: "Rent ge beku" },
+        ]),
+        question("buy_budget", "Buymadbekadre nimma budget eshtu?"),
+        question("rent_budget", "Rent ge monthly budget eshtu?"),
+        question("yava_type_property_beku?", "Yava type property beku?", [
+          { key: "house", value: "House" },
+          { key: "flat", value: "Flat" },
+        ]),
+        question("yavaga_property_beku?", "Yavaga property beku?"),
+        question("yava_area_alli_property_beku?", "Yava area alli property beku?"),
+      ],
+      "mixed",
+    );
+    assert.equal(mixed["nimge_yen_beku?"], "intent");
+    assert.equal(mixed.buy_budget, "purchase_budget");
+    assert.equal(mixed.rent_budget, "rent_budget");
+    assert.equal(mixed["yava_type_property_beku?"], "property_type");
+    assert.equal(mixed["yavaga_property_beku?"], "timeline");
+    assert.equal(mixed["yava_area_alli_property_beku?"], "locality");
+    assert.deepEqual(
+      alignBudgetTargets(
+        [question("buy_budget", "Buymadbekadre nimma budget eshtu?"), question("rent_budget", "Rent ge monthly budget eshtu?")],
+        "mixed",
+        { buy_budget: "budget", rent_budget: "budget" },
+      ),
+      { buy_budget: "purchase_budget", rent_budget: "rent_budget" },
+    );
+
+    const areaWise = suggestMapping(
+      [
+        question("which_property", "Nimma yaava property rent-ge kodalu ide?"),
+        question("where", "Nimma property yaava area dalli ide?"),
+        question("rent", "Tingala rent eshtu expect maadtira?"),
+        question("available", "Property eega rent-ge available ideya?"),
+      ],
+      "owner",
+    );
+    assert.equal(areaWise.which_property, "");
+    assert.equal(areaWise.where, "locality");
+    assert.equal(areaWise.rent, "expected_price");
+    assert.equal(areaWise.available, "");
+    assert.equal(suggestOwnerIntent([question("rent", "Tingala rent eshtu expect maadtira?")]), "Rent");
+
+    const choice = [
+      question("intent", "Nimma property yen madbeku?", [
+        { key: "sell", value: "Sell madbeku" },
+        { key: "rent", value: "Rent ge kodbeku" },
+        { key: "lease", value: "Lease ge kodbeku" },
+      ]),
+      question("type", "Property type", [
+        { key: "house", value: "House" },
+        { key: "plot", value: "Plot" },
+      ]),
+      question("where", "Property location"),
+      question("condition", "Property condition"),
+    ];
+    const owner = suggestMapping(choice, "owner");
+    assert.equal(owner.intent, "intent");
+    assert.equal(owner.type, "property_type");
+    assert.equal(owner.where, "locality");
+    assert.equal(owner.condition, "preferences");
+    assert.equal(suggestOwnerIntent(choice), "");
   });
 
   it("requires a mobile mapping before a form can import", async () => {

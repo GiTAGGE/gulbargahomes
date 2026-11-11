@@ -117,35 +117,80 @@ export function suggestTarget(question: MetaQuestion, classification: FormClassi
   const byKey = STANDARD_KEYS[question.key];
   if (byKey) return byKey;
   const text = questionText(question);
-  const ownerChoices = ownerIntentsIn(text);
-  const demandChoices = demandIntentsIn(text);
+  const optionText = question.options.map((option) => `${option.key} ${option.value}`).join(" ");
+  const ownerChoices = ownerIntentsIn(optionText || text);
+  const demandChoices = demandIntentsIn(optionText || text);
   if (/\b(bhk|bedroom|bed room)/.test(text)) return "bhk";
   if (ownerChoices.length > 1 || demandChoices.length > 1) return "intent";
   if (/(rent or (sale|sell|buy)|sell or rent|buy or rent|looking to|purpose|want to (rent|sell|buy)|\byen beku\b|\bmadbeku\b)/.test(text)) {
     return "intent";
   }
+  // "Which property will you give for rent?" is a note, not a type and not a price.
+  if (/(kodalu|which property|yaava property)/.test(text) && question.options.length < 2) return "";
+  // "Is it available now?" is not the buyer's move-in timeline.
+  if (/(available|availability)/.test(text) && !/(yavaga|how soon|when do you|timeline|move)/.test(text)) return "";
   if (/(property type|type of property|kind of property|what type|type property)/.test(text)) return "property_type";
   if (/\b(house|flat|apartment|plot|villa|commercial)\b/.test(text) && question.options.length >= 2) return "property_type";
-  if (/(budget|price range|how much|eshtu|expect)/.test(text)) {
+  if (/(budget|price range|how much|eshtu|expect|tingala)/.test(text)) {
     if (classification === "owner") return "expected_price";
-    if (classification === "mixed") {
-      if (/lakh|crore|\bcr\b/.test(text)) return "purchase_budget";
-      if (/month|monthly|rent|tingala/.test(text)) return "rent_budget";
-    }
+    if (classification === "mixed") return mixedBudgetTarget(text);
     return "budget";
   }
   if (/(expected (rent|price)|asking|rent amount|selling price)/.test(text)) return "expected_price";
   if (/(immediate|within|just looking|how soon|timeline|move|possession|yavaga)/.test(text)) return "timeline";
   if (/(locat|locality|area|where|address|road|colony|ellide|dalli|oorin)/.test(text)) return "locality";
-  if (/(prefer|requirement|additional|furnish|vegetarian|family|bachelor|parking|message|comment)/.test(text)) {
+  if (/(prefer|requirement|additional|furnish|vegetarian|family|bachelor|parking|message|comment|condition)/.test(text)) {
     return "preferences";
   }
   if (question.type === "CITY") return "preferences";
   return "";
 }
 
+/** Purchase is a total price. Monthly rent is per month. A mixed form never uses one generic budget. */
+function mixedBudgetTarget(text: string): MappingTarget {
+  const purchase = /(buy|purchase|madbekadre|lakh|crore|\bcr\b)/.test(text);
+  const monthly = /(month|monthly|tingala|per month)/.test(text) || (/\brent\b/.test(text) && !purchase);
+  if (purchase && !monthly) return "purchase_budget";
+  if (monthly && !purchase) return "rent_budget";
+  if (/month|monthly|tingala/.test(text)) return "rent_budget";
+  if (purchase) return "purchase_budget";
+  return "";
+}
+
 export function suggestMapping(questions: MetaQuestion[], classification: FormClassification): FieldMapping {
   return Object.fromEntries(questions.map((question) => [question.key, suggestTarget(question, classification)]));
+}
+
+/**
+ * A saved single-purpose Budget row cannot tell a purchase price from monthly rent,
+ * or an owner's asking price from a buyer's budget. Replace only those rows.
+ */
+export function alignBudgetTargets(
+  questions: MetaQuestion[],
+  classification: FormClassification,
+  mapping: FieldMapping,
+): FieldMapping {
+  if (classification !== "mixed" && classification !== "owner") return mapping;
+  let changed = false;
+  const next: FieldMapping = { ...mapping };
+  for (const question of questions) {
+    if (next[question.key] !== "budget") continue;
+    const suggested = suggestTarget(question, classification);
+    next[question.key] = suggested === "budget" ? "expected_price" : suggested;
+    changed = true;
+  }
+  return changed ? next : mapping;
+}
+
+/** Forms that ask sell, rent and lease must not assume one of them. A rent-only form can assume rent. */
+export function suggestOwnerIntent(questions: MetaQuestion[]): OwnerIntent | "" {
+  const asks = questions.some((question) => {
+    const options = question.options.map((option) => `${option.key} ${option.value}`).join(" ");
+    return ownerIntentsIn(options).length > 1;
+  });
+  if (asks) return "";
+  const found = ownerIntentsIn(questions.map((question) => questionText(question)).join(" "));
+  return found.length === 1 ? found[0] : "";
 }
 
 export type MappedAnswer = { key: string; label: string; value: string; target: MappingTarget };
