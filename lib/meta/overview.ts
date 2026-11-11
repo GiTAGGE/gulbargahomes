@@ -159,7 +159,7 @@ const LIST_SELECT = `SELECT i.*, f.name AS form_name FROM meta_lead_ingestions i
 
 export async function listIngestions(
   db: SqlDb,
-  filter: { statuses?: IngestionStatus[]; formId?: string; limit?: number; canViewPhone: boolean },
+  filter: { statuses?: IngestionStatus[]; formId?: string; limit?: number; offset?: number; canViewPhone: boolean },
 ): Promise<IngestionSummary[]> {
   const statuses = (filter.statuses ?? []).filter((status) => (INGESTION_STATUSES as readonly string[]).includes(status));
   const clauses: string[] = [];
@@ -170,9 +170,10 @@ export async function listIngestions(
     clauses.push(`i.form_id = ?${binds.length}`);
   }
   binds.push(Math.min(Math.max(filter.limit ?? 50, 1), 200));
+  binds.push(Math.max(0, Math.floor(filter.offset ?? 0)));
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const { results } = await db
-    .prepare(`${LIST_SELECT} ${where} ORDER BY i.updated_at DESC LIMIT ?${binds.length}`)
+    .prepare(`${LIST_SELECT} ${where} ORDER BY i.updated_at DESC, i.id LIMIT ?${binds.length - 1} OFFSET ?${binds.length}`)
     .bind(...binds)
     .all<IngestionListRow>();
   return results.map((row) => toSummary(row, filter.canViewPhone));

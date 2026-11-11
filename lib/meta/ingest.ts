@@ -546,6 +546,7 @@ const RETRYABLE_STATUSES = ["failed", "needs_mapping", "waiting_token", "retry"]
 /**
  * Put selected queue rows back to pending. Requires the lead ids and the one form they belong to.
  * An empty selection, a held review row, or an id from another form updates nothing.
+ * The check and the write are one statement, so a status that changes at the same time does not leave a partial retry.
  */
 export async function requeueIngestions(
   db: SqlDb,
@@ -556,29 +557,27 @@ export async function requeueIngestions(
   if (ids.length === 0) throw new HttpError(400, "Choose the leads to retry.");
   if (!/^\d{5,40}$/.test(filter.formId)) throw new HttpError(400, "Choose one form.");
 
-  const placeholders = ids.map((_, index) => `?${index + 1}`).join(", ");
-  const { results } = await db
-    .prepare(`SELECT id, form_id, status FROM meta_lead_ingestions WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: string; form_id: string; status: string }>();
-  const allowed = new Set<string>(RETRYABLE_STATUSES);
-  const sameForm =
-    results.length === ids.length &&
-    results.every((row) => row.form_id === filter.formId && allowed.has(row.status));
-  if (!sameForm) {
-    throw new HttpError(400, "Those leads are not all failed leads on this form. Nothing was retried.");
-  }
-
-  const idPlaceholders = ids.map((_, index) => `?${index + 3}`).join(", ");
   const statusList = RETRYABLE_STATUSES.map((status) => `'${status}'`).join(", ");
+  const idPlaceholders = ids.map((_, index) => `?${index + 3}`).join(", ");
+  const countPlaceholder = ids.length + 3;
   const result = await db
     .prepare(
-      `UPDATE meta_lead_ingestions SET status = 'pending', attempts = 0, next_attempt_at = ?1, updated_at = ?1
-       WHERE form_id = ?2 AND id IN (${idPlaceholders}) AND status IN (${statusList})`,
+      `WITH chosen AS (
+         SELECT id FROM meta_lead_ingestions
+         WHERE form_id = ?2 AND id IN (${idPlaceholders}) AND status IN (${statusList})
+       )
+       UPDATE meta_lead_ingestions
+       SET status = 'pending', attempts = 0, next_attempt_at = ?1, updated_at = ?1
+       WHERE id IN (SELECT id FROM chosen)
+         AND (SELECT COUNT(*) FROM chosen) = ?${countPlaceholder}`,
     )
-    .bind(now, filter.formId, ...ids)
+    .bind(now, filter.formId, ...ids, ids.length)
     .run();
-  return changedRows(result);
+  const changed = changedRows(result);
+  if (changed !== ids.length) {
+    throw new HttpError(400, "Those leads are not all failed leads on this form. Nothing was retried.");
+  }
+  return changed;
 }
 
 /** Staff decided not to import these. The queue's copy of the answers is dropped at once. */

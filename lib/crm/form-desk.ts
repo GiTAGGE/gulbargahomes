@@ -52,6 +52,7 @@ export type FormDeskSection = {
   requirementTotal: number;
   requirementPage: number;
   held: IngestionSummary[];
+  heldPage: number;
   retryable: IngestionSummary[];
 };
 
@@ -79,7 +80,7 @@ async function countByForm(db: SqlDb, table: "owner_leads" | "demand_requirement
 
 export async function formDesk(
   db: SqlDb,
-  options: { canViewPhone: boolean; pages?: { formId: string; owner?: number; requirement?: number } },
+  options: { canViewPhone: boolean; pages?: { formId: string; owner?: number; requirement?: number; held?: number } },
 ): Promise<FormDeskSection[]> {
   const [forms, grouped, ownerTotals, requirementTotals] = await Promise.all([
     listForms(db),
@@ -100,16 +101,25 @@ export async function formDesk(
     forms.map(async (form) => {
       const ownerLeadTotal = ownerTotals.get(form.formId) ?? 0;
       const requirementTotal = requirementTotals.get(form.formId) ?? 0;
+      const counts = formDeskCounts(form.classification, form.leadsCount, byForm.get(form.formId) ?? {});
       const requested = options.pages?.formId === form.formId ? options.pages : undefined;
       const owner = listPage(requested?.owner, ownerLeadTotal);
       const requirement = listPage(requested?.requirement, requirementTotal);
-      const [ownerLeads, requirements, attention] = await Promise.all([
+      const held = listPage(requested?.held, counts.held);
+      const [ownerLeads, requirements, heldRows, retryable] = await Promise.all([
         listOwnerLeads(db, { formId: form.formId, limit: FORM_RECORD_PAGE, offset: owner.offset }),
         listRequirements(db, { formId: form.formId, limit: FORM_RECORD_PAGE, offset: requirement.offset }),
         listIngestions(db, {
           formId: form.formId,
-          statuses: ["needs_review", ...RETRYABLE],
-          limit: 100,
+          statuses: ["needs_review"],
+          limit: FORM_RECORD_PAGE,
+          offset: held.offset,
+          canViewPhone: options.canViewPhone,
+        }),
+        listIngestions(db, {
+          formId: form.formId,
+          statuses: [...RETRYABLE],
+          limit: FORM_RECORD_PAGE,
           canViewPhone: options.canViewPhone,
         }),
       ]);
@@ -117,15 +127,16 @@ export async function formDesk(
         form,
         paused: Boolean(form.status) && form.status.toUpperCase() !== "ACTIVE",
         classificationLabel: CLASSIFICATION_LABEL[form.classification],
-        counts: formDeskCounts(form.classification, form.leadsCount, byForm.get(form.formId) ?? {}),
+        counts,
         ownerLeads,
         ownerLeadTotal,
         ownerLeadPage: owner.page,
         requirements,
         requirementTotal,
         requirementPage: requirement.page,
-        held: attention.filter((row) => row.status === "needs_review"),
-        retryable: attention.filter((row) => row.status !== "needs_review"),
+        held: heldRows,
+        heldPage: held.page,
+        retryable,
       };
     }),
   );

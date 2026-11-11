@@ -235,6 +235,27 @@ describe("form desk counts", () => {
     assert.equal(first.ownerLeads.some((lead) => lead.id === second.ownerLeads[0]?.id), false);
     assert.equal(second.requirementTotal, 2);
   });
+
+  it("pages held review rows and keeps the held count complete", async () => {
+    const db = await setup();
+    await insertForm(db, { id: JV, name: "Agricultural Land JV | Kalaburagi", classification: "owner", leads: FORM_RECORD_PAGE + 1 });
+    const total = FORM_RECORD_PAGE + 1;
+    for (let index = 0; index < total; index += 1) {
+      await insertIngestion(db, `mli_${index.toString(16).padStart(20, "0")}`, JV, "needs_review");
+    }
+
+    const first = (await formDesk(db, { canViewPhone: false, pages: { formId: JV, held: 1 } })).find((section) => section.form.formId === JV)!;
+    assert.equal(first.counts.held, total);
+    assert.equal(first.held.length, FORM_RECORD_PAGE);
+    assert.equal(first.heldPage, 1);
+    assert.equal(first.retryable.length, 0);
+
+    const second = (await formDesk(db, { canViewPhone: false, pages: { formId: JV, held: 2 } })).find((section) => section.form.formId === JV)!;
+    assert.equal(second.counts.held, total);
+    assert.equal(second.heldPage, 2);
+    assert.equal(second.held.length, 1);
+    assert.equal(first.held.some((row) => row.id === second.held[0]?.id), false);
+  });
 });
 
 describe("scoped retry", () => {

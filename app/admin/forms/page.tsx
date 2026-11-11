@@ -19,14 +19,16 @@ const COUNT_LABEL: { key: keyof FormDeskCounts; label: string }[] = [
 export default async function FormsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ form?: string; leads?: string; requirements?: string }>;
+  searchParams: Promise<{ form?: string; leads?: string; requirements?: string; held?: string }>;
 }) {
   const { db, caps } = await requirePageAdmin("crm.view");
   const params = await searchParams;
   const formId = typeof params.form === "string" && /^\d{5,40}$/.test(params.form) ? params.form : "";
   const sections = await formDesk(db, {
     canViewPhone: caps.viewPhone,
-    pages: formId ? { formId, owner: pageNumber(params.leads), requirement: pageNumber(params.requirements) } : undefined,
+    pages: formId
+      ? { formId, owner: pageNumber(params.leads), requirement: pageNumber(params.requirements), held: pageNumber(params.held) }
+      : undefined,
   });
 
   return (
@@ -84,7 +86,7 @@ export default async function FormsPage({
                 empty="No owner leads from this form."
                 total={section.ownerLeadTotal}
                 page={section.ownerLeadPage}
-                pageHref={(page) => formsHref(section.form.formId, page, section.requirementPage)}
+                pageHref={(page) => formsHref(section.form.formId, page, section.requirementPage, section.heldPage)}
                 rows={section.ownerLeads.map((lead) => ({
                   id: lead.id,
                   href: `/admin/owner-leads/${lead.id}`,
@@ -97,7 +99,7 @@ export default async function FormsPage({
                 empty="No requirements from this form."
                 total={section.requirementTotal}
                 page={section.requirementPage}
-                pageHref={(page) => formsHref(section.form.formId, section.ownerLeadPage, page)}
+                pageHref={(page) => formsHref(section.form.formId, section.ownerLeadPage, page, section.heldPage)}
                 rows={section.requirements.map((item) => ({
                   id: item.id,
                   href: `/admin/requirements/${item.id}`,
@@ -106,9 +108,9 @@ export default async function FormsPage({
                 }))}
               />
 
-              {section.held.length > 0 && (
+              {section.counts.held > 0 && (
                 <div className="mt-4 border-t border-brand-50 pt-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Held for review</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Held for review · {section.counts.held}</p>
                   <p className="mt-1 text-xs text-ink-muted">These stay held. This desk does not retry them or choose Sale, Rent or Lease.</p>
                   <ul className="mt-2 divide-y divide-brand-50">
                     {section.held.map((row) => (
@@ -121,6 +123,32 @@ export default async function FormsPage({
                       </li>
                     ))}
                   </ul>
+                  {section.counts.held > section.held.length && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
+                      <p>
+                        Showing {(section.heldPage - 1) * FORM_RECORD_PAGE + 1}–
+                        {(section.heldPage - 1) * FORM_RECORD_PAGE + section.held.length} of {section.counts.held}.
+                      </p>
+                      <p className="flex gap-3 font-semibold">
+                        {section.heldPage > 1 ? (
+                          <Link
+                            href={formsHref(section.form.formId, section.ownerLeadPage, section.requirementPage, section.heldPage - 1)}
+                            className="text-brand-800 hover:underline"
+                          >
+                            Previous
+                          </Link>
+                        ) : null}
+                        {section.heldPage < Math.ceil(section.counts.held / FORM_RECORD_PAGE) ? (
+                          <Link
+                            href={formsHref(section.form.formId, section.ownerLeadPage, section.requirementPage, section.heldPage + 1)}
+                            className="text-brand-800 hover:underline"
+                          >
+                            Next
+                          </Link>
+                        ) : null}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -149,11 +177,12 @@ function pageNumber(value: string | undefined): number {
   return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
-function formsHref(formId: string, leads: number, requirements: number) {
+function formsHref(formId: string, leads: number, requirements: number, held: number) {
   const params = new URLSearchParams();
   params.set("form", formId);
   if (leads > 1) params.set("leads", String(leads));
   if (requirements > 1) params.set("requirements", String(requirements));
+  if (held > 1) params.set("held", String(held));
   return `/admin/forms?${params.toString()}`;
 }
 
