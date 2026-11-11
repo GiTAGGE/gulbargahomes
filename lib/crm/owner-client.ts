@@ -14,8 +14,31 @@ export type ClientRequirementResult = {
   created: boolean;
 };
 
+const DEMAND_INTENTS = ["Buy", "Rent"] as const;
+
 function storageKey(idempotencyKey: string, intent: RequirementInput["intent"]): string {
   return `${idempotencyKey}:${intent}`;
+}
+
+function samePayload(stored: Requirement, input: RequirementInput): boolean {
+  return (
+    stored.intent === input.intent &&
+    JSON.stringify(stored.propertyTypes) === JSON.stringify(input.propertyTypes) &&
+    stored.bhkMin === input.bhkMin &&
+    stored.bhkMax === input.bhkMax &&
+    stored.budgetMin === input.budgetMin &&
+    stored.budgetMax === input.budgetMax &&
+    JSON.stringify(stored.localities) === JSON.stringify(input.localities) &&
+    stored.localityFlexible === input.localityFlexible &&
+    stored.areaMin === input.areaMin &&
+    stored.furnishing === input.furnishing &&
+    stored.tenantProfile === input.tenantProfile &&
+    stored.vegetarian === input.vegetarian &&
+    stored.parkingRequired === input.parkingRequired &&
+    stored.timeline === input.timeline &&
+    stored.neededBy === input.neededBy &&
+    stored.notes === input.notes
+  );
 }
 
 function manualSource(
@@ -73,11 +96,49 @@ async function requirementsInOrder(db: SqlDb, keys: string[], found: Map<string,
   return requirements;
 }
 
+const DIFFERENT_REQUEST = "That submission key was already used for a different request.";
+
+/** Every requirement this client key has already stored, for either intent. */
+async function storedForKey(db: SqlDb, idempotencyKey: string): Promise<Requirement[]> {
+  const keys = DEMAND_INTENTS.map((intent) => storageKey(idempotencyKey, intent));
+  const found = await loadByKeys(db, keys);
+  const stored: Requirement[] = [];
+  for (const key of keys) {
+    const id = found.get(key);
+    if (!id) continue;
+    const requirement = await getRequirement(db, id);
+    if (requirement) stored.push(requirement);
+  }
+  return stored;
+}
+
+/**
+ * A repeated key is the original request only when the owner lead, the intent
+ * set, and every requirement field match. Anything else is a conflict.
+ */
+function replayMatch(
+  stored: Requirement[],
+  ownerLeadId: string,
+  requested: RequirementInput[],
+): Requirement[] | "none" | "conflict" {
+  if (stored.length === 0) return "none";
+  const requestedIntents = requested.map((item) => item.intent).sort().join("\0");
+  const storedIntents = stored.map((item) => item.intent).sort().join("\0");
+  if (storedIntents !== requestedIntents) return "conflict";
+  const byIntent = new Map(requested.map((item) => [item.intent, item]));
+  for (const requirement of stored) {
+    const input = byIntent.get(requirement.intent);
+    if (requirement.originOwnerLeadId !== ownerLeadId || !input || !samePayload(requirement, input)) return "conflict";
+  }
+  return requested.map((item) => stored.find((requirement) => requirement.intent === item.intent)!);
+}
+
 /**
  * Adds buyer and/or tenant requirements for the owner lead's existing contact.
  * One batch writes every source, requirement, role flag and audit row. A repeated
- * idempotency key, including two requests at the same time, returns the original
- * rows. The owner lead, its Meta source and its status are left as they are.
+ * idempotency key returns the original rows only when the owner lead, intent
+ * set, and requirement fields are the same. A different request with that key
+ * is rejected. The owner lead, its Meta source and its status are left as they are.
  */
 export async function addClientRequirements(
   db: SqlDb,
@@ -98,14 +159,14 @@ export async function addClientRequirements(
   if (!lead) throw new HttpError(404, "Owner lead not found.");
   const keys = input.requirements.map((item) => storageKey(idempotencyKey, item.intent));
 
-  const replay = async (): Promise<ClientRequirementResult | null> => {
-    const stored = await requirementsInOrder(db, keys, await loadByKeys(db, keys));
-    return stored ? { requirements: stored, created: false } : null;
+  const replay = async (): Promise<ClientRequirementResult | "conflict" | null> => {
+    const matched = replayMatch(await storedForKey(db, idempotencyKey), lead.id, input.requirements);
+    if (matched === "conflict") return "conflict";
+    return matched === "none" ? null : { requirements: matched, created: false };
   };
   const already = await replay();
+  if (already === "conflict") throw new HttpError(409, DIFFERENT_REQUEST);
   if (already) return already;
-  const partial = await loadByKeys(db, keys);
-  if (partial.size > 0) throw new HttpError(409, "That submission did not finish. Start a new one.");
 
   const original = lead.sourceId ? await getSource(db, lead.sourceId) : null;
   const contact = { name: lead.contactName, phone: lead.contactPhone };
@@ -172,6 +233,7 @@ export async function addClientRequirements(
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     const winner = await replay();
+    if (winner === "conflict") throw new HttpError(409, DIFFERENT_REQUEST);
     if (winner) return winner;
     throw new HttpError(409, "That submission was already saved. Refresh to see it.");
   }

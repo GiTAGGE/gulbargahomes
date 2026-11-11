@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 
 import { listAudit } from "../lib/admin/audit";
 import { can } from "../lib/admin/permissions";
-import { findContactByPhone } from "../lib/crm/contacts";
+import { HttpError } from "../lib/admin/errors";
+import { findContactByPhone, updateContact } from "../lib/crm/contacts";
 import { addClientRequirements } from "../lib/crm/owner-client";
 import { createOwnerLead, getOwnerLead, updateOwnerLead } from "../lib/crm/owner-leads";
 import { getRequirement, matchableBudget, updateRequirement } from "../lib/crm/requirements";
@@ -211,6 +212,174 @@ describe("owner to client requirements", () => {
     assert.equal(later.created, true);
     assert.notEqual(later.requirements[0].id, first.requirements[0].id);
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>())?.n, 2);
+  });
+
+  it("rejects a repeated key used for another owner lead or a different payload", async () => {
+    const db = await setup();
+    const lead = await ownerWithMeta(db);
+    const input = {
+      idempotencyKey: "bound-key-01",
+      requirements: [{ ...details(5_000_000, 7_000_000, "Sedam Road"), intent: "Buy" as const }],
+    };
+    const first = await addClientRequirements(db, executive, lead.id, input, NOW);
+
+    const other = await createOwnerLead(
+      db,
+      executive,
+      { name: "Other Owner", phone: "9845022222" },
+      { intent: "Sale", propertyType: "Plot", locality: "Alang Road", locationText: "", expectedPrice: 2000000, notes: "", priority: "Warm" },
+      parseSourceInput({ channel: "phone" }),
+      NOW,
+    );
+    await assert.rejects(addClientRequirements(db, executive, other.id, input, NOW), (error: unknown) => {
+      assert.ok(error instanceof HttpError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+    assert.equal((await findContactByPhone(db, "9845022222"))?.isSeeker, false);
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements WHERE origin_owner_lead_id = ?1").bind(other.id).first<{ n: number }>())?.n, 0);
+
+    const changedBudget = {
+      ...input,
+      requirements: [{ ...details(5_000_000, 9_000_000, "Sedam Road"), intent: "Buy" as const }],
+    };
+    await assert.rejects(addClientRequirements(db, executive, lead.id, changedBudget, NOW), (error: unknown) => {
+      assert.ok(error instanceof HttpError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+    const both = {
+      idempotencyKey: input.idempotencyKey,
+      requirements: [input.requirements[0], { ...details(12_000, 18_000, "Alang Road"), intent: "Rent" as const }],
+    };
+    await assert.rejects(addClientRequirements(db, executive, lead.id, both, NOW), (error: unknown) => {
+      assert.ok(error instanceof HttpError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>())?.n, 1);
+    assert.equal((await getRequirement(db, first.requirements[0].id))?.budgetMax, 7_000_000);
+    assert.equal((await getRequirement(db, first.requirements[0].id))?.originOwnerLeadId, lead.id);
+
+    const [kept, rejected] = await Promise.allSettled([
+      addClientRequirements(db, executive, lead.id, input, NOW),
+      addClientRequirements(db, executive, lead.id, changedBudget, NOW),
+    ]);
+    assert.equal(kept.status, "fulfilled");
+    assert.equal(rejected.status, "rejected");
+    if (kept.status === "fulfilled") {
+      assert.equal(kept.value.created, false);
+      assert.equal(kept.value.requirements[0].id, first.requirements[0].id);
+    }
+    if (rejected.status === "rejected") {
+      assert.ok(rejected.reason instanceof HttpError);
+      assert.equal(rejected.reason.status, 409);
+    }
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>())?.n, 1);
+
+    const left = {
+      idempotencyKey: "race-key-001",
+      requirements: [{ ...details(1_000_000, 2_000_000, "Sedam Road"), intent: "Buy" as const }],
+    };
+    const right = {
+      idempotencyKey: "race-key-001",
+      requirements: [{ ...details(3_000_000, 4_000_000, "Jewargi Road"), intent: "Buy" as const }],
+    };
+    const raced = await Promise.allSettled([
+      addClientRequirements(db, executive, lead.id, left, NOW),
+      addClientRequirements(db, executive, lead.id, right, NOW),
+    ]);
+    assert.equal(raced.filter((item) => item.status === "fulfilled").length, 1);
+    const raceRefusal = raced.find((item) => item.status === "rejected");
+    assert.ok(raceRefusal && raceRefusal.status === "rejected" && raceRefusal.reason instanceof HttpError);
+    assert.equal(raceRefusal.reason.status, 409);
+    const raceRow = await db
+      .prepare("SELECT budget_max, origin_owner_lead_id FROM demand_requirements WHERE idempotency_key = 'race-key-001:Buy'")
+      .first<{ budget_max: number; origin_owner_lead_id: string }>();
+    const raceWinner = raced.find((item) => item.status === "fulfilled");
+    assert.ok(raceWinner && raceWinner.status === "fulfilled");
+    assert.equal(raceRow?.budget_max, raceWinner.value.requirements[0].budgetMax);
+    assert.equal(raceRow?.origin_owner_lead_id, lead.id);
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements WHERE idempotency_key LIKE 'race-key-001:%'").first<{ n: number }>())?.n, 1);
+
+    const shared = {
+      idempotencyKey: "race-owner-1",
+      requirements: [{ ...details(8_000, 12_000, "Alang Road"), intent: "Rent" as const }],
+    };
+    const racedOwners = await Promise.allSettled([
+      addClientRequirements(db, executive, lead.id, shared, NOW),
+      addClientRequirements(db, executive, other.id, shared, NOW),
+    ]);
+    assert.equal(racedOwners.filter((item) => item.status === "fulfilled").length, 1);
+    const ownerRefusal = racedOwners.find((item) => item.status === "rejected");
+    assert.ok(ownerRefusal && ownerRefusal.status === "rejected" && ownerRefusal.reason instanceof HttpError);
+    assert.equal(ownerRefusal.reason.status, 409);
+    const ownerWinner = racedOwners.find((item) => item.status === "fulfilled");
+    assert.ok(ownerWinner && ownerWinner.status === "fulfilled");
+    assert.equal(
+      (await db.prepare("SELECT origin_owner_lead_id FROM demand_requirements WHERE idempotency_key = 'race-owner-1:Rent'").first<{ origin_owner_lead_id: string }>())
+        ?.origin_owner_lead_id,
+      ownerWinner.value.requirements[0].originOwnerLeadId,
+    );
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM demand_requirements WHERE idempotency_key LIKE 'race-owner-1:%'").first<{ n: number }>())?.n, 1);
+  });
+
+  it("keeps the owner flag and contact details when an edit lands during requirement creation", async () => {
+    const db = await setup();
+    const lead = await ownerWithMeta(db);
+    const contact = (await findContactByPhone(db, "9845011111"))!;
+    const originalBatch = db.batch.bind(db);
+    db.batch = async (statements) => {
+      db.batch = originalBatch;
+      await updateContact(
+        db,
+        executive,
+        contact,
+        { name: "Akhil A. Khan", notes: "Call after 6", email: "akhil@example.com", doNotContact: true, doNotContactReason: "Asked later" },
+        { now: NOW, expectedVersion: contact.rowVersion },
+      );
+      return originalBatch(statements);
+    };
+    const result = await addClientRequirements(
+      db,
+      executive,
+      lead.id,
+      { idempotencyKey: "contact-key1", requirements: [{ ...details(4_000_000, 6_000_000, "Sedam Road"), intent: "Buy" }] },
+      NOW,
+    );
+    const saved = (await findContactByPhone(db, "9845011111"))!;
+    assert.equal(saved.id, contact.id);
+    assert.equal(saved.isOwner, true);
+    assert.equal(saved.isSeeker, true);
+    assert.equal(saved.name, "Akhil A. Khan");
+    assert.equal(saved.phone, contact.phone);
+    assert.equal(saved.notes, "Call after 6");
+    assert.equal(saved.email, "akhil@example.com");
+    assert.equal(saved.doNotContact, true);
+    assert.equal(saved.doNotContactReason, "Asked later");
+    assert.equal(result.requirements[0].contactId, contact.id);
+    assert.equal((await getOwnerLead(db, lead.id))?.intent, "Lease");
+    assert.equal((await getOwnerLead(db, lead.id))?.status, "New");
+
+    await assert.rejects(
+      updateContact(db, executive, contact, { notes: "This write used the old version" }, { now: NOW, expectedVersion: contact.rowVersion }),
+      /changed this contact/,
+    );
+    const edited = await updateContact(
+      db,
+      executive,
+      saved,
+      { notes: "Morning calls only" },
+      { now: NOW, expectedVersion: saved.rowVersion },
+    );
+    assert.equal(edited.isOwner, true);
+    assert.equal(edited.isSeeker, true);
+    assert.equal(edited.name, "Akhil A. Khan");
+    assert.equal(edited.phone, contact.phone);
+    assert.equal(edited.email, "akhil@example.com");
+    assert.equal(edited.notes, "Morning calls only");
+    assert.equal((await getRequirement(db, result.requirements[0].id))?.status, "New");
   });
 
   it("keeps owner and requirement lifecycles independent", async () => {

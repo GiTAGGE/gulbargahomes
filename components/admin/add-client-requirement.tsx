@@ -67,6 +67,7 @@ export function AddClientRequirement({
   const [error, setError] = useState("");
 
   function open(next: Mode) {
+    if (mode || pending) return;
     setMode(next);
     setKey(newKey());
     setError("");
@@ -77,27 +78,32 @@ export function AddClientRequirement({
     if (!mode || pending) return;
     setPending(true);
     setError("");
-    const response = await fetch(`/api/admin/owner-leads/${ownerLeadId}/requirements`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        idempotencyKey: key,
-        buy: mode === "rent" ? undefined : payload(buy, localities),
-        rent: mode === "buy" ? undefined : payload(rent, localities),
-      }),
-    });
-    const data = (await response.json().catch(() => ({}))) as { error?: string };
-    setPending(false);
-    if (!response.ok) {
-      setError(data.error || "That requirement was not saved.");
-      return;
+    try {
+      const response = await fetch(`/api/admin/owner-leads/${ownerLeadId}/requirements`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          idempotencyKey: key,
+          buy: mode === "rent" ? undefined : payload(buy, localities),
+          rent: mode === "buy" ? undefined : payload(rent, localities),
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(data.error || "That requirement was not saved. Save again to retry this submission.");
+        return;
+      }
+      setMode(null);
+      setBuy(blank());
+      setRent(blank());
+      setKey(newKey());
+      router.refresh();
+    } catch {
+      setError("The connection failed before the result came back. Save again to retry this same submission.");
+    } finally {
+      setPending(false);
     }
-    setMode(null);
-    setBuy(blank());
-    setRent(blank());
-    setKey(newKey());
-    router.refresh();
   }
 
   return (
@@ -107,13 +113,13 @@ export function AddClientRequirement({
       </p>
       {canEdit && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-ghost" onClick={() => open("buy")}>
+          <button type="button" className="btn-ghost" onClick={() => open("buy")} disabled={mode !== null || pending}>
             Add Buyer Requirement
           </button>
-          <button type="button" className="btn-ghost" onClick={() => open("rent")}>
+          <button type="button" className="btn-ghost" onClick={() => open("rent")} disabled={mode !== null || pending}>
             Add Tenant Requirement
           </button>
-          <button type="button" className="btn-ghost" onClick={() => open("both")}>
+          <button type="button" className="btn-ghost" onClick={() => open("both")} disabled={mode !== null || pending}>
             Add Both Requirements
           </button>
         </div>
@@ -126,7 +132,7 @@ export function AddClientRequirement({
           {(mode === "rent" || mode === "both") && (
             <Fields title="Tenant requirement" budgetLabel="Monthly rent (₹)" listId="rent-localities" fields={rent} localities={localities} onChange={setRent} />
           )}
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p className="text-sm text-red-700">{error} Cancel starts a new submission.</p>}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary" disabled={pending}>
               {pending ? "Saving…" : "Save requirement"}
