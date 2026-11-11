@@ -6,7 +6,15 @@ import { authorize, errorResponse, HttpError, readJson } from "@/lib/admin/route
 import { nowIso } from "@/lib/db/sql";
 import { listForms } from "@/lib/meta/forms";
 import { listImportJobs } from "@/lib/meta/imports";
-import { dismissIngestions, INGESTION_STATUSES, processDue, requeueIngestions, type IngestionStatus } from "@/lib/meta/ingest";
+import {
+  dismissIngestions,
+  INGESTION_STATUSES,
+  processDue,
+  processIngestion,
+  resolveIngestionIntent,
+  requeueIngestions,
+  type IngestionStatus,
+} from "@/lib/meta/ingest";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
 import { metaRuntime } from "@/lib/meta/runtime";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
@@ -91,6 +99,21 @@ export async function POST(request: Request) {
         }).run();
         const processed = await processDue(runtime, { limit: 25, budgetMs: 20_000, ...(ids.length ? { ids } : {}) });
         return NextResponse.json({ ok: true, requeued, processed });
+      }
+      case "import_as": {
+        const id = typeof body.id === "string" && /^mli_[0-9a-f]{20}$/.test(body.id) ? body.id : "";
+        const intent = typeof body.intent === "string" ? body.intent : "";
+        if (!id) throw new HttpError(400, "Choose the lead.");
+        const decision = await resolveIngestionIntent(auth.db, auth.admin, id, intent, now);
+        if (!decision.ready) {
+          return NextResponse.json({ ok: true, already: true, entityType: decision.entityType, entityId: decision.entityId });
+        }
+        const outcome = await processIngestion(runtime, id);
+        const saved = await auth.db
+          .prepare("SELECT entity_type, entity_id FROM meta_lead_ingestions WHERE id = ?1")
+          .bind(id)
+          .first<{ entity_type: string | null; entity_id: string | null }>();
+        return NextResponse.json({ ok: true, outcome, entityType: saved?.entity_type ?? null, entityId: saved?.entity_id ?? null });
       }
       case "dismiss": {
         const ids = idList(body.ids);

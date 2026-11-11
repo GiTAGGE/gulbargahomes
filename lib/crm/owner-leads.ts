@@ -322,18 +322,29 @@ export async function convertOwnerLead(
   db: SqlDb,
   actor: AuditActor,
   lead: OwnerLead,
-  options: { now: string; title?: string },
+  options: { now: string; title?: string; listing?: "Rent" | "Sale" },
 ): Promise<InventoryProperty> {
   if (["Not interested", "Duplicate", "Invalid"].includes(lead.status)) {
     throw new HttpError(400, `Reopen this lead before converting it (it is marked ${lead.status}).`);
   }
   const propertyType: PropertyType = lead.propertyType || "House";
   const place = lead.locality || lead.locationText;
-  const title =
-    text(options.title, 180) ||
-    `${propertyType} for ${lead.intent === "Rent" ? "rent" : "sale"} in ${place}`;
+  // A lease stays a lease on the lead. The public site only has Rent and Sale
+  // listings, so staff choose which of those the draft uses. Rent and Sale
+  // leads keep their own listing. Nothing here turns a sale into a rent.
+  const listing = lead.intent === "Lease" ? options.listing : lead.intent;
+  if (listing !== "Rent" && listing !== "Sale") {
+    throw new HttpError(
+      400,
+      "This lead is a lease. Choose whether the draft is published later as a rental listing or a sale listing. The lead stays a lease either way.",
+    );
+  }
+  const offered = lead.intent === "Sale" ? "sale" : lead.intent === "Lease" ? "lease" : "rent";
+  const title = text(options.title, 180) || `${propertyType} for ${offered} in ${place}`;
   const base = slugifyTitle(title).slice(0, 64) || "property";
   const suffix = lead.code.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const leaseNote =
+    lead.intent === "Lease" ? ` Owner asked for a lease. Staff drafted it as a ${listing === "Rent" ? "rental" : "sale"} listing.` : "";
 
   const property = await createDraftProperty(
     db,
@@ -342,10 +353,10 @@ export async function convertOwnerLead(
       ...emptyProperty(options.now),
       title,
       slug: `${base}-${suffix}-${Date.now().toString(36).slice(-4)}`,
-      listing: lead.intent,
+      listing,
       propertyType,
       bhk: propertyType === "Plot" || propertyType === "Commercial" ? null : 2,
-      priceSuffix: lead.intent === "Rent" ? "/month" : "",
+      priceSuffix: listing === "Rent" ? "/month" : "",
       price: lead.expectedPrice ?? 0,
       locality: lead.locality || canonicalLocalityName(lead.locationText.split(",")[0] ?? ""),
       mapQuery: `${place}, Kalaburagi, Karnataka`,
@@ -355,11 +366,11 @@ export async function convertOwnerLead(
       status: "Available",
       ownerContactId: lead.contactId,
       sourceOwnerLeadId: lead.id,
-      internalNotes: lead.notes ? `From owner lead ${lead.code}: ${lead.notes}` : `From owner lead ${lead.code}`,
+      internalNotes: `${lead.notes ? `From owner lead ${lead.code}: ${lead.notes}` : `From owner lead ${lead.code}`}${leaseNote}`,
     },
   );
 
-  const context = { property_id: property.id, property_code: property.code };
+  const context = { property_id: property.id, property_code: property.code, listing, owner_intent: lead.intent };
   const label = `${lead.code} ${lead.contactName}`;
   // Not version-checked: the draft already exists, so the lead must follow it.
   const results = await db.batch([

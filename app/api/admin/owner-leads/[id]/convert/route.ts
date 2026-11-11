@@ -19,6 +19,7 @@ export async function POST(request: Request, context: Context) {
     const property = await convertOwnerLead(auth.db, auth.admin, lead, {
       now: nowIso(),
       title: typeof body.title === "string" ? body.title : undefined,
+      listing: body.listing === "Rent" || body.listing === "Sale" ? body.listing : undefined,
     });
     return NextResponse.json({ ok: true, property }, { status: 201 });
   } catch (error) {

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Card, Empty, Pill, Stat } from "@/components/admin/ui";
-import { bandTone, budgetLabel, formatDate, formatDateTime, relativeTime } from "@/lib/admin/format";
+import { bandTone, budgetLabel, formatDate, formatDateTime, ownerIntentPhrase, relativeTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import type { Followup } from "@/lib/crm/activity";
 import { todayQueue } from "@/lib/crm/today";
@@ -83,7 +83,7 @@ export default async function TodayPage() {
                         {item.code} · {item.contactName}
                       </span>
                       <span className="block truncate text-xs text-ink-muted">
-                        {item.intent} · {item.propertyTypes.join(", ") || "Any"} · {budgetLabel(item.budgetMin, item.budgetMax)} ·{" "}
+                        {item.intent} · {item.propertyTypes.join(", ") || "Any"} · {budgetLabel(item.budgetMin, item.budgetMax, item.intent)} ·{" "}
                         {item.localities.join(", ") || "Any area"}
                       </span>
                     </span>
@@ -109,7 +109,7 @@ export default async function TodayPage() {
                         {lead.code} · {lead.contactName}
                       </span>
                       <span className="block truncate text-xs text-ink-muted">
-                        {lead.intent === "Rent" ? "Rent out" : "Sell"} · {lead.propertyType || "Type?"} · {lead.locality || lead.locationText}
+                        {ownerIntentPhrase(lead.intent)} · {lead.propertyType || "Type?"} · {lead.locality || lead.locationText}
                       </span>
                     </span>
                     <span className="shrink-0 text-xs text-ink-muted">{relativeTime(lead.createdAt, now)}</span>

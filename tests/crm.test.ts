@@ -66,6 +66,40 @@ describe("owner leads", () => {
     assert.ok(actions.includes("convert_additional"));
   });
 
+  it("keeps a lease as a lease and never turns a sale into a rental listing", async () => {
+    const db = await setup();
+    const sale = await createOwnerLead(
+      db,
+      actor,
+      owner,
+      { intent: "Sale", propertyType: "House", locality: "Sedam Road", locationText: "", expectedPrice: 4500000, notes: "", priority: "Warm" },
+      parseSourceInput({ channel: "phone" }),
+      NOW,
+    );
+    const sold = await convertOwnerLead(db, actor, sale, { now: NOW, listing: "Rent" });
+    assert.equal(sold.listing, "Sale");
+    assert.equal(sold.priceSuffix, "");
+
+    const lease = await createOwnerLead(
+      db,
+      actor,
+      { name: "Lease Owner", phone: "98450 22222" },
+      { intent: "Lease", propertyType: "Commercial", locality: "Ring Road", locationText: "", expectedPrice: 80000, notes: "", priority: "Warm" },
+      parseSourceInput({ channel: "phone" }),
+      NOW,
+    );
+    await assert.rejects(convertOwnerLead(db, actor, lease, { now: NOW }), /lease/);
+    assert.equal((await getOwnerLead(db, lease.id))?.intent, "Lease");
+    assert.equal((await getOwnerLead(db, lease.id))?.status, "New");
+    const drafted = await convertOwnerLead(db, actor, lease, { now: NOW, listing: "Rent" });
+    assert.equal(drafted.listing, "Rent");
+    assert.equal(drafted.priceSuffix, "/month");
+    assert.match(drafted.internalNotes, /lease/);
+    assert.equal((await getOwnerLead(db, lease.id))?.intent, "Lease");
+    const visible = await db.prepare("SELECT COUNT(*) AS n FROM public_properties").first<{ n: number }>();
+    assert.equal(visible?.n, 0);
+  });
+
   it("will not convert a lead marked not interested", async () => {
     const db = await setup();
     const lead = await ownerLead(db);

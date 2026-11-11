@@ -91,9 +91,30 @@ export function formatInr(value: number | null | undefined): string {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
-export function budgetLabel(min: number | null, max: number | null): string {
-  if (min && max) return `${formatInr(min)} – ${formatInr(max)}`;
-  if (max) return `Up to ${formatInr(max)}`;
-  if (min) return `From ${formatInr(min)}`;
-  return "Budget not given";
+/**
+ * A requirement stores one range. Buy means a purchase price. Rent means
+ * monthly rent. Callers that know the intent must pass it, so a screen, a
+ * filter and a future match never treat the two as the same kind of money.
+ */
+export function ownerIntentPhrase(intent: string): string {
+  if (intent === "Rent") return "Rent out";
+  if (intent === "Lease") return "Lease";
+  if (intent === "Sale") return "Sell";
+  return intent;
+}
+
+export function ownerPriceLabel(intent: string): string {
+  if (intent === "Rent") return "Expected monthly rent";
+  if (intent === "Lease") return "Expected lease amount";
+  if (intent === "Sale") return "Expected sale price";
+  return "Expected price";
+}
+
+export function budgetLabel(min: number | null, max: number | null, intent?: "Rent" | "Buy"): string {
+  const prefix = intent === "Buy" ? "Purchase " : intent === "Rent" ? "Monthly rent " : "";
+  const empty = intent === "Buy" ? "Purchase budget not given" : intent === "Rent" ? "Monthly rent not given" : "Budget not given";
+  if (min && max) return `${prefix}${formatInr(min)} – ${formatInr(max)}`;
+  if (max) return `${prefix}up to ${formatInr(max)}`;
+  if (min) return `${prefix}from ${formatInr(min)}`;
+  return empty;
 }

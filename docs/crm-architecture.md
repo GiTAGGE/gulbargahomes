@@ -105,10 +105,11 @@ runner lives in `lib/db/migrations.ts`, records each version in
 | 3 | `admin_and_audit` | 0 | `admin_users`, append-only `audit_log` (with UPDATE/DELETE-blocking triggers) |
 | 4 | `crm_core` | 1 | `lead_sources`, `contacts`, `owner_leads`, `demand_requirements`, `activities`, `followups` |
 | 5 | `meta_lead_ads` | 1 ext. | Meta connection, forms, webhook deliveries, ingestion queue + history, import jobs, `ad_entities`, `ad_spend_daily`, `campaign_lead_funnel` view; attribution columns on `lead_sources`. See [`meta-lead-ads.md`](meta-lead-ads.md) |
-| 6 | `matching` | 2 | `matches`, `match_runs` |
-| 7 | `visits_and_deals` | 3 | `site_visits`, `deals` |
-| 8 | `messaging` | 3 | `message_channels`, `messages` (WhatsApp Cloud API + Business App coexistence) |
-| 9 | `campaign_spend` | 4 | spend import into `ad_spend_daily`, CSV `lead_imports` / `lead_import_rows` |
+| 6 | `meta_intent_decision` | 1 ext. | `intent_override`, `resolved_by`, `resolved_at` on `meta_lead_ingestions`. Staff choice for a mixed or ambiguous lead. Additive; not applied to production until this code is deployed. |
+| 7 | `matching` | 2 | `matches`, `match_runs` (planned) |
+| 8 | `visits_and_deals` | 3 | `site_visits`, `deals` (planned) |
+| 9 | `messaging` | 3 | `message_channels`, `messages` (planned) |
+| 10 | `campaign_spend` | 4 | spend import into `ad_spend_daily`, CSV `lead_imports` / `lead_import_rows` (planned) |
 
 ### 3.1 `properties` (extended, Phase 0)
 

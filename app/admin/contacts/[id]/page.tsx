@@ -8,7 +8,7 @@ import { TimelinePanel } from "@/components/admin/crm-panels";
 import { HistoryList } from "@/components/admin/history-list";
 import { Card, Empty, Pill } from "@/components/admin/ui";
 import { listAudit } from "@/lib/admin/audit";
-import { availabilityTone, bandTone, budgetLabel, publicationTone, verificationTone } from "@/lib/admin/format";
+import { availabilityTone, bandTone, budgetLabel, ownerIntentPhrase, publicationTone, verificationTone } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities } from "@/lib/crm/activity";
@@ -47,7 +47,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                 {leads.map((lead) => (
                   <li key={lead.id} className="flex items-center gap-2 py-2">
                     <Link href={`/admin/owner-leads/${lead.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-800 hover:underline">
-                      {lead.code} · {lead.intent === "Rent" ? "Rent out" : "Sell"} {lead.propertyType} in {lead.locality || lead.locationText}
+                      {lead.code} · {ownerIntentPhrase(lead.intent)} {lead.propertyType} in {lead.locality || lead.locationText}
                     </Link>
                     <Pill tone="stone">{lead.status}</Pill>
                   </li>
@@ -86,7 +86,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                   <li key={item.id} className="flex items-center gap-2 py-2">
                     <Pill tone={bandTone(item.intentScore.band)}>{item.intentScore.score}</Pill>
                     <Link href={`/admin/requirements/${item.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-800 hover:underline">
-                      {item.code} · {item.intent} · {budgetLabel(item.budgetMin, item.budgetMax)}
+                      {item.code} · {item.intent} · {budgetLabel(item.budgetMin, item.budgetMax, item.intent)}
                     </Link>
                     <Pill tone="stone">{item.status}</Pill>
                   </li>
