@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { SyncNamesButton } from "@/components/admin/sync-names-button";
 import { Card, Empty, Pill, Stat } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
@@ -61,6 +62,7 @@ export default async function CampaignsPage({
         Which Meta campaigns produce genuine owners, buyers and tenants. A form submission stays pending until someone
         confirms it. Spend is shown only when it has been imported.
       </p>
+      {caps.manageIntegrations && <SyncNamesButton />}
 
       <form action="/admin/campaigns" className="mb-4 grid gap-3 rounded-2xl border border-brand-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-xs font-semibold text-ink">

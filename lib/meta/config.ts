@@ -21,7 +21,7 @@ export const REQUIRED_SCOPES = [
 
 /** Asked for only when the super admin ticks them on Connect. Ingestion works without either. */
 export const OPTIONAL_SCOPES = {
-  ads_read: "Campaign, ad set and ad names on each lead (ids are stored either way)",
+  ads_read: "Read campaign, ad set and ad names for Sync names. Ids are stored either way. This is not ads_management.",
   business_management: "Only if the Page is reachable solely through a Business portfolio and does not appear otherwise",
 } as const;
 export type OptionalScope = keyof typeof OPTIONAL_SCOPES;

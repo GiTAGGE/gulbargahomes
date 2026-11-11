@@ -381,6 +381,18 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
       return { ...toForm(raw), pageId: String(page.id ?? "") };
     },
 
+    /**
+     * Read one campaign, ad set or ad by the id already stored on a lead.
+     * `fields=id,name` is a Marketing API read. It does not ask for spend.
+     */
+    async readMarketingObject(id: string, token: string): Promise<{ id: string; name: string }> {
+      const raw = await request<{ id?: string; name?: string }>(`/${encodeURIComponent(id)}`, {
+        token,
+        query: { fields: "id,name" },
+      });
+      return { id: String(raw.id ?? id), name: String(raw.name ?? "").trim().slice(0, 200) };
+    },
+
     async getLead(leadgenId: string, pageToken: string, options: LeadFieldOptions = {}): Promise<MetaLead> {
       const fetchLead = (withAdFields: boolean) =>
         request<Record<string, unknown>>(`/${encodeURIComponent(leadgenId)}`, {

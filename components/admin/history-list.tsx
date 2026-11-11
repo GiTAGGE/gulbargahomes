@@ -35,6 +35,7 @@ const ACTION_LABEL: Record<string, string> = {
   followup_open: "Follow-up reopened",
   login: "Signed in",
   backfill: "Brought into the new inventory",
+  sync_campaign_names: "Synced campaign names",
 };
 
 const FIELD_LABEL: Record<string, string> = {

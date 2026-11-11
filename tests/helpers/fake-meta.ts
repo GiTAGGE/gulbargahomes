@@ -33,6 +33,12 @@ export class FakeMeta {
   scopes = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
   /** Simulates a token without advertiser access: ad-level lead fields are refused. */
   refuseAdFields = false;
+  /** Campaign, ad set and ad nodes returned by a Marketing API name read. */
+  objects: { id: string; name: string }[] = [];
+  /** `GET /{id}?fields=id,name` is refused. Lead field reads are unchanged. */
+  refuseMarketingRead = false;
+  /** These ids answer with a rate limit during a name sync. */
+  rateLimitIds = new Set<string>();
   /** Forms Meta knows about that belong to a different Page. */
   foreignForms: FakeForm[] = [];
 
@@ -103,6 +109,17 @@ export class FakeMeta {
       return json({ data: page.map(pick), paging: { cursors: { after: String(after + limit) }, ...(next ? { next: "https://graph/next" } : {}) } });
     }
     const id = path.slice(1);
+    if (this.rateLimitIds.has(id)) {
+      return json({ error: { message: "Application request limit reached", code: 4 } }, 400);
+    }
+    const named = this.objects.find((item) => item.id === id);
+    const nameOnly = fields.length > 0 && fields.every((field) => field === "id" || field === "name");
+    if (named && nameOnly) {
+      if (this.refuseMarketingRead) {
+        return json({ error: { message: "(#200) Requires ads_read permission to access this object", code: 200 } }, 403);
+      }
+      return json({ id: named.id, name: named.name });
+    }
     const lead = this.leads.find((item) => item.id === id);
     if (lead) return json(pick(lead));
     const form = this.forms.find((item) => item.id === id);

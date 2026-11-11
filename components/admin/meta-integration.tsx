@@ -303,6 +303,13 @@ function ConnectionCard({
             ))}
           </fieldset>
         )}
+        {connected && !connection.scopes.includes("ads_read") && (
+          <Notice tone="warn">
+            Campaign, ad set and ad names stay blank until this connection has ads_read. Tick ads_read under Optional on next
+            connect and reconnect. Sync names reads those ids. It does not re-import leads, does not request ads_management, and
+            does not import spend.
+          </Notice>
+        )}
         {checks && (
           <ul className="space-y-1 rounded-xl bg-surface-muted/60 p-3 text-sm">
             {checks.map((check) => (
@@ -325,6 +332,22 @@ function ConnectionCard({
               }}
             >
               {busy === "sync" ? "Refreshing…" : "Refresh forms"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={Boolean(busy) || !connected}
+              onClick={async () => {
+                const result = await act("sync_names", API, "POST", { action: "sync_names" });
+                if (result.data) {
+                  setMessage({
+                    tone: result.data.incomplete ? "warn" : "ok",
+                    text: String(result.data.message ?? "Campaign names synced."),
+                  });
+                }
+              }}
+            >
+              {busy === "sync_names" ? "Syncing names…" : "Sync names"}
             </button>
             <button
               type="button"
