@@ -20,6 +20,7 @@ import {
   type Priority,
 } from "./options";
 import { updateVersionedRecord } from "./records";
+import { ownerReviewAction, storedFromDecision, storedReview, type ReviewDecision, type StoredReview } from "./review";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
 
 export type OwnerLead = {
@@ -42,7 +43,7 @@ export type OwnerLead = {
   notes: string;
   status: OwnerLeadStatus;
   statusReason: string;
-  roleReview: "" | "misclassified";
+  roleReview: StoredReview;
   roleReviewNote: string;
   priority: Priority;
   assignedTo: string | null;
@@ -119,7 +120,7 @@ function toLead(row: OwnerLeadRow): OwnerLead {
     notes: row.notes,
     status: oneOf(row.status, OWNER_LEAD_STATUSES, "New"),
     statusReason: row.status_reason,
-    roleReview: row.role_review === "misclassified" ? "misclassified" : "",
+    roleReview: storedReview(row.role_review),
     roleReviewNote: row.role_review_note ?? "",
     priority: oneOf(row.priority, PRIORITIES, "Warm"),
     assignedTo: row.assigned_to,
@@ -146,8 +147,8 @@ export async function listOwnerLeads(
     q?: string;
     contactId?: string;
     formId?: string;
-    /** "misclassified" is the dedicated list. "any" keeps marked leads in a history view. */
-    roleReview?: "misclassified" | "any";
+    /** A named review is that list. "any" keeps marked leads in a history view. */
+    roleReview?: "misclassified" | "unqualified" | "any";
     limit?: number;
     offset?: number;
   } = {},
@@ -164,10 +165,10 @@ export async function listOwnerLeads(
   if (filter.status === "closed") {
     conditions.push("l.status IN ('Not interested', 'Unreachable', 'Duplicate', 'Invalid')");
   }
-  if (filter.roleReview === "misclassified") {
-    conditions.push("l.role_review = 'misclassified'");
+  if (filter.roleReview === "misclassified" || filter.roleReview === "unqualified") {
+    conditions.push(`l.role_review = '${filter.roleReview}'`);
   } else if (filter.roleReview !== "any" && !filter.q?.trim()) {
-    conditions.push("l.role_review != 'misclassified'");
+    conditions.push("l.role_review NOT IN ('misclassified', 'unqualified')");
   }
   if (filter.contactId) add("l.contact_id = ?", filter.contactId);
   if (filter.formId) add("s.meta_form_id = ?", filter.formId);
@@ -342,26 +343,27 @@ export async function updateOwnerLead(
 }
 
 /**
- * Records that the original owner classification was wrong, or restores it.
+ * Records a staff quality decision on an owner lead.
+ * Empty stays pending. Genuine is only stored when someone confirms it.
  * The lead status, Meta source and any buyer or tenant requirement stay as they are.
- * The Owner badge remains while any of this person's leads is still an owner lead.
+ * The Owner badge remains while any of this person's leads is pending or confirmed.
  */
 export async function setOwnerLeadRoleReview(
   db: SqlDb,
   actor: AuditActor,
   lead: OwnerLead,
-  decision: "misclassified" | "owner",
+  decision: ReviewDecision,
   noteInput: unknown,
   options: { now: string; expectedVersion?: number },
 ): Promise<OwnerLead> {
   assertVersion(options.expectedVersion, lead.rowVersion);
-  const review = decision === "misclassified" ? "misclassified" : "";
+  const review = storedFromDecision(decision);
   const note = text(noteInput, 300);
   if (note.length < 2) throw new HttpError(400, "Say why this classification changed.");
   if (lead.roleReview === review && lead.roleReviewNote === note) return lead;
 
   const stillOwner = `CASE WHEN EXISTS (
-    SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review != 'misclassified'
+    SELECT 1 FROM owner_leads WHERE contact_id = contacts.id AND role_review NOT IN ('misclassified', 'unqualified')
   ) THEN 1 ELSE 0 END`;
   const statements: SqlStatement[] = [
     db
@@ -375,7 +377,7 @@ export async function setOwnerLeadRoleReview(
       entityType: "owner_lead",
       entityId: lead.id,
       entityLabel: `${lead.code} ${lead.contactName}`,
-      action: review === "misclassified" ? "mark_not_owner" : "restore_owner_role",
+      action: ownerReviewAction(decision),
       changes: diffFields(
         { role_review: lead.roleReview, role_review_note: lead.roleReviewNote },
         { role_review: review, role_review_note: note },
@@ -420,8 +422,14 @@ export async function convertOwnerLead(
   lead: OwnerLead,
   options: { now: string; title?: string; listing?: "Rent" | "Sale" },
 ): Promise<InventoryProperty> {
-  if (lead.roleReview === "misclassified") {
-    throw new HttpError(400, "This person is marked not an owner. The lead stays on file and cannot become a property.");
+  if (lead.roleReview !== "genuine") {
+    const reason =
+      lead.roleReview === "misclassified"
+        ? "This person is marked not an owner. The lead stays on file and cannot become a property."
+        : lead.roleReview === "unqualified"
+          ? "This lead is marked not a genuine enquiry. It stays on file and cannot become a property."
+          : "This lead is still pending review. Confirm the person is a genuine owner before creating a property.";
+    throw new HttpError(400, reason);
   }
   if (["Not interested", "Duplicate", "Invalid"].includes(lead.status)) {
     throw new HttpError(400, `Reopen this lead before converting it (it is marked ${lead.status}).`);

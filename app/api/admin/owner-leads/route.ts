@@ -17,7 +17,14 @@ export async function GET(request: Request) {
     try {
       const leads = await listOwnerLeads(auth.db, {
         status: status === "all" || status === "not_owner" ? undefined : status,
-        roleReview: status === "all" || roleReview === "any" ? "any" : status === "not_owner" || roleReview === "misclassified" ? "misclassified" : undefined,
+        roleReview:
+          status === "all" || roleReview === "any"
+            ? "any"
+            : status === "not_owner" || roleReview === "misclassified"
+              ? "misclassified"
+              : status === "not_genuine" || roleReview === "unqualified"
+                ? "unqualified"
+                : undefined,
         q: url.searchParams.get("q") ?? undefined,
       });
     const canViewPhone = can(auth.admin.role, "contact.view_phone");

@@ -22,6 +22,13 @@ const ACTION_LABEL: Record<string, string> = {
   convert: "Converted to draft property",
   mark_not_owner: "Marked not an owner",
   restore_owner_role: "Owner classification restored",
+  confirm_owner: "Confirmed as a genuine owner",
+  mark_owner_unqualified: "Marked not a genuine enquiry",
+  mark_owner_pending: "Returned to pending review",
+  confirm_buyer: "Confirmed as a genuine buyer",
+  confirm_tenant: "Confirmed as a genuine tenant",
+  mark_requirement_unqualified: "Marked not a genuine enquiry",
+  mark_requirement_pending: "Returned to pending review",
   convert_additional: "Another property created from this lead",
   followup_done: "Follow-up done",
   followup_cancelled: "Follow-up cancelled",
@@ -34,6 +41,8 @@ const FIELD_LABEL: Record<string, string> = {
   status: "status",
   role_review: "classification",
   role_review_note: "classification note",
+  quality_review: "classification",
+  quality_review_note: "classification note",
   verification_status: "verification",
   publication_status: "publication",
   price: "price",
@@ -51,7 +60,15 @@ function actorName(entry: AuditEntry, names: Record<string, string>) {
   return entry.actorEmail;
 }
 
-function show(value: unknown): string {
+function show(value: unknown, field?: string): string {
+  if ((field === "role_review" || field === "quality_review") && (value === "" || value === null || value === undefined)) {
+    return "pending";
+  }
+  if (field === "role_review" || field === "quality_review") {
+    if (value === "genuine") return "genuine";
+    if (value === "misclassified") return "not an owner";
+    if (value === "unqualified") return "not a genuine enquiry";
+  }
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return formatDateTime(value);
   if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
@@ -76,7 +93,7 @@ export function HistoryList({ entries, names }: { entries: AuditEntry[]; names: 
                 {changes.slice(0, 8).map(([field, [before, after]]) => (
                   <li key={field}>
                     <span className="font-medium text-ink">{FIELD_LABEL[field] ?? field.replace(/_/g, " ")}</span>:{" "}
-                    {show(before)} → {show(after)}
+                    {show(before, field)} → {show(after, field)}
                   </li>
                 ))}
                 {changes.length > 8 && <li>and {changes.length - 8} more fields</li>}

@@ -1,6 +1,6 @@
 import { auditStatement, diffFields, type AuditActor } from "../admin/audit";
 import { HttpError, isUniqueViolation } from "../admin/errors";
-import { formatCode, newId, nextSequence, parseJson, type SqlDb, type SqlValue } from "../db/sql";
+import { changedRows, formatCode, newId, nextSequence, parseJson, type SqlDb, type SqlStatement, type SqlValue } from "../db/sql";
 import { canonicalLocalityName } from "../locality";
 import type { PropertyType } from "../types";
 import { resolveContact, type ContactInput } from "./contacts";
@@ -22,6 +22,13 @@ import {
   type Timeline,
 } from "./options";
 import { updateVersionedRecord } from "./records";
+import {
+  requirementReviewAction,
+  storedFromDecision,
+  storedReview,
+  type RequirementReviewDecision,
+  type StoredReview,
+} from "./review";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
 
 /**
@@ -82,6 +89,8 @@ export type Requirement = {
   rowVersion: number;
   idempotencyKey: string | null;
   originOwnerLeadId: string | null;
+  qualityReview: StoredReview;
+  qualityReviewNote: string;
   intentScore: IntentScore;
 };
 
@@ -127,6 +136,8 @@ type RequirementRow = {
   row_version: number;
   idempotency_key: string | null;
   origin_owner_lead_id: string | null;
+  quality_review: string | null;
+  quality_review_note: string | null;
 };
 
 const SELECT = `SELECT r.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
@@ -142,6 +153,7 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
   const localities = parseJson<string[]>(row.localities_json, []);
   const timeline = oneOf(row.timeline, TIMELINES, "Exploring");
   const status = oneOf(row.status, REQUIREMENT_STATUSES, "New");
+  const qualityReview = storedReview(row.quality_review);
   return {
     id: row.id,
     code: row.code,
@@ -184,6 +196,8 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     rowVersion: Number(row.row_version),
     idempotencyKey: row.idempotency_key,
     originOwnerLeadId: row.origin_owner_lead_id,
+    qualityReview: qualityReview === "misclassified" ? "" : qualityReview,
+    qualityReviewNote: row.quality_review_note ?? "",
     intentScore: intentScore(
       {
         timeline,
@@ -436,4 +450,52 @@ export async function updateRequirement(
     now: options.now,
   });
   return (await getRequirement(db, current.id))!;
+}
+
+/**
+ * Records whether a buyer or tenant requirement is genuine.
+ * Does not change its status, intent, or the Meta source it came from.
+ * An empty review stays pending until someone chooses.
+ */
+export async function setRequirementQuality(
+  db: SqlDb,
+  actor: AuditActor,
+  requirement: Requirement,
+  decision: RequirementReviewDecision,
+  noteInput: unknown,
+  options: { now: string; expectedVersion?: number },
+): Promise<Requirement> {
+  assertVersion(options.expectedVersion, requirement.rowVersion);
+  const review = storedFromDecision(decision);
+  const note = text(noteInput, 300);
+  if (note.length < 2) throw new HttpError(400, "Say why this classification changed.");
+  if (requirement.qualityReview === review && requirement.qualityReviewNote === note) return requirement;
+
+  const statements: SqlStatement[] = [
+    db
+      .prepare(
+        `UPDATE demand_requirements SET quality_review = ?1, quality_review_note = ?2, updated_at = ?3, updated_by = ?4, row_version = row_version + 1
+         WHERE id = ?5 AND row_version = ?6`,
+      )
+      .bind(review, note, options.now, actor.id, requirement.id, requirement.rowVersion),
+    auditStatement(db, {
+      actor,
+      entityType: "requirement",
+      entityId: requirement.id,
+      entityLabel: `${requirement.code} ${requirement.contactName}`,
+      action: requirementReviewAction(decision, requirement.intent),
+      changes: diffFields(
+        { quality_review: requirement.qualityReview, quality_review_note: requirement.qualityReviewNote },
+        { quality_review: review, quality_review_note: note },
+      ),
+      context: { contact_id: requirement.contactId, intent: requirement.intent },
+      at: options.now,
+      onlyIfPreviousChanged: true,
+    }),
+  ];
+  const results = await db.batch(statements);
+  if (changedRows(results[0]) === 0) {
+    throw new HttpError(409, "Someone else changed this requirement. Reload to see the latest version.");
+  }
+  return (await getRequirement(db, requirement.id))!;
 }

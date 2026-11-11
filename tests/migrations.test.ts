@@ -113,13 +113,15 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10]);
     const columns = await db.prepare("PRAGMA table_info(demand_requirements)").all<{ name: string }>();
     assert.ok(columns.results.some((column) => column.name === "idempotency_key"));
     assert.ok(columns.results.some((column) => column.name === "origin_owner_lead_id"));
     const leadColumns = await db.prepare("PRAGMA table_info(owner_leads)").all<{ name: string }>();
     assert.ok(leadColumns.results.some((column) => column.name === "role_review"));
     assert.ok(leadColumns.results.some((column) => column.name === "role_review_note"));
+    assert.ok(columns.results.some((column) => column.name === "quality_review"));
+    assert.ok(columns.results.some((column) => column.name === "quality_review_note"));
     const row = await db
       .prepare("SELECT status, intent_override, resolved_by, resolved_at FROM meta_lead_ingestions WHERE id = 'mli_existing'")
       .first<{ status: string; intent_override: string; resolved_by: string; resolved_at: string | null }>();

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { OWNER_LEAD_STATUSES, PRIORITIES, REQUIREMENT_STATUSES } from "@/lib/crm/options";
+import { reviewLabel, type RequirementReviewDecision, type ReviewDecision, type StoredReview } from "@/lib/crm/review";
 
 import { inputClass, labelClass } from "./ui";
 
@@ -35,7 +36,7 @@ export function OwnerLeadActions({
   priority: string;
   intent: string;
   rowVersion: number;
-  roleReview: "" | "misclassified";
+  roleReview: StoredReview;
   roleReviewNote: string;
   canEdit: boolean;
   canConvert: boolean;
@@ -45,6 +46,7 @@ export function OwnerLeadActions({
   const [nextStatus, setNextStatus] = useState(status);
   const [reason, setReason] = useState("");
   const [classificationNote, setClassificationNote] = useState("");
+  const [nextDecision, setNextDecision] = useState<ReviewDecision | "">("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -73,7 +75,7 @@ export function OwnerLeadActions({
     router.push(`/admin/properties/${data.property.slug}/edit`);
   }
 
-  async function classify(decision: "misclassified" | "owner") {
+  async function classify(decision: ReviewDecision) {
     setPending(decision);
     setError("");
     const response = await fetch(`/api/admin/owner-leads/${id}/classification`, {
@@ -85,14 +87,28 @@ export function OwnerLeadActions({
     setPending("");
     if (!response.ok) return setError(data.error || "That classification was not saved.");
     setClassificationNote("");
+    setNextDecision("");
     router.refresh();
   }
 
   const closing = ["Not interested", "Unreachable", "Duplicate", "Invalid"].includes(nextStatus);
-  const notOwner = roleReview === "misclassified";
+  const currentDecision: ReviewDecision = roleReview === "" ? "pending" : roleReview;
+  const ownerChoices: { value: ReviewDecision; label: string }[] = [
+    { value: "genuine", label: "Confirmed owner" },
+    { value: "misclassified", label: "Not an owner" },
+    { value: "unqualified", label: "Not a genuine enquiry" },
+    { value: "pending", label: "Pending review" },
+  ];
 
   return (
     <div className="space-y-4">
+      {canEdit && roleReview !== "genuine" && (
+        <p className="rounded-xl bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+          Confirm this person is a genuine owner before creating a property draft. Pending, not-an-owner and not-genuine
+          leads stay on file.
+        </p>
+      )}
+
       {canConvert && (
         <div className="rounded-xl bg-brand-50 p-3">
           <p className="text-sm font-semibold text-brand-900">{converted ? "Add another property" : "Ready to list?"}</p>
@@ -168,27 +184,43 @@ export function OwnerLeadActions({
 
       {canEdit && (
         <div className="space-y-2 border-t border-brand-50 pt-3">
-          <p className="text-sm font-semibold text-ink">{notOwner ? "Not an owner" : "Misclassified?"}</p>
+          <p className="text-sm font-semibold text-ink">Lead quality</p>
           <p className="text-xs text-ink-muted">
-            {notOwner
-              ? "This lead is kept, including its status and Meta source. It is not treated as a property owner."
-              : "Use this when the person wants to rent or buy, and is not listing a property. The lead, its status and the Meta source stay as they are."}
+            Now: {reviewLabel("owner", roleReview)}. An unanswered lead stays pending. Saving this does not change the status
+            or the Meta campaign, and the previous decision stays in the history.
           </p>
-          {notOwner && roleReviewNote && <p className="text-xs text-ink-muted">Note: {roleReviewNote}</p>}
+          {roleReviewNote && <p className="text-xs text-ink-muted">Latest note: {roleReviewNote}</p>}
+          <label className={labelClass}>
+            Change to
+            <select
+              value={nextDecision}
+              onChange={(event) => setNextDecision(event.target.value as ReviewDecision | "")}
+              className={inputClass}
+            >
+              <option value="">Choose</option>
+              {ownerChoices
+                .filter((choice) => choice.value !== currentDecision)
+                .map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+            </select>
+          </label>
           <textarea
             value={classificationNote}
             onChange={(event) => setClassificationNote(event.target.value)}
-            placeholder={notOwner ? "Why should this be an owner lead again?" : "What did the person confirm?"}
+            placeholder="Why? This note is required and kept."
             rows={2}
             className={inputClass}
           />
           <button
             type="button"
             className="btn-ghost w-full"
-            disabled={Boolean(pending)}
-            onClick={() => void classify(notOwner ? "owner" : "misclassified")}
+            disabled={Boolean(pending) || !nextDecision || classificationNote.trim().length < 2}
+            onClick={() => nextDecision && void classify(nextDecision)}
           >
-            {pending === "misclassified" || pending === "owner" ? "Saving…" : notOwner ? "Restore owner classification" : "Mark as not an owner"}
+            {pending === nextDecision && pending ? "Saving…" : "Save classification"}
           </button>
         </div>
       )}
@@ -228,11 +260,17 @@ export function RequirementActions({
   status,
   priorityOverride,
   rowVersion,
+  intent,
+  qualityReview,
+  qualityReviewNote,
 }: {
   id: string;
   status: string;
   priorityOverride: string;
   rowVersion: number;
+  intent: "Buy" | "Rent";
+  qualityReview: StoredReview;
+  qualityReviewNote: string;
 }) {
   const router = useRouter();
   const [nextStatus, setNextStatus] = useState(status);
@@ -240,6 +278,8 @@ export function RequirementActions({
   const [outcome, setOutcome] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+  const [classificationNote, setClassificationNote] = useState("");
+  const [nextDecision, setNextDecision] = useState<RequirementReviewDecision | "">("");
 
   async function save(body: Record<string, unknown>, key: string) {
     setPending(key);
@@ -252,11 +292,74 @@ export function RequirementActions({
     router.refresh();
   }
 
+  async function classify(decision: RequirementReviewDecision) {
+    setPending(decision);
+    setError("");
+    const response = await fetch(`/api/admin/requirements/${id}/classification`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision, note: classificationNote, rowVersion }),
+    });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    setPending("");
+    if (!response.ok) return setError(data.error || "That classification was not saved.");
+    setClassificationNote("");
+    setNextDecision("");
+    router.refresh();
+  }
+
   const needsOutcome = nextStatus === "Converted" || nextStatus === "Lost";
+  const currentDecision: RequirementReviewDecision = qualityReview === "" ? "pending" : qualityReview === "genuine" ? "genuine" : "unqualified";
+  const kind = intent === "Buy" ? "buyer" : "tenant";
+  const requirementChoices: { value: RequirementReviewDecision; label: string }[] = [
+    { value: "genuine", label: intent === "Buy" ? "Genuine buyer" : "Genuine tenant" },
+    { value: "unqualified", label: "Not a genuine enquiry" },
+    { value: "pending", label: "Pending review" },
+  ];
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
+        <p className="text-sm font-semibold text-ink">Lead quality</p>
+        <p className="text-xs text-ink-muted">
+          Now: {reviewLabel(kind, qualityReview)}. This does not change the stage or the Meta campaign. The previous decision
+          stays in the history.
+        </p>
+        {qualityReviewNote && <p className="text-xs text-ink-muted">Latest note: {qualityReviewNote}</p>}
+        <label className={labelClass}>
+          Change to
+          <select
+            value={nextDecision}
+            onChange={(event) => setNextDecision(event.target.value as RequirementReviewDecision | "")}
+            className={inputClass}
+          >
+            <option value="">Choose</option>
+            {requirementChoices
+              .filter((choice) => choice.value !== currentDecision)
+              .map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+          </select>
+        </label>
+        <textarea
+          value={classificationNote}
+          onChange={(event) => setClassificationNote(event.target.value)}
+          placeholder="Why? This note is required and kept."
+          rows={2}
+          className={inputClass}
+        />
+        <button
+          type="button"
+          className="btn-ghost w-full"
+          disabled={Boolean(pending) || !nextDecision || classificationNote.trim().length < 2}
+          onClick={() => nextDecision && void classify(nextDecision)}
+        >
+          {pending === nextDecision && pending ? "Saving…" : "Save classification"}
+        </button>
+      </div>
+      <div className="space-y-2 border-t border-brand-50 pt-3">
         <label className={labelClass}>
           Stage
           <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)} className={inputClass}>

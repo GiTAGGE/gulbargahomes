@@ -45,6 +45,7 @@ async function seed() {
     parseSourceInput({ channel: "manual" }),
     NOW,
   );
+  db.raw.prepare("UPDATE demand_requirements SET quality_review_note = 'Shanta is a buyer' WHERE id = ?").run(requirement.id);
   await logActivity(
     db,
     actor,

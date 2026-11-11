@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 import { authorize, errorResponse, jsonError, readJson } from "@/lib/admin/route";
 import { expectedVersion } from "@/lib/crm/input";
 import { getOwnerLead, setOwnerLeadRoleReview } from "@/lib/crm/owner-leads";
+import { REVIEW_DECISIONS, type ReviewDecision } from "@/lib/crm/review";
 import { nowIso } from "@/lib/db/sql";
 
 type Context = { params: Promise<{ id: string }> };
 
-/** Marks an owner lead as not an owner, or restores that classification. Does not change lead status. */
+/** Records an owner-lead quality decision. Empty stays pending. Does not change lead status or the Meta source. */
 export async function POST(request: Request, context: Context) {
   const auth = await authorize(request, "crm.edit");
   if ("response" in auth) return auth.response;
@@ -16,8 +17,10 @@ export async function POST(request: Request, context: Context) {
     const current = await getOwnerLead(auth.db, id);
     if (!current) return jsonError(404, "Owner lead not found.");
     const body = await readJson(request);
-    const decision = body.decision === "misclassified" || body.decision === "owner" ? body.decision : null;
-    if (!decision) return jsonError(400, "Choose whether this person is an owner.");
+    const decision = (REVIEW_DECISIONS as readonly string[]).includes(String(body.decision))
+      ? (body.decision as ReviewDecision)
+      : null;
+    if (!decision) return jsonError(400, "Choose a classification.");
     const lead = await setOwnerLeadRoleReview(auth.db, auth.admin, current, decision, body.note, {
       now: nowIso(),
       expectedVersion: expectedVersion(body.rowVersion),
