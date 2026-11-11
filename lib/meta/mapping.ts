@@ -20,6 +20,27 @@ import {
 export const FORM_CLASSIFICATIONS = ["unclassified", "owner", "tenant", "buyer", "mixed", "ignore"] as const;
 export type FormClassification = (typeof FORM_CLASSIFICATIONS)[number];
 
+/**
+ * Forms the six-hour reconciliation scan may read. A mixed form is included
+ * because each lead is resolved from its Buy or Rent answer. Unclassified and
+ * Ignore stay out, with no form id hardcoded.
+ */
+export const RECONCILE_CLASSIFICATIONS = ["owner", "tenant", "buyer", "mixed"] as const satisfies readonly FormClassification[];
+
+/**
+ * Forms a staff member may select for a historical import. Mixed stays off
+ * this list so a classified copy is not pulled in with a date range.
+ */
+export const HISTORICAL_IMPORT_CLASSIFICATIONS = ["owner", "tenant", "buyer"] as const satisfies readonly FormClassification[];
+
+export function isReconcileClassification(value: string): value is (typeof RECONCILE_CLASSIFICATIONS)[number] {
+  return (RECONCILE_CLASSIFICATIONS as readonly string[]).includes(value);
+}
+
+export function isHistoricalImportClassification(value: string): value is (typeof HISTORICAL_IMPORT_CLASSIFICATIONS)[number] {
+  return (HISTORICAL_IMPORT_CLASSIFICATIONS as readonly string[]).includes(value);
+}
+
 export const CLASSIFICATION_LABEL: Record<FormClassification, string> = {
   unclassified: "Not classified",
   owner: "Owner property enquiry → owner lead",

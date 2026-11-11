@@ -5,6 +5,7 @@ import { markTokenRejected, readPageToken } from "./connection";
 import { getStoredForm, listForms } from "./forms";
 import { MetaApiError, redactTokens } from "./graph";
 import { enqueueLead, processDue, purgeExpiredQueueData, type MetaRuntime } from "./ingest";
+import { isHistoricalImportClassification, isReconcileClassification } from "./mapping";
 
 export const IMPORT_STATUSES = ["scanning", "processing", "paused", "completed", "cancelled"] as const;
 export type ImportStatus = (typeof IMPORT_STATUSES)[number];
@@ -115,7 +116,7 @@ export async function createImportJob(
   for (const formId of input.formIds) {
     const form = await getStoredForm(db, formId);
     if (!form) throw new HttpError(400, "One of the forms is not on the connected Page. Refresh forms first.");
-    if (!["owner", "tenant", "buyer"].includes(form.classification)) {
+    if (!isHistoricalImportClassification(form.classification)) {
       throw new HttpError(400, `Classify “${form.name}” before importing its leads.`);
     }
   }
@@ -259,7 +260,9 @@ const RECONCILE_WINDOW_HOURS = 48;
 
 /**
  * Catches leads whose webhook never arrived: every few hours, list the last
- * two days of leads on each classified form and queue any we have not seen.
+ * two days of leads on each owner, tenant, buyer and mixed form and queue any
+ * we have not seen. Unclassified and Ignore forms are not listed. Historical
+ * import uses a narrower list and does not accept mixed forms.
  */
 export async function reconcileRecentLeads(runtime: MetaRuntime, options: { force?: boolean } = {}): Promise<{ checked: number; queued: number } | null> {
   const { db } = runtime;
@@ -270,7 +273,7 @@ export async function reconcileRecentLeads(runtime: MetaRuntime, options: { forc
   const token = await readPageToken(db, runtime.tokenKey);
   if (!token) return null;
 
-  const forms = (await listForms(db, runtime.pageId)).filter((form) => ["owner", "tenant", "buyer"].includes(form.classification));
+  const forms = (await listForms(db, runtime.pageId)).filter((form) => isReconcileClassification(form.classification));
   const since = new Date(now.getTime() - RECONCILE_WINDOW_HOURS * 3_600_000).toISOString();
   let checked = 0;
   let queued = 0;

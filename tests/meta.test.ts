@@ -21,7 +21,15 @@ import {
   resolveIngestionIntent,
   type MetaRuntime,
 } from "../lib/meta/ingest";
-import { alignBudgetTargets, mapLead, suggestMapping, suggestOwnerIntent, type FormClassification } from "../lib/meta/mapping";
+import {
+  alignBudgetTargets,
+  isHistoricalImportClassification,
+  isReconcileClassification,
+  mapLead,
+  suggestMapping,
+  suggestOwnerIntent,
+  type FormClassification,
+} from "../lib/meta/mapping";
 import { getIngestionDetail, ingestionStats } from "../lib/meta/overview";
 import { selectPage, testConnection } from "../lib/meta/setup";
 import { parseBhk, parseDemandIntent, parseMoney, parseOwnerIntent, parseTimeline, splitLocalities } from "../lib/meta/values";
@@ -591,6 +599,134 @@ describe("historical import and reconciliation", () => {
     await processDue(ctx.runtime);
     assert.equal((await ingestion(ctx.db, missed.id))!.status, "done");
     assert.equal(await reconcileRecentLeads(ctx.runtime), null);
+  });
+
+  it("reconciliation imports recent mixed buy and rent leads, holds an ambiguous answer, and skips unclassified forms", async () => {
+    const ctx = await setup();
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const copy: FakeForm = {
+      id: "900000000000012",
+      name: "Gulbarga Buyer & Renter-copy",
+      questions: MIXED_FORM.questions,
+    };
+    await classifyForm(ctx, copy, "unclassified");
+
+    const buyer = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Reconciled Buyer",
+      phone: "9711111111",
+      "nimge_yen_beku?": "Buy madbeku",
+      "buy_madbekadre_nimma_budget_eshtu?": "40-60 lakh",
+      "rent_ge_monthly_budget_eshtu?": "10-20 thousand",
+      "yava_type_property_beku?": "Land",
+      "yava_area_alli_property_beku?": "Sedam Road",
+    });
+    const tenant = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Reconciled Tenant",
+      phone: "9722222222",
+      "nimge_yen_beku?": "Rent ge beku",
+      "buy_madbekadre_nimma_budget_eshtu?": "40-60 lakh",
+      "rent_ge_monthly_budget_eshtu?": "10-20 thousand",
+      "yava_type_property_beku?": "Flat",
+    });
+    const ambiguous = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Both",
+      phone: "9733333333",
+      "nimge_yen_beku?": "buy or rent",
+    });
+    const oldLead = addLead(
+      ctx.meta,
+      MIXED_FORM,
+      { full_name: "Too Old", phone: "9744444444", "nimge_yen_beku?": "Buy madbeku" },
+      { created_time: "2026-11-01T08:00:00+0000" },
+    );
+    const excluded = addLead(ctx.meta, copy, {
+      full_name: "Copy Lead",
+      phone: "9755555555",
+      "nimge_yen_beku?": "Buy madbeku",
+    });
+
+    const result = await reconcileRecentLeads(ctx.runtime, { force: true });
+    assert.deepEqual(result, { checked: 3, queued: 3 });
+    await processDue(ctx.runtime);
+
+    const purchase = (await getRequirement(ctx.db, (await ingestion(ctx.db, buyer.id))!.entity_id))!;
+    assert.equal(purchase.intent, "Buy");
+    assert.deepEqual([purchase.budgetMin, purchase.budgetMax], [4_000_000, 6_000_000]);
+    assert.deepEqual(matchableBudget(purchase), { basis: "purchase", unit: "inr_total", min: 4_000_000, max: 6_000_000 });
+    const buyerSource = (await getSource(ctx.db, purchase.sourceId))!;
+    assert.equal(buyerSource.ingestionOrigin, "reconciliation");
+    const buyerAnswers = buyerSource.rawPayload.answers as { key: string; value: string }[];
+    assert.equal(buyerAnswers.find((answer) => answer.key.startsWith("rent_ge_monthly"))?.value, "10-20 thousand");
+
+    const rental = (await getRequirement(ctx.db, (await ingestion(ctx.db, tenant.id))!.entity_id))!;
+    assert.equal(rental.intent, "Rent");
+    assert.deepEqual([rental.budgetMin, rental.budgetMax], [10_000, 20_000]);
+    assert.deepEqual(matchableBudget(rental), { basis: "monthly", unit: "inr_per_month", min: 10_000, max: 20_000 });
+    assert.equal((await getSource(ctx.db, rental.sourceId))!.ingestionOrigin, "reconciliation");
+
+    const held = (await ingestion(ctx.db, ambiguous.id))!;
+    assert.equal(held.status, "needs_review");
+    assert.equal(held.last_error_kind, "intent_demand");
+    assert.equal(held.entity_id, null);
+    assert.equal(await ingestion(ctx.db, oldLead.id), null);
+    assert.equal(await ingestion(ctx.db, excluded.id), null);
+
+    const requirements = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    const owners = await ctx.db.prepare("SELECT COUNT(*) AS n FROM owner_leads").first<{ n: number }>();
+    const properties = await ctx.db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>();
+    assert.equal(requirements?.n, 2);
+    assert.equal(owners?.n, 0);
+    assert.equal(properties?.n, 0);
+    assert.equal(isReconcileClassification("mixed"), true);
+    assert.equal(isReconcileClassification("unclassified"), false);
+  });
+
+  it("does not create a second requirement when reconciliation sees a webhook lead", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const lead = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Already In",
+      phone: "9766666666",
+      "nimge_yen_beku?": "Buy madbeku",
+      "buy_madbekadre_nimma_budget_eshtu?": "40-60 lakh",
+    });
+    await deliver(ctx, webhookBody(lead));
+    const first = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(first.status, "done");
+    assert.equal(first.entity_type, "requirement");
+
+    const result = await reconcileRecentLeads(ctx.runtime, { force: true });
+    assert.deepEqual(result, { checked: 1, queued: 0 });
+    await processDue(ctx.runtime);
+
+    const again = (await ingestion(ctx.db, lead.id))!;
+    assert.equal(again.status, "done");
+    assert.equal(again.entity_id, first.entity_id);
+    const requirements = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    const owners = await ctx.db.prepare("SELECT COUNT(*) AS n FROM owner_leads").first<{ n: number }>();
+    assert.equal(requirements?.n, 1);
+    assert.equal(owners?.n, 0);
+  });
+
+  it("refuses a historical import of a mixed form", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    await assert.rejects(
+      createImportJob(
+        ctx.db,
+        admin,
+        { formIds: [MIXED_FORM.id], since: "2026-10-01T00:00:00Z", until: "2026-11-10T00:00:00Z" },
+        ctx.clock.iso(),
+      ),
+      /Classify/,
+    );
+    assert.equal(isHistoricalImportClassification("mixed"), false);
+    assert.equal(isHistoricalImportClassification("owner"), true);
+    assert.equal(isHistoricalImportClassification("tenant"), true);
+    assert.equal(isHistoricalImportClassification("buyer"), true);
+    assert.equal(isHistoricalImportClassification("unclassified"), false);
+    const jobs = await ctx.db.prepare("SELECT COUNT(*) AS n FROM meta_import_jobs").first<{ n: number }>();
+    assert.equal(jobs?.n, 0);
   });
 });
 

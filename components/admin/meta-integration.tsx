@@ -16,6 +16,7 @@ import {
   MAPPING_TARGETS,
   TARGET_LABEL,
   alignBudgetTargets,
+  isHistoricalImportClassification,
   suggestMapping,
   suggestOwnerIntent,
   type FieldMapping,
@@ -744,7 +745,7 @@ const ISO_DAY = (date: Date) => date.toISOString().slice(0, 10);
 
 function ImportCard({ canManage, forms, jobs, retentionDays, connection, busy, act }: Props & { busy: string; act: Act }) {
   const router = useRouter();
-  const importable = forms.filter((form) => ["owner", "tenant", "buyer"].includes(form.classification));
+  const importable = forms.filter((form) => isHistoricalImportClassification(form.classification));
   const [formIds, setFormIds] = useState<string[]>([]);
   const today = new Date();
   const [since, setSince] = useState(ISO_DAY(new Date(today.getTime() - 30 * 86_400_000)));
