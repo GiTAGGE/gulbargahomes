@@ -66,7 +66,7 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
                       ? `${requirement.bhkMax}`
                       : `${requirement.bhkMin}–${requirement.bhkMax}`}
               </Field>
-              <Field label="Budget">{budgetLabel(requirement.budgetMin, requirement.budgetMax)}</Field>
+              <Field label="Budget">{budgetLabel(requirement.budgetMin, requirement.budgetMax, requirement.intent)}</Field>
               <Field label="Localities">
                 {requirement.localities.join(", ") || "Any"}
                 {requirement.localityFlexible ? " (nearby OK)" : ""}

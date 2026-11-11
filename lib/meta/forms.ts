@@ -3,6 +3,7 @@ import { HttpError } from "../admin/errors";
 import { OWNER_INTENTS, type OwnerIntent } from "../crm/options";
 import { changedRows, parseJson, type SqlDb } from "../db/sql";
 import type { MetaForm, MetaQuestion } from "./graph";
+import { ownerIntentsIn } from "./values";
 import {
   FORM_CLASSIFICATIONS,
   isMappingTarget,
@@ -157,10 +158,25 @@ export function parseFormSettings(value: unknown, form: StoredForm): FormSetting
     : Object.keys(form.mapping).length
       ? form.mapping
       : suggestMapping(form.questions, classification);
-  if (["owner", "tenant", "buyer"].includes(classification) && form.questions.length > 0) {
+  if (["owner", "tenant", "buyer", "mixed"].includes(classification) && form.questions.length > 0) {
     const targets = new Set(Object.values(mapping));
-    const hasPhone = targets.has("phone") || form.questions.some((question) => question.key === "phone_number" && !(question.key in mapping));
+    const hasPhone = targets.has("phone") || form.questions.some((question) => (question.key === "phone_number" || question.key === "phone") && !(question.key in mapping));
     if (!hasPhone) throw new HttpError(400, "Map one question to Mobile. Leads without a mobile number cannot be imported.");
+    if (classification === "mixed" && !targets.has("intent")) {
+      throw new HttpError(400, "Map the question that asks whether they want to buy or rent.");
+    }
+    if (classification === "mixed" && targets.has("budget")) {
+      throw new HttpError(400, "On a buyer-or-tenant form, map each budget to Purchase budget or Monthly rental budget. One Budget target cannot tell them apart.");
+    }
+    if (classification === "owner") {
+      const splitsIntent = form.questions.some((question) => {
+        const options = question.options.map((option) => `${option.key} ${option.value}`).join(" ");
+        return ownerIntentsIn(options).length > 1 && mapping[question.key] !== "intent";
+      });
+      if (splitsIntent) {
+        throw new HttpError(400, "Map the question that asks sell, rent or lease to Rent / sale / buy. Otherwise a sale can be stored as a rent.");
+      }
+    }
   }
   return { classification, ownerIntent, mapping };
 }
@@ -180,7 +196,7 @@ export async function updateFormSettings(
     { classification: input.classification, owner_intent: input.ownerIntent, mapping: input.mapping },
   );
   if (Object.keys(changes).length === 0) return { form, requeued: 0 };
-  const importable = ["owner", "tenant", "buyer"].includes(input.classification);
+  const importable = ["owner", "tenant", "buyer", "mixed"].includes(input.classification);
   const results = await db.batch([
     db
       .prepare(

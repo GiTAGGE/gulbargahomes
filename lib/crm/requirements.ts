@@ -24,6 +24,22 @@ import {
 import { updateVersionedRecord } from "./records";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
 
+/**
+ * The one budget range on a requirement. Purchase price and monthly rent are
+ * never stored in separate columns: the intent says which one `budgetMin` and
+ * `budgetMax` are. Matching must compare `purchase` with a sale price and
+ * `monthly` with a monthly rent, and must not compare across the two.
+ */
+export function matchableBudget(requirement: Pick<Requirement, "intent" | "budgetMin" | "budgetMax">) {
+  const purchase = requirement.intent === "Buy";
+  return {
+    basis: purchase ? ("purchase" as const) : ("monthly" as const),
+    unit: purchase ? ("inr_total" as const) : ("inr_per_month" as const),
+    min: requirement.budgetMin,
+    max: requirement.budgetMax,
+  };
+}
+
 export type Requirement = {
   id: string;
   code: string;

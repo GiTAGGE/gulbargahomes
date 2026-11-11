@@ -96,6 +96,15 @@ export function SourceCard({ source, canViewPhone = false }: { source: LeadSourc
           </Field>
         )}
       </dl>
+      {meta && source.rawPayload.decision && typeof source.rawPayload.decision === "object" ? (
+        <p className="mt-3 border-t border-brand-50 pt-3 text-sm text-ink">
+          Imported as {(source.rawPayload.decision as { intent?: string }).intent || "—"}
+          {(source.rawPayload.decision as { basis?: string }).basis === "staff" ? " (chosen by staff)" : ""}
+          {(source.rawPayload.decision as { budgetBasis?: string }).budgetBasis
+            ? ` · ${(source.rawPayload.decision as { budgetBasis: string }).budgetBasis === "monthly" ? "monthly rent" : (source.rawPayload.decision as { budgetBasis: string }).budgetBasis === "purchase" ? "purchase budget" : "expected price"}`
+            : ""}
+        </p>
+      ) : null}
       {meta && storedAnswers(source).length > 0 && (
         <div className="mt-3 border-t border-brand-50 pt-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Form answers</p>

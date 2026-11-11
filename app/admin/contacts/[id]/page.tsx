@@ -86,7 +86,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                   <li key={item.id} className="flex items-center gap-2 py-2">
                     <Pill tone={bandTone(item.intentScore.band)}>{item.intentScore.score}</Pill>
                     <Link href={`/admin/requirements/${item.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-800 hover:underline">
-                      {item.code} · {item.intent} · {budgetLabel(item.budgetMin, item.budgetMax)}
+                      {item.code} · {item.intent} · {budgetLabel(item.budgetMin, item.budgetMax, item.intent)}
                     </Link>
                     <Pill tone="stone">{item.status}</Pill>
                   </li>

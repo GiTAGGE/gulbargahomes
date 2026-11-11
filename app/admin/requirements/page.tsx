@@ -92,7 +92,7 @@ export default async function RequirementsPage({
                     <p className="mt-0.5 truncate text-sm text-ink-muted">
                       {item.intent === "Rent" ? "Rent" : "Buy"} · {item.propertyTypes.join(", ") || "Any type"}
                       {item.bhkMin ? ` · ${item.bhkMin}${item.bhkMax && item.bhkMax !== item.bhkMin ? `–${item.bhkMax}` : ""} BHK` : ""} ·{" "}
-                      {budgetLabel(item.budgetMin, item.budgetMax)} · {item.localities.join(", ") || "Any area"}
+                      {budgetLabel(item.budgetMin, item.budgetMax, item.intent)} · {item.localities.join(", ") || "Any area"}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted sm:justify-end">

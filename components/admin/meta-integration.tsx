@@ -606,6 +606,31 @@ function AttentionCard({ canManage, attention, busy, act }: Props & { busy: stri
                   {item.attempts} attempt{item.attempts === 1 ? "" : "s"}
                   {item.status === "retry" ? ` · next ${formatDateTime(item.nextAttemptAt)}` : ""}
                 </p>
+                {canManage && (item.lastErrorKind === "intent_demand" || item.lastErrorKind === "intent_owner") && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(item.lastErrorKind === "intent_demand"
+                      ? [
+                          ["Buy", "Import as Buy"],
+                          ["Rent", "Import as Rent"],
+                        ]
+                      : [
+                          ["Sale", "Import as Sale"],
+                          ["Rent", "Import as Rent"],
+                          ["Lease", "Import as Lease"],
+                        ]
+                    ).map(([intent, label]) => (
+                      <button
+                        key={intent}
+                        type="button"
+                        className="btn-primary"
+                        disabled={Boolean(busy)}
+                        onClick={() => void act(`import-${item.id}`, API, "POST", { action: "import_as", id: item.id, intent })}
+                      >
+                        {busy === `import-${item.id}` ? "Importing…" : label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 type="button"

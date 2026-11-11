@@ -22,6 +22,7 @@ export function OwnerLeadActions({
   id,
   status,
   priority,
+  intent,
   rowVersion,
   canEdit,
   canConvert,
@@ -30,6 +31,7 @@ export function OwnerLeadActions({
   id: string;
   status: string;
   priority: string;
+  intent: string;
   rowVersion: number;
   canEdit: boolean;
   canConvert: boolean;
@@ -52,13 +54,13 @@ export function OwnerLeadActions({
     router.refresh();
   }
 
-  async function convert() {
+  async function convert(listing?: "Rent" | "Sale") {
     setPending("convert");
     setError("");
     const response = await fetch(`/api/admin/owner-leads/${id}/convert`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify(listing ? { listing } : {}),
     });
     const data = (await response.json().catch(() => ({}))) as { error?: string; property?: { slug: string } };
     setPending("");
@@ -78,11 +80,27 @@ export function OwnerLeadActions({
             until staff verify it.
           </p>
           {confirming ? (
-            <div className="mt-2 flex gap-2">
-              <button type="button" className="btn-primary flex-1" disabled={Boolean(pending)} onClick={() => void convert()}>
-                {pending === "convert" ? "Creating…" : "Yes, create draft"}
-              </button>
-              <button type="button" className="btn-ghost" onClick={() => setConfirming(false)}>
+            <div className="mt-2 space-y-2">
+              {intent === "Lease" ? (
+                <>
+                  <p className="text-xs text-brand-900/80">
+                    This lead stays a lease. Choose which public listing the draft will be, once it is verified.
+                  </p>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-primary flex-1" disabled={Boolean(pending)} onClick={() => void convert("Rent")}>
+                      {pending === "convert" ? "Creating…" : "Draft as rental"}
+                    </button>
+                    <button type="button" className="btn-primary flex-1" disabled={Boolean(pending)} onClick={() => void convert("Sale")}>
+                      Draft as sale
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button type="button" className="btn-primary w-full" disabled={Boolean(pending)} onClick={() => void convert()}>
+                  {pending === "convert" ? "Creating…" : "Yes, create draft"}
+                </button>
+              )}
+              <button type="button" className="btn-ghost w-full" onClick={() => setConfirming(false)}>
                 Cancel
               </button>
             </div>

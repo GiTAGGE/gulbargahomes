@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { findContactByPhone, getContact } from "../lib/crm/contacts";
 import { getOwnerLead } from "../lib/crm/owner-leads";
-import { getRequirement } from "../lib/crm/requirements";
+import { getRequirement, matchableBudget } from "../lib/crm/requirements";
 import { getSource } from "../lib/crm/sources";
 import { prepareDatabase } from "../lib/db/prepare";
 import { readMetaConfig, REQUIRED_SCOPES, requestedScopes } from "../lib/meta/config";
@@ -18,12 +18,13 @@ import {
   processDue,
   processIngestion,
   purgeExpiredQueueData,
+  resolveIngestionIntent,
   type MetaRuntime,
 } from "../lib/meta/ingest";
-import { suggestMapping, type FormClassification } from "../lib/meta/mapping";
+import { mapLead, suggestMapping, type FormClassification } from "../lib/meta/mapping";
 import { getIngestionDetail, ingestionStats } from "../lib/meta/overview";
 import { selectPage, testConnection } from "../lib/meta/setup";
-import { parseBhk, parseMoney, parseTimeline, splitLocalities } from "../lib/meta/values";
+import { parseBhk, parseDemandIntent, parseMoney, parseOwnerIntent, parseTimeline, splitLocalities } from "../lib/meta/values";
 import { receiveWebhook, verifySubscription } from "../lib/meta/webhook";
 import {
   attribution,
@@ -124,7 +125,21 @@ async function ingestion(db: ReturnType<typeof createTestDb>, leadgenId: string)
   return db
     .prepare("SELECT * FROM meta_lead_ingestions WHERE leadgen_id = ?1")
     .bind(leadgenId)
-    .first<{ id: string; status: string; attempts: number; deliveries: number; next_attempt_at: string; entity_type: string; entity_id: string; last_error: string; payload_json: string; contact_existing: number }>();
+    .first<{
+      id: string;
+      status: string;
+      attempts: number;
+      deliveries: number;
+      next_attempt_at: string;
+      entity_type: string;
+      entity_id: string;
+      last_error: string;
+      last_error_kind: string;
+      payload_json: string;
+      contact_existing: number;
+      intent_override: string;
+      resolved_by: string;
+    }>();
 }
 
 const OWNER_ANSWERS = {
@@ -362,7 +377,7 @@ describe("Meta lead ingestion", () => {
     const requirement = (await getRequirement(ctx.db, (await ingestion(ctx.db, extra.id))!.entity_id))!;
     assert.equal(requirement.contactName, "Meta lead");
     assert.match(requirement.notes, /Other answers:\n- surprise question: Need it near a school/);
-    assert.match(requirement.notes, /Budget \(as answered\): about fifteen thousand/);
+    assert.match(requirement.notes, /Monthly rent \(as answered\): about fifteen thousand/);
     assert.equal(requirement.budgetMax, null);
     const source = (await getSource(ctx.db, requirement.sourceId))!;
     const answers = source.rawPayload.answers as { key: string; target: string }[];
@@ -892,5 +907,340 @@ describe("retention of integration data", () => {
 
     ctx.clock.advance(60 * 24 * 60);
     assert.ok((await purgeExpiredQueueData(ctx.db, ctx.clock.now())).deliveriesDeleted >= 2);
+  });
+});
+
+const MIXED_FORM: FakeForm = {
+  id: "900000000000010",
+  name: "Gulbarga Buyer & Renter",
+  questions: [
+    {
+      key: "nimge_yen_beku?",
+      label: "Nimge yen beku?",
+      type: "CUSTOM",
+      options: [
+        { key: "buy_madbeku", value: "Buy madbeku" },
+        { key: "rent_ge_beku", value: "Rent ge beku" },
+      ],
+    },
+    {
+      key: "buy_madbekadre_nimma_budget_eshtu?",
+      label: "Buy madbekadre nimma budget eshtu?",
+      type: "CUSTOM",
+      options: [
+        { key: "40_60_lakh", value: "40-60 lakh" },
+        { key: "budget_decide_madilla", value: "Budget decide madilla" },
+      ],
+    },
+    {
+      key: "rent_ge_monthly_budget_eshtu?",
+      label: "Rent ge monthly budget eshtu?",
+      type: "CUSTOM",
+      options: [{ key: "10_20_thousand", value: "10-20 thousand" }],
+    },
+    {
+      key: "yava_type_property_beku?",
+      label: "Yava type property beku?",
+      type: "CUSTOM",
+      options: [
+        { key: "house", value: "House" },
+        { key: "land", value: "Land" },
+        { key: "flat", value: "Flat" },
+      ],
+    },
+    {
+      key: "yavaga_property_beku?",
+      label: "Yavaga property beku?",
+      type: "CUSTOM",
+      options: [
+        { key: "immediately", value: "Immediately" },
+        { key: "just_looking", value: "Just looking" },
+      ],
+    },
+    { key: "yava_area_alli_property_beku?", label: "Yava area alli property beku?", type: "CUSTOM", options: [] },
+    { key: "full_name", label: "Full name", type: "FULL_NAME", options: [] },
+    { key: "phone", label: "Phone number", type: "PHONE", options: [] },
+  ],
+};
+
+const OWNER_CHOICE_FORM: FakeForm = {
+  id: "900000000000011",
+  name: "Gulbarga Property Owner",
+  questions: [
+    { key: "full_name", label: "Full name", type: "FULL_NAME", options: [] },
+    { key: "phone_number", label: "Phone number", type: "PHONE", options: [] },
+    {
+      key: "nimma_property_yen_madbeku?",
+      label: "Nimma property yen madbeku?",
+      type: "CUSTOM",
+      options: [
+        { key: "sell_madbeku", value: "Sell madbeku" },
+        { key: "rent_ge_kodbeku", value: "Rent ge kodbeku" },
+        { key: "lease_ge_kodbeku", value: "Lease ge kodbeku" },
+      ],
+    },
+    { key: "property_location", label: "Property ellide?", type: "CUSTOM", options: [] },
+  ],
+};
+
+async function classifyForm(ctx: Awaited<ReturnType<typeof setup>>, form: FakeForm, classification: FormClassification) {
+  ctx.meta.forms.push(form);
+  await upsertDiscoveredForms(ctx.db, admin.id, PAGE_ID, await ctx.graph.listForms(PAGE_ID, PAGE_TOKEN), ctx.clock.iso());
+  const stored = (await getStoredForm(ctx.db, form.id))!;
+  await updateFormSettings(ctx.db, admin, stored, parseFormSettings({ classification }, stored), { now: ctx.clock.iso() });
+}
+
+describe("mixed buyer and renter forms", () => {
+  it("suggests separate budgets and refuses a single Budget target", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "unclassified");
+    const stored = (await getStoredForm(ctx.db, MIXED_FORM.id))!;
+    const suggested = suggestMapping(stored.questions, "mixed");
+    assert.equal(suggested["nimge_yen_beku?"], "intent");
+    assert.equal(suggested["buy_madbekadre_nimma_budget_eshtu?"], "purchase_budget");
+    assert.equal(suggested["rent_ge_monthly_budget_eshtu?"], "rent_budget");
+    assert.equal(suggested["yava_type_property_beku?"], "property_type");
+    assert.equal(suggested["yavaga_property_beku?"], "timeline");
+    assert.equal(suggested["yava_area_alli_property_beku?"], "locality");
+    assert.equal(suggested.phone, "phone");
+    assert.throws(
+      () => parseFormSettings({ classification: "mixed", mapping: { ...suggested, "buy_madbekadre_nimma_budget_eshtu?": "budget" } }, stored),
+      /Purchase budget/,
+    );
+  });
+
+  it("stores a purchase budget for a buyer and a monthly rent for a tenant, and nothing for the other", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const buyer = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Buyer One",
+      phone: "9811111111",
+      "nimge_yen_beku?": "Buy madbeku",
+      "buy_madbekadre_nimma_budget_eshtu?": "40-60 lakh",
+      "rent_ge_monthly_budget_eshtu?": "10-20 thousand",
+      "yava_type_property_beku?": "Land",
+      "yavaga_property_beku?": "Immediately",
+      "yava_area_alli_property_beku?": "Sedam Road",
+    });
+    const tenant = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Tenant One",
+      phone: "9822222222",
+      "nimge_yen_beku?": "Rent ge beku",
+      "buy_madbekadre_nimma_budget_eshtu?": "40-60 lakh",
+      "rent_ge_monthly_budget_eshtu?": "10-20 thousand",
+      "yava_type_property_beku?": "Flat",
+    });
+    const buyerNone = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Buyer None",
+      phone: "9833333333",
+      "nimge_yen_beku?": "buy_madbeku",
+    });
+    const tenantNone = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Tenant None",
+      phone: "9844444444",
+      "nimge_yen_beku?": "rent_ge_beku",
+      "rent_ge_monthly_budget_eshtu?": "Budget decide madilla",
+    });
+    await deliver(ctx, webhookBody(buyer));
+    await deliver(ctx, webhookBody(tenant));
+    await deliver(ctx, webhookBody(buyerNone));
+    await deliver(ctx, webhookBody(tenantNone));
+
+    const purchase = (await getRequirement(ctx.db, (await ingestion(ctx.db, buyer.id))!.entity_id))!;
+    assert.equal(purchase.intent, "Buy");
+    assert.equal(purchase.status, "New");
+    assert.deepEqual([purchase.budgetMin, purchase.budgetMax], [4_000_000, 6_000_000]);
+    assert.deepEqual(purchase.propertyTypes, ["Plot"]);
+    assert.equal(purchase.timeline, "Immediate");
+    assert.deepEqual(purchase.localities, ["Sedam Road"]);
+    assert.match(purchase.notes, /Land/);
+    assert.deepEqual(matchableBudget(purchase), { basis: "purchase", unit: "inr_total", min: 4_000_000, max: 6_000_000 });
+    const buyerSource = (await getSource(ctx.db, purchase.sourceId))!;
+    const buyerAnswers = buyerSource.rawPayload.answers as { key: string; value: string }[];
+    assert.equal(buyerAnswers.find((answer) => answer.key.startsWith("rent_ge_monthly"))?.value, "10-20 thousand");
+    assert.equal((buyerSource.rawPayload.decision as { budgetBasis: string }).budgetBasis, "purchase");
+
+    const rental = (await getRequirement(ctx.db, (await ingestion(ctx.db, tenant.id))!.entity_id))!;
+    assert.equal(rental.intent, "Rent");
+    assert.deepEqual([rental.budgetMin, rental.budgetMax], [10_000, 20_000]);
+    assert.deepEqual(matchableBudget(rental), { basis: "monthly", unit: "inr_per_month", min: 10_000, max: 20_000 });
+    assert.match(rental.notes, /Purchase answer/);
+
+    const openBuyer = (await getRequirement(ctx.db, (await ingestion(ctx.db, buyerNone.id))!.entity_id))!;
+    assert.equal(openBuyer.intent, "Buy");
+    assert.equal(openBuyer.budgetMin, null);
+    assert.equal(openBuyer.budgetMax, null);
+    const openTenant = (await getRequirement(ctx.db, (await ingestion(ctx.db, tenantNone.id))!.entity_id))!;
+    assert.equal(openTenant.intent, "Rent");
+    assert.equal(openTenant.budgetMax, null);
+    assert.match(openTenant.notes, /Monthly rent \(as answered\): Budget decide madilla/);
+  });
+
+  it("does not create a requirement until buy or rent is reliable, and a second click does not duplicate", async () => {
+    const ctx = await setup({ classify: {} });
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const missing = addLead(ctx.meta, MIXED_FORM, { full_name: "No Intent", phone: "9855555555", "yava_type_property_beku?": "House" });
+    const both = addLead(ctx.meta, MIXED_FORM, { full_name: "Both", phone: "9866666666", "nimge_yen_beku?": "buy or rent" });
+    const unknown = addLead(ctx.meta, MIXED_FORM, { full_name: "Unknown", phone: "9877777777", "nimge_yen_beku?": "maybe later" });
+    await deliver(ctx, webhookBody(missing));
+    await deliver(ctx, webhookBody(missing));
+    await deliver(ctx, webhookBody(both));
+    await deliver(ctx, webhookBody(unknown));
+
+    for (const lead of [missing, both, unknown]) {
+      const row = (await ingestion(ctx.db, lead.id))!;
+      assert.equal(row.status, "needs_review");
+      assert.equal(row.last_error_kind, "intent_demand");
+      assert.equal(row.entity_id, null);
+    }
+    assert.equal(missing && (await ingestion(ctx.db, missing.id))!.deliveries, 2);
+    const created = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    assert.equal(created?.n, 0);
+    assert.equal(parseDemandIntent("buy or rent"), null);
+
+    const held = (await ingestion(ctx.db, both.id))!;
+    const [first, second] = await Promise.all([
+      resolveIngestionIntent(ctx.db, admin, held.id, "Buy", ctx.clock.iso()),
+      resolveIngestionIntent(ctx.db, admin, held.id, "Rent", ctx.clock.iso()),
+    ]);
+    assert.equal([first, second].filter((item) => item.ready).length, 1);
+    await processIngestion(ctx.runtime, held.id);
+    await processIngestion(ctx.runtime, held.id);
+    const again = await resolveIngestionIntent(ctx.db, admin, held.id, "Rent", ctx.clock.iso());
+    assert.equal(again.ready, false);
+    const requirements = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    assert.equal(requirements?.n, 1);
+    const imported = (await getRequirement(ctx.db, (await ingestion(ctx.db, both.id))!.entity_id))!;
+    assert.equal(imported.status, "New");
+    const source = (await getSource(ctx.db, imported.sourceId))!;
+    assert.equal((source.rawPayload.answers as { value: string }[]).some((answer) => answer.value === "buy or rent"), true);
+    assert.equal((source.rawPayload.decision as { basis: string; decidedBy: string }).basis, "staff");
+    assert.equal((source.rawPayload.decision as { decidedBy: string }).decidedBy, admin.id);
+    assert.equal((await ingestion(ctx.db, both.id))!.resolved_by, admin.id);
+    const decision = await ctx.db
+      .prepare("SELECT actor_id FROM audit_log WHERE action = 'resolve_intent' AND entity_id = 'meta'")
+      .all<{ actor_id: string }>();
+    assert.equal(decision.results.some((entry) => entry.actor_id === admin.id), true);
+  });
+
+  it("adds another requirement on an existing contact without a second contact", async () => {
+    const ctx = await setup();
+    await classifyForm(ctx, MIXED_FORM, "mixed");
+    const first = addLead(ctx.meta, BUYER_FORM, { full_name: "Same Person", phone_number: "9888888888", budget: "50 lakh" });
+    const second = addLead(ctx.meta, MIXED_FORM, {
+      full_name: "Same Person",
+      phone: "9888888888",
+      "nimge_yen_beku?": "Rent ge beku",
+      "rent_ge_monthly_budget_eshtu?": "15000",
+    });
+    await deliver(ctx, webhookBody(first));
+    await deliver(ctx, webhookBody(second));
+    assert.equal((await ingestion(ctx.db, second.id))!.contact_existing, 1);
+    const contacts = await ctx.db.prepare("SELECT COUNT(*) AS n FROM contacts").first<{ n: number }>();
+    const requirements = await ctx.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    assert.equal(contacts?.n, 1);
+    assert.equal(requirements?.n, 2);
+  });
+});
+
+describe("owner sell, rent and lease", () => {
+  it("does not file a sale as a rent, and holds an answer that names more than one", async () => {
+    assert.equal(parseOwnerIntent("Sell madbeku"), "Sale");
+    assert.equal(parseOwnerIntent("Rent ge kodbeku"), "Rent");
+    assert.equal(parseOwnerIntent("Lease ge kodbeku"), "Lease");
+    assert.equal(parseOwnerIntent("sell or rent"), null);
+
+    const ctx = await setup({ classify: {} });
+    ctx.meta.forms.push(OWNER_CHOICE_FORM);
+    await upsertDiscoveredForms(ctx.db, admin.id, PAGE_ID, await ctx.graph.listForms(PAGE_ID, PAGE_TOKEN), ctx.clock.iso());
+    const stored = (await getStoredForm(ctx.db, OWNER_CHOICE_FORM.id))!;
+    assert.throws(
+      () =>
+        parseFormSettings(
+          { classification: "owner", ownerIntent: "Rent", mapping: { full_name: "name", phone_number: "phone" } },
+          stored,
+        ),
+      /sell, rent or lease/,
+    );
+    const mapping = suggestMapping(stored.questions, "owner");
+    assert.equal(mapping["nimma_property_yen_madbeku?"], "intent");
+    await updateFormSettings(ctx.db, admin, stored, parseFormSettings({ classification: "owner", mapping }, stored), { now: ctx.clock.iso() });
+
+    const seller = addLead(ctx.meta, OWNER_CHOICE_FORM, {
+      full_name: "Seller",
+      phone_number: "9899999991",
+      "nimma_property_yen_madbeku?": "Sell madbeku",
+      property_location: "Jewargi Road",
+    });
+    const landlord = addLead(ctx.meta, OWNER_CHOICE_FORM, {
+      full_name: "Landlord",
+      phone_number: "9899999992",
+      "nimma_property_yen_madbeku?": "Rent ge kodbeku",
+    });
+    const lessor = addLead(ctx.meta, OWNER_CHOICE_FORM, {
+      full_name: "Lessor",
+      phone_number: "9899999993",
+      "nimma_property_yen_madbeku?": "Lease ge kodbeku",
+    });
+    const unclear = addLead(ctx.meta, OWNER_CHOICE_FORM, {
+      full_name: "Unclear",
+      phone_number: "9899999994",
+      "nimma_property_yen_madbeku?": "sell or rent",
+    });
+    await deliver(ctx, webhookBody(seller));
+    await deliver(ctx, webhookBody(landlord));
+    await deliver(ctx, webhookBody(lessor));
+    await deliver(ctx, webhookBody(unclear));
+
+    assert.equal((await getOwnerLead(ctx.db, (await ingestion(ctx.db, seller.id))!.entity_id))!.intent, "Sale");
+    assert.equal((await getOwnerLead(ctx.db, (await ingestion(ctx.db, landlord.id))!.entity_id))!.intent, "Rent");
+    const lease = (await getOwnerLead(ctx.db, (await ingestion(ctx.db, lessor.id))!.entity_id))!;
+    assert.equal(lease.intent, "Lease");
+    assert.equal(lease.status, "New");
+    const properties = await ctx.db.prepare("SELECT COUNT(*) AS n FROM properties WHERE source_owner_lead_id = ?1").bind(lease.id).first<{ n: number }>();
+    assert.equal(properties?.n, 0);
+    const held = (await ingestion(ctx.db, unclear.id))!;
+    assert.equal(held.status, "needs_review");
+    assert.equal(held.last_error_kind, "intent_owner");
+    assert.equal(held.entity_id, null);
+
+    const decided = await resolveIngestionIntent(ctx.db, admin, held.id, "Sale", ctx.clock.iso());
+    assert.equal(decided.ready, true);
+    assert.equal(await processIngestion(ctx.runtime, held.id), "done");
+    assert.equal((await getOwnerLead(ctx.db, (await ingestion(ctx.db, unclear.id))!.entity_id))!.intent, "Sale");
+    assert.equal(await processIngestion(ctx.runtime, held.id), "skipped");
+  });
+
+  it("does not let an unmapped sell answer fall through to the form default", () => {
+    const mapped = mapLead(
+      {
+        formId: OWNER_CHOICE_FORM.id,
+        name: OWNER_CHOICE_FORM.name,
+        classification: "owner",
+        ownerIntent: "Rent",
+        mapping: { full_name: "name", phone_number: "phone" },
+        questions: OWNER_CHOICE_FORM.questions,
+      },
+      {
+        id: "1",
+        formId: OWNER_CHOICE_FORM.id,
+        createdTime: "2026-11-10T09:30:00.000Z",
+        adId: "",
+        adName: "",
+        adsetId: "",
+        adsetName: "",
+        campaignId: "",
+        campaignName: "",
+        platform: "fb",
+        isOrganic: false,
+        fieldData: [
+          { name: "full_name", values: ["Seller"] },
+          { name: "phone_number", values: ["9899999991"] },
+          { name: "nimma_property_yen_madbeku?", values: ["Sell madbeku"] },
+        ],
+      },
+    );
+    assert.equal(mapped.kind, "owner");
+    if (mapped.kind === "owner") assert.equal(mapped.owner.intent, "Sale");
   });
 });

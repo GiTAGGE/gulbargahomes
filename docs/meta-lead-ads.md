@@ -239,7 +239,17 @@ Every connect, Page selection, test, mapping change, import, retry, dismiss and
 disconnect is written to `audit_log`. Leads created by the integration show
 "Meta Lead Ads" as their creator.
 
-## Database (migration 5, `meta_lead_ads`)
+## Mixed buyer / renter forms and owner sell, rent, lease
+
+A requirement has one intent and one budget range (`budget_min`, `budget_max`, integer rupees). **Buy** means a purchase price. **Rent** means a monthly rent. There is no second pair of columns. `matchableBudget()` returns `{ basis: "purchase" | "monthly", unit, min, max }` so a future matcher compares a purchase budget with a sale price and a monthly budget with a monthly rent, and does not compare across those. CRM screens prefix the range “Purchase” or “Monthly rent”. The budget answer that does not match the intent stays in `lead_sources.raw_payload_json` and is never written into the range.
+
+Classification `mixed` (“Buyer or tenant, from the answer”) reads the intent answer. A missing or ambiguous answer (including “buy or rent”) is held as `needs_review` with `last_error_kind = intent_demand`. Nothing is created. Staff use **Import as Buy** or **Import as Rent**. That stores `intent_override`, `resolved_by` and `resolved_at` on the queue row (migration 6) and only then imports. The update matches only a row still waiting for that decision, and the unique Meta lead id still blocks a second CRM record. The original answers, campaign attribution and both audit rows (the import, and the staff decision) are kept.
+
+Owner intent is `Rent`, `Sale` or `Lease` on the existing `owner_leads.intent` text column. Sell is `Sale`. It is never stored as `Rent`. An answer that names more than one of sell, rent and lease is held (`intent_owner`) for **Import as Sale**, **Import as Rent** or **Import as Lease**. A rent-only owner form can still assume Rent, but a form whose options include more than one of those cannot be saved until that question is mapped to intent.
+
+Public listings stay `Rent` | `Sale`. A lease lead does not become a listing by itself. Staff choose “Draft as rental” or “Draft as sale”; the lead remains Lease, the draft is unpublished, and the notes record the choice. Availability expiry follows the listing they chose (14 days for Rent, 30 for Sale).
+
+## Database (migration 5, `meta_lead_ads`, and migration 6, `meta_intent_decision`)
 
 - `lead_sources`: new `meta_page_id`, `meta_is_organic`, `ingestion_origin`,
   `received_at`; indexes on form and ad.
@@ -497,6 +507,12 @@ later deploy:
 - **Data:**
   - Migration 5 is additive only: new tables, new nullable or defaulted columns,
     indexes and a view. It does not need reverting.
+  - Migration 6 adds `intent_override`, `resolved_by` and `resolved_at` with
+    defaults. Old code ignores them. New code treats an unknown classification
+    such as `mixed` as `unclassified`, so those forms wait instead of importing
+    with the wrong intent. Do not apply migration 6 in production until this
+    code is deployed. Do not roll the code forward onto a database that has not
+    run it: the queue claim reads the new columns.
   - To restore the database to before a deploy:
 
     ```bash

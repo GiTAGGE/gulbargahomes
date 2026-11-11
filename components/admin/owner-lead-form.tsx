@@ -70,6 +70,7 @@ export function OwnerLeadForm({ localities }: { localities: string[] }) {
               <select value={lead.intent} onChange={(event) => setLead({ ...lead, intent: event.target.value })} className={inputClass}>
                 <option value="Rent">Rent it out</option>
                 <option value="Sale">Sell</option>
+                <option value="Lease">Lease</option>
               </select>
             </label>
             <label className={labelClass}>

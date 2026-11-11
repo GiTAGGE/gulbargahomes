@@ -25,7 +25,7 @@ export const LEAD_CHANNEL_LABEL: Record<LeadChannel, string> = {
 
 export const META_PLATFORMS = ["", "facebook", "instagram"] as const;
 
-export const OWNER_INTENTS = ["Rent", "Sale"] as const;
+export const OWNER_INTENTS = ["Rent", "Sale", "Lease"] as const;
 export type OwnerIntent = (typeof OWNER_INTENTS)[number];
 
 export const OWNER_LEAD_STATUSES = [

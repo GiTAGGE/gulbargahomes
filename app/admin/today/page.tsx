@@ -83,7 +83,7 @@ export default async function TodayPage() {
                         {item.code} · {item.contactName}
                       </span>
                       <span className="block truncate text-xs text-ink-muted">
-                        {item.intent} · {item.propertyTypes.join(", ") || "Any"} · {budgetLabel(item.budgetMin, item.budgetMax)} ·{" "}
+                        {item.intent} · {item.propertyTypes.join(", ") || "Any"} · {budgetLabel(item.budgetMin, item.budgetMax, item.intent)} ·{" "}
                         {item.localities.join(", ") || "Any area"}
                       </span>
                     </span>

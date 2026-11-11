@@ -113,6 +113,8 @@ type IngestionRow = {
   attempts: number;
   payload_json: string;
   received_at: string;
+  intent_override: string;
+  resolved_by: string;
 };
 
 async function finish(
@@ -160,7 +162,7 @@ async function claim(db: SqlDb, id: string, now: Date): Promise<IngestionRow | n
          (status IN ('pending', 'retry') AND next_attempt_at <= ?2)
          OR (status = 'processing' AND locked_until < ?2)
        )
-       RETURNING id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, attempts, payload_json, received_at`,
+       RETURNING id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, attempts, payload_json, received_at, intent_override, resolved_by`,
     )
     .bind(plusMinutes(now, LOCK_MINUTES), at, id)
     .first<IngestionRow>();
@@ -228,6 +230,7 @@ function sourceFor(lead: MetaLead, form: { formId: string; name: string }, row: 
         origin: row.origin,
       },
       answers: mapped.answers,
+      decision: mapped.kind === "review" ? undefined : mapped.decision,
     },
   };
 }
@@ -338,7 +341,15 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
       return "needs_mapping";
     }
 
-    const mapped = mapLead(form, lead);
+    let mapped = mapLead(form, lead, row.intent_override ? { intent: row.intent_override, decidedBy: row.resolved_by } : {});
+    if (mapped.kind === "review") {
+      await finish(db, row, at, "needs_review", {
+        error: mapped.reason,
+        kind: mapped.choices.includes("Sale") ? "intent_owner" : "intent_demand",
+        payload,
+      });
+      return "needs_review";
+    }
     const phone = normalizeIndianMobile(mapped.contact.phone);
     if (!phone) {
       // The number itself stays in the (role-masked) answers, not in the error text and history.
@@ -445,6 +456,71 @@ export async function processDue(
     if (outcome === "rate_limited" || outcome === "waiting_token") break;
   }
   return tally;
+}
+
+const IMPORT_AS = ["Buy", "Rent", "Sale", "Lease"] as const;
+export type ImportAsIntent = (typeof IMPORT_AS)[number];
+
+/**
+ * A staff member chooses the intent for a lead the importer refused to guess.
+ * The choice is stored on the queue row before anything is created, so a second
+ * click, a retry, or the sweep finds the same decision and the leadgen id
+ * still prevents a second CRM record.
+ */
+export async function resolveIngestionIntent(
+  db: SqlDb,
+  actor: AuditActor,
+  id: string,
+  intent: string,
+  now: string,
+): Promise<{ ready: boolean; entityType: string | null; entityId: string | null }> {
+  if (!(IMPORT_AS as readonly string[]).includes(intent)) throw new HttpError(400, "Choose Buy, Rent, Sale or Lease.");
+  const row = await db
+    .prepare("SELECT id, status, last_error_kind, form_id, entity_type, entity_id FROM meta_lead_ingestions WHERE id = ?1")
+    .bind(id)
+    .first<{ id: string; status: string; last_error_kind: string; form_id: string; entity_type: string | null; entity_id: string | null }>();
+  if (!row) throw new HttpError(404, "Lead not found.");
+  if (row.status === "done" || row.status === "duplicate") {
+    return { ready: false, entityType: row.entity_type, entityId: row.entity_id };
+  }
+  const form = await getStoredForm(db, row.form_id);
+  const allowed = form?.classification === "owner" ? ["Sale", "Rent", "Lease"] : ["Buy", "Rent"];
+  if (!allowed.includes(intent)) {
+    throw new HttpError(400, form?.classification === "owner" ? "Choose Sale, Rent or Lease." : "Choose Buy or Rent.");
+  }
+  if (row.status !== "needs_review" || (row.last_error_kind !== "intent_demand" && row.last_error_kind !== "intent_owner")) {
+    throw new HttpError(409, "This lead is no longer waiting for that decision.");
+  }
+  const result = await db
+    .prepare(
+      `UPDATE meta_lead_ingestions
+       SET intent_override = ?1, resolved_by = ?2, resolved_at = ?3, status = 'pending', attempts = 0,
+           next_attempt_at = ?3, locked_until = NULL, last_error = '', updated_at = ?3
+       WHERE id = ?4 AND status = 'needs_review' AND last_error_kind IN ('intent_demand', 'intent_owner')`,
+    )
+    .bind(intent, actor.id, now, id)
+    .run();
+  if (changedRows(result) === 0) {
+    const again = await db
+      .prepare("SELECT status, entity_type, entity_id FROM meta_lead_ingestions WHERE id = ?1")
+      .bind(id)
+      .first<{ status: string; entity_type: string | null; entity_id: string | null }>();
+    if (again && (again.status === "done" || again.status === "duplicate")) {
+      return { ready: false, entityType: again.entity_type, entityId: again.entity_id };
+    }
+    return { ready: false, entityType: null, entityId: null };
+  }
+  await auditStatement(db, {
+    actor,
+    entityType: "integration",
+    entityId: "meta",
+    entityLabel: "Meta Lead Ads",
+    action: "resolve_intent",
+    changes: { intent: ["", intent] },
+    context: { ingestion_id: id },
+    at: now,
+  }).run();
+  return { ready: true, entityType: null, entityId: null };
 }
 
 /** Retry from the admin: failed, needs-review and waiting rows go back to the queue. */

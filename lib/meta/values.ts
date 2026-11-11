@@ -73,18 +73,40 @@ export function parseTimeline(value: string): Timeline | null {
   return null;
 }
 
-export function parseOwnerIntent(value: string): OwnerIntent | null {
+const SALE_WORDS = /\b(sell|sale|selling)\b/;
+const LEASE_WORDS = /\b(lease|leasing)\b/;
+const RENT_WORDS = /\b(rent|rental|renting|tenant)\b|ಬಾಡಿಗೆ/;
+const BUY_WORDS = /\b(buy|buying|purchase|purchasing)\b|ಖರೀದಿ|ಕೊಂಡುಕೊ/;
+
+/** Every distinct owner intent named in the text. Lease is not rent. */
+export function ownerIntentsIn(value: string): OwnerIntent[] {
   const text = cleanAnswer(value).toLowerCase();
-  if (/\b(sell|sale|selling)\b/.test(text)) return "Sale";
-  if (/\b(rent|lease|let|tenant|renting)\b/.test(text)) return "Rent";
-  return null;
+  const found: OwnerIntent[] = [];
+  if (SALE_WORDS.test(text)) found.push("Sale");
+  if (LEASE_WORDS.test(text)) found.push("Lease");
+  if (RENT_WORDS.test(text)) found.push("Rent");
+  return found;
 }
 
-export function parseDemandIntent(value: string): DemandIntent | null {
+/** Sell, rent, or lease. An answer that names more than one, or none, is null. Lease never becomes rent. */
+export function parseOwnerIntent(value: string): OwnerIntent | null {
+  const found = ownerIntentsIn(value);
+  return found.length === 1 ? found[0] : null;
+}
+
+/** Every distinct buyer/tenant intent named in the text. */
+export function demandIntentsIn(value: string): DemandIntent[] {
   const text = cleanAnswer(value).toLowerCase();
-  if (/\b(buy|purchase|buying|own)\b/.test(text)) return "Buy";
-  if (/\b(rent|lease|tenant|renting)\b/.test(text)) return "Rent";
-  return null;
+  const found: DemandIntent[] = [];
+  if (BUY_WORDS.test(text)) found.push("Buy");
+  if (RENT_WORDS.test(text)) found.push("Rent");
+  return found;
+}
+
+/** Buy or rent for someone looking. An answer that says both, or neither, is null. */
+export function parseDemandIntent(value: string): DemandIntent | null {
+  const found = demandIntentsIn(value);
+  return found.length === 1 ? found[0] : null;
 }
 
 /** "Sedam Road, Jewargi Road / Aland Road" → three localities. */

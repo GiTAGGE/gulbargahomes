@@ -139,11 +139,11 @@ export function RequirementForm({ localities }: { localities: string[] }) {
               <input type="number" min={0} max={10} value={fields.bhkMax} onChange={(event) => set({ bhkMax: event.target.value })} className={inputClass} />
             </label>
             <label className={labelClass}>
-              Budget from (₹)
+              {intent === "Buy" ? "Purchase budget from (₹)" : "Monthly rent from (₹)"}
               <input type="number" min={0} value={fields.budgetMin} onChange={(event) => set({ budgetMin: event.target.value })} className={inputClass} />
             </label>
             <label className={labelClass}>
-              Budget up to (₹)
+              {intent === "Buy" ? "Purchase budget up to (₹)" : "Monthly rent up to (₹)"}
               <input type="number" min={0} value={fields.budgetMax} onChange={(event) => set({ budgetMax: event.target.value })} className={inputClass} />
             </label>
           </div>

@@ -115,6 +115,7 @@ export default async function OwnerLeadPage({ params }: { params: Promise<{ id: 
                 id={lead.id}
                 status={lead.status}
                 priority={lead.priority}
+                intent={lead.intent}
                 rowVersion={lead.rowVersion}
                 canEdit={caps.editCrm}
                 canConvert={caps.editCrm && caps.createProperty && !["Not interested", "Duplicate", "Invalid"].includes(lead.status)}

@@ -446,6 +446,16 @@ export const MIGRATIONS: Migration[] = [
        GROUP BY s.meta_campaign_id`,
     ],
   },
+  {
+    version: 6,
+    name: "meta_intent_decision",
+    statements: [
+      // Staff choice for a mixed or ambiguous lead. Empty until someone clicks Import as Buy / Rent / Sale / Lease.
+      `ALTER TABLE meta_lead_ingestions ADD COLUMN intent_override TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE meta_lead_ingestions ADD COLUMN resolved_by TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE meta_lead_ingestions ADD COLUMN resolved_at TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
