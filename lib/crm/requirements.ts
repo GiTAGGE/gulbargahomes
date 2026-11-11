@@ -80,6 +80,8 @@ export type Requirement = {
   createdBy: string;
   updatedAt: string;
   rowVersion: number;
+  idempotencyKey: string | null;
+  originOwnerLeadId: string | null;
   intentScore: IntentScore;
 };
 
@@ -123,6 +125,8 @@ type RequirementRow = {
   created_by: string;
   updated_at: string;
   row_version: number;
+  idempotency_key: string | null;
+  origin_owner_lead_id: string | null;
 };
 
 const SELECT = `SELECT r.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
@@ -178,6 +182,8 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     createdBy: row.created_by,
     updatedAt: row.updated_at,
     rowVersion: Number(row.row_version),
+    idempotencyKey: row.idempotency_key,
+    originOwnerLeadId: row.origin_owner_lead_id,
     intentScore: intentScore(
       {
         timeline,
@@ -303,7 +309,7 @@ export function parseRequirementInput(value: unknown): RequirementInput {
   };
 }
 
-function columnsFor(input: RequirementInput): Record<string, SqlValue> {
+export function requirementColumns(input: RequirementInput): Record<string, SqlValue> {
   return {
     intent: input.intent,
     property_types_json: JSON.stringify(input.propertyTypes),
@@ -344,7 +350,7 @@ export async function createRequirement(
     code,
     contact_id: resolved.contactId,
     source_id: insertSource.id,
-    ...columnsFor(input),
+    ...requirementColumns(input),
     status: "New",
     created_at: now,
     created_by: actor.id,
@@ -368,7 +374,7 @@ export async function createRequirement(
         entityId: id,
         entityLabel: `${code} ${contact.name}`,
         action: "create",
-        changes: diffFields({}, columnsFor(input)),
+        changes: diffFields({}, requirementColumns(input)),
         context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId },
         at: now,
       }),
@@ -392,7 +398,7 @@ export async function updateRequirement(
   assertVersion(options.expectedVersion, current.rowVersion);
   const next: Record<string, SqlValue> = {};
 
-  if (input.details !== undefined) Object.assign(next, columnsFor(parseRequirementInput(input.details)));
+  if (input.details !== undefined) Object.assign(next, requirementColumns(parseRequirementInput(input.details)));
   if (input.status !== undefined) {
     const status = strictOneOf(input.status, REQUIREMENT_STATUSES);
     if (!status) throw new HttpError(400, "Choose a valid status.");
@@ -419,7 +425,7 @@ export async function updateRequirement(
     label: `${current.code} ${current.contactName}`,
     rowVersion: current.rowVersion,
     before: {
-      ...columnsFor(current),
+      ...requirementColumns(current),
       status: current.status,
       status_reason: current.statusReason,
       closed_at: current.closedAt,

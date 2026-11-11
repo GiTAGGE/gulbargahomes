@@ -6,7 +6,7 @@ import { LEAD_CHANNEL_LABEL } from "@/lib/crm/options";
 import { formatPhone, maskEmail, maskPhone, whatsappLink } from "@/lib/crm/phone";
 import type { LeadSource } from "@/lib/crm/sources";
 
-import { Card, Field } from "./ui";
+import { Card, Field, Pill } from "./ui";
 
 export function ContactCard({ contact, canViewPhone, title = "Contact" }: { contact: Contact; canViewPhone: boolean; title?: string }) {
   return (
@@ -15,6 +15,12 @@ export function ContactCard({ contact, canViewPhone, title = "Contact" }: { cont
         {contact.name}
       </Link>
       <p className="font-mono text-xs text-ink-faint">{contact.code}</p>
+      {(contact.isOwner || contact.isSeeker) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {contact.isOwner && <Pill>Owner</Pill>}
+          {contact.isSeeker && <Pill>Seeker</Pill>}
+        </div>
+      )}
       {contact.doNotContact && (
         <p className="mt-2 rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">
           Do not contact{contact.doNotContactReason ? `: ${contact.doNotContactReason}` : ""}

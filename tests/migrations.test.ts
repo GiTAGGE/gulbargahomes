@@ -33,8 +33,13 @@ describe("migrations", () => {
     const visible = await db.prepare("SELECT COUNT(*) AS n FROM public_properties").first<{ n: number }>();
     assert.equal(total?.n, loadSeedProperties().length);
     assert.equal(visible?.n, total?.n);
-    const versions = await db.prepare("SELECT version FROM schema_migrations").all<{ version: number }>();
-    assert.equal(versions.results.length, LATEST_SCHEMA_VERSION);
+    const versions = await db.prepare("SELECT version FROM schema_migrations ORDER BY version").all<{ version: number }>();
+    assert.deepEqual(
+      versions.results.map((row) => row.version),
+      MIGRATIONS.map((migration) => migration.version),
+    );
+    assert.equal(MIGRATIONS.at(-1)?.version, LATEST_SCHEMA_VERSION);
+    assert.equal(MIGRATIONS.some((migration) => migration.version === 7), false);
   });
 
   it("upgrades a production-shaped database without hiding or changing listings", async () => {
@@ -108,7 +113,10 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8]);
+    const columns = await db.prepare("PRAGMA table_info(demand_requirements)").all<{ name: string }>();
+    assert.ok(columns.results.some((column) => column.name === "idempotency_key"));
+    assert.ok(columns.results.some((column) => column.name === "origin_owner_lead_id"));
     const row = await db
       .prepare("SELECT status, intent_override, resolved_by, resolved_at FROM meta_lead_ingestions WHERE id = 'mli_existing'")
       .first<{ status: string; intent_override: string; resolved_by: string; resolved_at: string | null }>();

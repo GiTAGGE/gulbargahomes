@@ -147,18 +147,27 @@ export async function resolveContact(
 
   const existing = await findContactByPhone(db, phone);
   if (existing) {
-    const alreadyFlagged = role === "owner" ? existing.isOwner : existing.isSeeker;
-    const statements: SqlStatement[] = [];
-    if (!alreadyFlagged || (!existing.email && input.email)) {
-      statements.push(
+    // Set only this role flag, and fill a blank email. The statement reads every
+    // other column from the row at write time, so a contact edit that commits
+    // after this read keeps its name, number, notes, and the other role flag.
+    const email = input.email ?? "";
+    return {
+      contactId: existing.id,
+      created: false,
+      statements: [
         db
           .prepare(
-            `UPDATE contacts SET ${flag} = 1, email = CASE WHEN email = '' THEN ?1 ELSE email END, updated_at = ?2, updated_by = ?3, row_version = row_version + 1 WHERE id = ?4`,
+            `UPDATE contacts
+             SET ${flag} = 1,
+                 email = CASE WHEN ?1 <> '' AND email = '' THEN ?1 ELSE email END,
+                 updated_at = ?2,
+                 updated_by = ?3,
+                 row_version = row_version + 1
+             WHERE id = ?4 AND (${flag} = 0 OR (?1 <> '' AND email = ''))`,
           )
-          .bind(input.email ?? "", now, actor.id, existing.id),
-      );
-    }
-    return { contactId: existing.id, created: false, statements };
+          .bind(email, now, actor.id, existing.id),
+      ],
+    };
   }
 
   const id = newId("con");
