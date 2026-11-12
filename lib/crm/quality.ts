@@ -219,12 +219,20 @@ export function spendLabel(spend: Spend, comparable: boolean): string {
   if (!comparable) return "N/A";
   if (spend.incomplete) return "Incomplete";
   if (!spend.imported || spend.minor === null) return "Not imported";
-  if (spend.mixed || spend.minor <= 0) return "N/A";
+  if (spend.mixed || spend.minor < 0) return "N/A";
   return money(spend.minor, spend.currency);
 }
 
 export function costLabel(spend: Spend, comparable: boolean, opportunities: number): string {
-  if (!comparable || spend.incomplete || !spend.imported || spend.mixed || spend.minor === null || spend.minor <= 0 || opportunities <= 0) {
+  if (
+    !comparable ||
+    spend.incomplete ||
+    !spend.imported ||
+    spend.mixed ||
+    spend.minor === null ||
+    spend.minor < 0 ||
+    opportunities <= 0
+  ) {
     return "N/A";
   }
   return money(Math.round(spend.minor / opportunities), spend.currency);
@@ -499,10 +507,20 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
   };
 
   const submissionById = new Map(submissionRows.map((row) => [row.group_id ?? "", row]));
+  const discoveredCampaigns = (
+    await db
+      .prepare(
+        "SELECT external_id AS id, name FROM ad_entities WHERE platform = 'meta' AND level = 'campaign' AND external_id != ''",
+      )
+      .all<{ id: string; name: string }>()
+  ).results;
   const ids = new Set<string>([
     ...grouped.results.map((row) => row.group_id ?? ""),
     ...submissionRows.map((row) => row.group_id ?? ""),
   ]);
+  if (level === "campaign" && !query.formId) {
+    for (const campaign of discoveredCampaigns) ids.add(campaign.id);
+  }
 
   const groups: QualityGroup[] = level
     ? [...ids].map((id) => {
@@ -514,7 +532,13 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
         const pending = num(metrics?.pending);
         const rowSpendValue = resolveSpend(level, id, nodes, spendMaps);
         const costMinor =
-          comparable && rowSpendValue.imported && !rowSpendValue.mixed && rowSpendValue.minor && rowSpendValue.minor > 0 && genuine > 0
+          comparable &&
+          rowSpendValue.imported &&
+          !rowSpendValue.incomplete &&
+          !rowSpendValue.mixed &&
+          rowSpendValue.minor !== null &&
+          rowSpendValue.minor >= 0 &&
+          genuine > 0
             ? Math.round(rowSpendValue.minor / genuine)
             : null;
         return {
@@ -660,10 +684,12 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
       };
     }),
     truncated: recordRows.length > 200,
-    campaigns: campaignOptions.results.map((item) => ({
-      id: item.id,
-      name: groupName("campaign", item.id, item.name ?? "", entities),
-    })),
+    campaigns: [...campaignOptions.results, ...discoveredCampaigns.filter((campaign) => !campaignOptions.results.some((item) => item.id === campaign.id))]
+      .map((item) => ({
+        id: item.id,
+        name: groupName("campaign", item.id, item.name ?? "", entities),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     forms: formOptions.results.map((item) => ({ id: item.id, name: item.name || item.id })),
     breadcrumb: {
       campaign: await scopeName("campaign", query.campaignId),

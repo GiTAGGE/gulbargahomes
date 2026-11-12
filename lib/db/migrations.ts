@@ -501,6 +501,16 @@ export const MIGRATIONS: Migration[] = [
     name: "meta_user_token_scopes",
     statements: [`ALTER TABLE meta_connection ADD COLUMN user_token_scopes_json TEXT NOT NULL DEFAULT '[]'`],
   },
+  {
+    // Version 7 stays unused. Do not renumber versions 1–12.
+    // Which ad account Sync spend reads. Empty until a super admin selects one.
+    version: 13,
+    name: "meta_ad_account",
+    statements: [
+      `ALTER TABLE meta_connection ADD COLUMN ad_account_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE meta_connection ADD COLUMN ad_account_name TEXT NOT NULL DEFAULT ''`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

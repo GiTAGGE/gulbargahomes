@@ -288,7 +288,7 @@ describe("campaign quality", () => {
     assert.equal(drilled.records[0]?.name, "No Campaign");
   });
 
-  it("shows N/A when spend is missing or zero, and a rupee cost when spend is imported", async () => {
+  it("shows ₹0 when imported spend is zero, N/A when spend is missing, and a rupee cost when spend is imported", async () => {
     const db = await setup();
     const paid = await metaOwner(db, { name: "Paid Lead", phone: "9845055555" }, {
       metaLeadId: "meta-paid",
@@ -322,8 +322,9 @@ describe("campaign quality", () => {
     assert.equal(paidReport.summary.costPerOpportunity, "₹2,500");
     assert.equal(paidReport.summary.costPerOwner, "₹2,500");
     const zero = await campaignQuality(db, parseQualityQuery({ campaign: "camp-zero" }));
-    assert.equal(zero.summary.spendLabel, "N/A");
-    assert.equal(zero.summary.costPerOpportunity, "N/A");
+    assert.equal(zero.summary.spendLabel, "₹0");
+    assert.equal(zero.summary.costPerOpportunity, "₹0");
+    assert.equal(zero.summary.costPerOwner, "₹0");
     const missing = await campaignQuality(db, parseQualityQuery({ campaign: "camp-missing" }));
     assert.equal(missing.summary.spendLabel, "Not imported");
     assert.equal(missing.summary.costPerLead, "N/A");
@@ -671,5 +672,31 @@ describe("campaign quality", () => {
     assert.equal(stillPartial.groups.find((group) => group.id === "set-b")?.spendLabel, "₹500");
     assert.notEqual(stillPartial.summary.spendLabel, "₹1,000");
     assert.notEqual(stillPartial.summary.spendLabel, "₹1,500");
+  });
+
+  it("lists a discovered campaign that has no submissions", async () => {
+    const db = await setup();
+    await db
+      .prepare(
+        `INSERT INTO ad_entities (platform, level, external_id, name, parent_id, first_seen_at, last_seen_at)
+         VALUES ('meta', 'campaign', '120257536957600091', 'GH | Agri Land Owner JV Leads', '', ?1, ?1)`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES ('meta', 'campaign', '120257536957600091', '2026-11-02', 'INR', 0, 'meta_insights', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    const report = await campaignQuality(db, parseQualityQuery({}));
+    const campaign = report.groups.find((group) => group.id === "120257536957600091");
+    assert.equal(campaign?.name, "GH | Agri Land Owner JV Leads");
+    assert.equal(campaign?.submissions, 0);
+    assert.equal(campaign?.genuineOpportunities, 0);
+    assert.equal(campaign?.spendLabel, "₹0");
+    assert.equal(campaign?.costLabel, "N/A");
+    assert.equal(report.campaigns.some((item) => item.id === "120257536957600091"), true);
   });
 });

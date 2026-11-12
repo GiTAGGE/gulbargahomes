@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { ImportSpendButton } from "@/components/admin/import-spend-button";
 import { SyncNamesButton } from "@/components/admin/sync-names-button";
 import { Card, Empty, Pill, Stat } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/admin/format";
@@ -65,7 +66,12 @@ export default async function CampaignsPage({
         confirms it. Spend is shown only when it has been imported.
       </p>
       {marketingWarning && <p className="mb-4 max-w-3xl text-sm text-amber-800">{marketingWarning}</p>}
-      {caps.manageIntegrations && <SyncNamesButton />}
+      {caps.manageIntegrations && (
+        <div className="mb-4 flex flex-wrap items-start gap-4">
+          <SyncNamesButton />
+          <ImportSpendButton />
+        </div>
+      )}
 
       <form action="/admin/campaigns" className="mb-4 grid gap-3 rounded-2xl border border-brand-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-xs font-semibold text-ink">
@@ -137,7 +143,7 @@ export default async function CampaignsPage({
         title={report.summary.qualityLabel}
         hint={`${report.summary.uniqueContacts} unique contacts · ${report.summary.genuineOpportunities} genuine opportunities · ${report.summary.ownerAndSeeker} people who are a genuine owner and a genuine seeker`}
       >
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Spend</dt>
             <dd className="mt-0.5 text-sm font-semibold text-ink">{report.summary.spendLabel}</dd>
@@ -157,6 +163,10 @@ export default async function CampaignsPage({
           <div>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Cost per genuine tenant</dt>
             <dd className="mt-0.5 text-sm font-semibold text-ink">{report.summary.costPerTenant}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Cost per genuine opportunity</dt>
+            <dd className="mt-0.5 text-sm font-semibold text-ink">{report.summary.costPerOpportunity}</dd>
           </div>
         </dl>
         {!report.costComparable && (
@@ -304,9 +314,10 @@ export default async function CampaignsPage({
           </li>
           <li>A requirement added from an owner lead keeps that lead’s campaign and does not add another submission.</li>
           <li>
-            Cost uses imported spend, in paise for INR. Zero spend, missing spend, or no genuine opportunities is N/A.
-            A campaign total uses only campaign-level spend. If spend is imported for only some ad sets or ads, the total
-            stays Incomplete rather than a partial sum. Nothing is estimated.
+            Cost uses imported campaign spend, in paise for INR. An imported zero is ₹0. Missing spend or no genuine
+            opportunities is N/A. Campaigns from the ad account stay on this list even when they have no submissions.
+            A campaign total uses only campaign-level spend. If spend is imported for only some campaigns, ad sets or ads,
+            the total stays Incomplete rather than a partial sum. Nothing is estimated, and a daily budget is not used.
           </li>
           <li>A lead with no campaign id is Unattributed. It is not given another campaign.</li>
           <li>Dates are the original Meta submission time in India Standard Time.</li>

@@ -184,12 +184,12 @@ The integration requests only these. The table lists every Graph call it makes.
 `pages_manage_ads`, `leads_retrieval`.
 
 **Optional**, requested only if ticked on the Connect card:
-- `ads_read`: campaign, ad set and ad **names**. The ids come with the lead
-  either way. **Sync names** reads those names with the saved user token, not
-  the Page token, and it checks `ads_read` on the user token's own permission
-  list. It does not re-import leads and it does not read spend.
-  A rejected or expired user token does not pause Lead Ads.
-  `ads_management` is still not requested.
+- `ads_read`: campaign, ad set and ad **names**, and campaign **spend**. The ids
+  come with the lead either way. **Sync names** and **Import spend** both use
+  the saved user token, not the Page token, and both check `ads_read` on the
+  user token's own permission list. Neither re-imports leads. Import spend reads
+  Insights and does not read `daily_budget`. A rejected or expired user token
+  does not pause Lead Ads. `ads_management` is still not requested.
 - `business_management`: only if the Page is reachable solely through the
   Business portfolio and does not appear in the Page picker. Meta documents it
   for Business Manager assets and system-user tokens, which this flow does not
@@ -242,8 +242,13 @@ also collected in `ad_entities`.
 
 `campaign_lead_funnel` (view) counts leads, owner leads, requirements,
 qualified, visited, rented and sold per campaign from current statuses.
-`ad_spend_daily` is empty until a real spend import exists. The view returns
-`NULL` spend and the UI shows no cost per lead rather than inventing one.
+`ad_spend_daily` stores one row per campaign per day. **Import spend** fills it
+from the Marketing API Insights endpoint with the saved user token and
+`ads_read`. The amount is delivered spend in INR, stored as paise. The same
+day is replaced on the next import, not added again. A campaign Meta did not
+return is stored as zero only after every Insights page has been read. An
+account that is not INR is refused and nothing is stored. The Page token is
+not used, and a failed import does not pause Lead Ads.
 
 ## Permissions
 
@@ -558,8 +563,8 @@ later deploy:
 - Only Indian mobile numbers are accepted. Other leads are held for review.
 - An existing contact keeps its current name and email. The form values are
   still visible under Form answers.
-- Funnel counts reflect current statuses, not stage history. Spend import is
-  not built yet, so cost metrics stay empty.
+- Funnel counts reflect current statuses, not stage history. Cost metrics stay
+  empty until **Import spend** has run for the selected ad account.
 - Campaign, ad set and ad names need the optional `ads_read`, then **Sync names**.
   Re-importing a lead does not fill a name that was missing the first time.
   Ad-level ids may need advertiser access on the ad account. Without either,

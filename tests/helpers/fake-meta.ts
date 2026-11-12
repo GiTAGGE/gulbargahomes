@@ -33,6 +33,24 @@ export class FakeMeta {
   scopes = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
   /** When set, debug_token for the Page token returns this list instead of `scopes`. */
   pageScopes: string[] | null = null;
+  adAccounts: { id: string; name: string; currency: string }[] = [
+    { id: "act_1509113601263131", name: "GulbargaHomes", currency: "INR" },
+  ];
+  adCampaigns: { id: string; name: string; effective_status: string }[] = [];
+  insights: {
+    campaign_id: string;
+    campaign_name?: string;
+    spend: string;
+    impressions?: string;
+    clicks?: string;
+    account_currency?: string;
+    date_start: string;
+  }[] = [];
+  insightPageSize = 100;
+  /** When set, the Insights request whose `after` cursor reaches this index fails. */
+  insightFailAt: number | null = null;
+  /** Return a next page without a cursor, so the importer must not treat the list as finished. */
+  insightDropCursor = false;
   /** Simulates a token without advertiser access: ad-level lead fields are refused. */
   refuseAdFields = false;
   /** Campaign, ad set and ad nodes returned by a Marketing API name read. */
@@ -84,6 +102,27 @@ export class FakeMeta {
     if (path === "/me") return json({ id: "777", name: "Gulbarga Support" });
     if (path === "/me/accounts") {
       return json({ data: [{ id: PAGE_ID, name: "GulbargaHomes", access_token: PAGE_TOKEN, tasks: ["ADVERTISE", "MANAGE"] }] });
+    }
+    if (path === "/me/adaccounts") {
+      return json({ data: this.adAccounts.map((account) => ({ ...account, account_status: 1 })) });
+    }
+    const campaignsMatch = path.match(/^\/(act_\d+)\/campaigns$/);
+    if (campaignsMatch) {
+      return json({ data: this.adCampaigns });
+    }
+    const insightsMatch = path.match(/^\/(act_\d+)\/insights$/);
+    if (insightsMatch) {
+      const after = Number(url.searchParams.get("after") ?? 0);
+      if (this.insightFailAt !== null && after >= this.insightFailAt) {
+        return json({ error: { message: "Please reduce the amount of data", code: 1, is_transient: true } }, 500);
+      }
+      const page = this.insights.slice(after, after + this.insightPageSize);
+      const more = after + this.insightPageSize < this.insights.length;
+      const cursor = this.insightDropCursor ? "" : String(after + this.insightPageSize);
+      return json({
+        data: page,
+        paging: { ...(cursor ? { cursors: { after: cursor } } : {}), ...(more ? { next: "https://graph/next" } : {}) },
+      });
     }
     if (path === `/${PAGE_ID}`) return json({ id: PAGE_ID, name: "GulbargaHomes" });
     if (path === `/${PAGE_ID}/subscribed_apps`) {

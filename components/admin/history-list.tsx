@@ -36,6 +36,8 @@ const ACTION_LABEL: Record<string, string> = {
   login: "Signed in",
   backfill: "Brought into the new inventory",
   sync_campaign_names: "Synced campaign names",
+  select_ad_account: "Selected the ad account",
+  import_campaign_spend: "Imported campaign spend",
 };
 
 const FIELD_LABEL: Record<string, string> = {
