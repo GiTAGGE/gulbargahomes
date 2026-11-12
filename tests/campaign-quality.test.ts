@@ -9,11 +9,12 @@ import { addClientRequirements } from "../lib/crm/owner-client";
 import { convertOwnerLead, createOwnerLead, getOwnerLead, listOwnerLeads, setOwnerLeadRoleReview } from "../lib/crm/owner-leads";
 import { maskPhone } from "../lib/crm/phone";
 import { campaignQuality, parseQualityQuery, qualityLabel } from "../lib/crm/quality";
-import { mergeCoverageRanges, rangeCovered } from "../lib/crm/spend-coverage";
 import { createRequirement, getRequirement, parseRequirementInput, setRequirementQuality } from "../lib/crm/requirements";
+import { mergeCoverageRanges, rangeCovered } from "../lib/crm/spend-coverage";
 import { getSource, parseSourceInput } from "../lib/crm/sources";
 import { todayQueue } from "../lib/crm/today";
 import { prepareDatabase } from "../lib/db/prepare";
+import { saveAdAccount } from "../lib/meta/connection";
 import { createTestDb } from "./helpers/sqlite";
 
 const executive = { id: "adm_exec", email: "leads@example.com", role: "lead_executive" };
@@ -761,6 +762,125 @@ describe("campaign quality", () => {
     assert.notEqual(gap.summary.spendLabel, "₹2,500");
     const early = await campaignQuality(db, parseQualityQuery({ from: "2026-05-12", to: "2026-05-20" }));
     assert.equal(early.summary.spendLabel, "Not imported");
+  });
+
+  it("marks a report Incomplete when it crosses a gap between two saved coverage windows", async () => {
+    const db = await setup();
+    await db
+      .prepare(
+        `INSERT INTO meta_connection (id, status, updated_at, ad_account_id, ad_account_name)
+         VALUES ('primary', 'connected', ?1, 'act_1509113601263131', 'GulbargaHomes')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_entities (platform, level, external_id, name, parent_id, first_seen_at, last_seen_at)
+         VALUES ('meta', 'campaign', 'camp-gap', 'Gapped', '', ?1, ?1)`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+         VALUES
+           ('meta', 'campaign', 'act_1509113601263131', '2026-05-01', '2026-05-20', ?1, 'x'),
+           ('meta', 'campaign', 'act_1509113601263131', '2026-08-14', '2026-11-12', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES
+           ('meta', 'campaign', 'camp-gap', '2026-05-15', 'INR', 10000, 'meta_insights', ?1, 'x'),
+           ('meta', 'campaign', 'camp-gap', '2026-11-02', 'INR', 250000, 'meta_insights', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+
+    const may = await campaignQuality(db, parseQualityQuery({ from: "2026-05-01", to: "2026-05-20" }));
+    assert.equal(may.summary.spendLabel, "₹100");
+    assert.equal(may.groups.find((group) => group.id === "camp-gap")?.spendMinor, 10000);
+    const november = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
+    assert.equal(november.summary.spendLabel, "₹2,500");
+    assert.equal(november.groups.find((group) => group.id === "camp-gap")?.spendMinor, 250000);
+
+    const crossing = await campaignQuality(db, parseQualityQuery({ from: "2026-05-01", to: "2026-11-12" }));
+    assert.deepEqual(crossing.spendCoverage, [
+      { since: "2026-05-01", until: "2026-05-20" },
+      { since: "2026-08-14", until: "2026-11-12" },
+    ]);
+    assert.equal(crossing.summary.spendLabel, "Incomplete");
+    assert.equal(crossing.summary.costPerLead, "N/A");
+    assert.equal(crossing.groups.find((group) => group.id === "camp-gap")?.spendLabel, "Incomplete");
+    assert.equal(crossing.groups.find((group) => group.id === "camp-gap")?.spendMinor, null);
+    assert.notEqual(crossing.summary.spendLabel, "₹2,600");
+    assert.notEqual(crossing.summary.spendLabel, "₹2,500");
+    assert.notEqual(crossing.summary.spendLabel, "₹100");
+  });
+
+  it("does not reuse coverage after the selected ad account changes", async () => {
+    const db = await setup();
+    await db
+      .prepare(
+        `INSERT INTO meta_connection (id, status, updated_at, ad_account_id, ad_account_name)
+         VALUES ('primary', 'connected', ?1, 'act_1509113601263131', 'GulbargaHomes')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_entities (platform, level, external_id, name, parent_id, first_seen_at, last_seen_at)
+         VALUES ('meta', 'campaign', 'camp-switch', 'Switched', '', ?1, ?1)`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'act_1509113601263131', '2026-08-14', '2026-11-12', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'camp-switch', '2026-11-02', 'INR', 250000, 'meta_insights', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+
+    const first = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
+    assert.equal(first.summary.spendLabel, "₹2,500");
+    assert.deepEqual(first.spendCoverage, [{ since: "2026-08-14", until: "2026-11-12" }]);
+
+    await saveAdAccount(db, executive, { id: "act_9990000000001", name: "Other", now: NOW });
+    const switched = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
+    assert.deepEqual(switched.spendCoverage, []);
+    assert.equal(switched.summary.spendLabel, "Incomplete");
+    assert.equal(switched.summary.costPerOpportunity, "N/A");
+    assert.equal(switched.groups.find((group) => group.id === "camp-switch")?.spendMinor, null);
+    assert.notEqual(switched.summary.spendLabel, "₹2,500");
+    const previous = await db
+      .prepare("SELECT COUNT(*) AS n FROM ad_spend_coverage WHERE ad_account_id = 'act_1509113601263131'")
+      .first<{ n: number }>();
+    assert.equal(previous?.n, 1);
+
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'act_9990000000001', '2026-11-01', '2026-11-05', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    const outsideNew = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
+    assert.deepEqual(outsideNew.spendCoverage, [{ since: "2026-11-01", until: "2026-11-05" }]);
+    assert.equal(outsideNew.summary.spendLabel, "Incomplete");
+    assert.notEqual(outsideNew.summary.spendLabel, "₹2,500");
+    const insideNew = await campaignQuality(db, parseQualityQuery({ from: "2026-11-01", to: "2026-11-05" }));
+    assert.equal(insideNew.summary.spendLabel, "₹2,500");
+    assert.equal(insideNew.groups.find((group) => group.id === "camp-switch")?.spendMinor, 250000);
   });
 
   it("merges adjacent import windows and rejects a gap", () => {

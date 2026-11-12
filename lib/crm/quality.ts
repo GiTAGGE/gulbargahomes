@@ -510,8 +510,10 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     adset: await spendMap(db, "adset", query),
     ad: await spendMap(db, "ad", query),
   };
-  const spendCoverage = await campaignCoverage(db);
-  const spendUncovered = spendCoverage.length > 0 && !rangeCovered(query.from, query.to, spendCoverage);
+  const selectedAccount = await selectedAdAccount(db);
+  const spendCoverage = await campaignCoverage(db, selectedAccount);
+  // A selected account uses only its own saved windows. Another account's coverage is not a substitute.
+  const spendUncovered = selectedAccount !== "" && !rangeCovered(query.from, query.to, spendCoverage);
 
   const submissionById = new Map(submissionRows.map((row) => [row.group_id ?? "", row]));
   const discoveredCampaigns = (
@@ -709,12 +711,15 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
   };
 }
 
-/** Windows a successful campaign import fully wrote for the ad account currently selected. */
-async function campaignCoverage(db: SqlDb): Promise<CoverageRange[]> {
+async function selectedAdAccount(db: SqlDb): Promise<string> {
   const account = await db
     .prepare("SELECT ad_account_id FROM meta_connection WHERE id = 'primary'")
     .first<{ ad_account_id: string }>();
-  const accountId = account?.ad_account_id ?? "";
+  return account?.ad_account_id ?? "";
+}
+
+/** Windows a successful campaign import fully wrote for the ad account currently selected. */
+async function campaignCoverage(db: SqlDb, accountId: string): Promise<CoverageRange[]> {
   if (!accountId) return [];
   const { results } = await db
     .prepare(

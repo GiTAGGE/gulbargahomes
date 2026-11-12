@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import { listAudit } from "../lib/admin/audit";
 import { HttpError } from "../lib/admin/errors";
+import { formatInr } from "../lib/admin/format";
 import { can } from "../lib/admin/permissions";
+import { campaignQuality, parseQualityQuery } from "../lib/crm/quality";
 import { prepareDatabase } from "../lib/db/prepare";
 import { readMetaConfig } from "../lib/meta/config";
 import {
@@ -279,6 +281,48 @@ describe("campaign spend import", () => {
     const inside = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
     assert.equal(inside.summary.spendLabel, "₹0");
     assert.equal(inside.groups.every((group) => group.spendMinor === 0), true);
+  });
+
+  it("marks a blank From and a blank To Incomplete after a successful import", async () => {
+    const { db, graph } = await connect();
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, meta_lead_id, meta_campaign_id, meta_campaign_name, submitted_at, created_at, created_by)
+         VALUES ('src_blank', 'meta_lead_form', 'lead-blank', ?1, 'Rent Owners - Area Wise', '2026-11-01T00:00:00.000Z', ?2, 'x')`,
+      )
+      .bind(ACTIVE, NOW)
+      .run();
+    const imported = await importCampaignSpend(db, actor, config.tokenKey, graph, NOW);
+    assert.equal(imported.since, "2026-11-01");
+    assert.equal(imported.until, "2026-11-12");
+
+    const openQuery = parseQualityQuery({});
+    assert.equal(openQuery.from, null);
+    assert.equal(openQuery.to, null);
+    const bothBlank = await campaignQuality(db, openQuery);
+    assert.equal(bothBlank.summary.spendLabel, "Incomplete");
+    assert.equal(bothBlank.summary.costPerLead, "N/A");
+    assert.equal(bothBlank.groups.every((group) => group.spendLabel === "Incomplete" && group.spendMinor === null), true);
+
+    const fromBlankQuery = parseQualityQuery({ to: "2026-11-12" });
+    assert.equal(fromBlankQuery.from, null);
+    assert.equal(fromBlankQuery.to, "2026-11-12");
+    const fromBlank = await campaignQuality(db, fromBlankQuery);
+    assert.equal(fromBlank.summary.spendLabel, "Incomplete");
+    assert.equal(fromBlank.groups.every((group) => group.spendMinor === null), true);
+
+    const toBlankQuery = parseQualityQuery({ from: "2026-11-01" });
+    assert.equal(toBlankQuery.from, "2026-11-01");
+    assert.equal(toBlankQuery.to, null);
+    const toBlank = await campaignQuality(db, toBlankQuery);
+    assert.equal(toBlank.summary.spendLabel, "Incomplete");
+    assert.equal(toBlank.groups.every((group) => group.spendMinor === null), true);
+
+    const inside = await campaignQuality(db, parseQualityQuery({ from: "2026-11-01", to: "2026-11-12" }));
+    assert.equal(inside.summary.spendLabel, formatInr(10.5));
+    assert.notEqual(bothBlank.summary.spendLabel, inside.summary.spendLabel);
+    assert.notEqual(fromBlank.summary.spendLabel, inside.summary.spendLabel);
+    assert.notEqual(toBlank.summary.spendLabel, inside.summary.spendLabel);
   });
 
   it("does not call the Marketing API when the user token lacks ads_read, even if the Page token list has it", async () => {

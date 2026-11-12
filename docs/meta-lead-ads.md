@@ -254,7 +254,8 @@ super admin, in addition to `integrations.manage`. A successful import records
 the dates it fully wrote in `ad_spend_coverage`. Campaign quality marks spend
 Incomplete when the selected From or To, including a blank date, falls outside
 that window, so a longer report cannot show the imported days as the whole
-period. The Page token is not used, and a failed import does not pause Lead Ads.
+period. The report uses only the ad account currently selected. A saved window
+for a previous account is not reused. The Page token is not used, and a failed import does not pause Lead Ads.
 
 ## Permissions
 
