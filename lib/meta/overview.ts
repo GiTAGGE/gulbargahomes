@@ -86,6 +86,7 @@ export type IngestionSummary = {
   leadgenId: string;
   formId: string;
   formName: string;
+  formClassification: string;
   origin: string;
   status: IngestionStatus;
   attempts: number;
@@ -107,6 +108,7 @@ type IngestionListRow = {
   leadgen_id: string;
   form_id: string;
   form_name: string | null;
+  form_classification: string | null;
   origin: string;
   status: string;
   attempts: number;
@@ -138,6 +140,7 @@ function toSummary(row: IngestionListRow, canViewPhone: boolean): IngestionSumma
     leadgenId: row.leadgen_id,
     formId: row.form_id,
     formName: row.form_name ?? "",
+    formClassification: row.form_classification ?? "",
     origin: row.origin,
     status: row.status as IngestionStatus,
     attempts: row.attempts,
@@ -155,7 +158,7 @@ function toSummary(row: IngestionListRow, canViewPhone: boolean): IngestionSumma
   };
 }
 
-const LIST_SELECT = `SELECT i.*, f.name AS form_name FROM meta_lead_ingestions i LEFT JOIN meta_forms f ON f.form_id = i.form_id`;
+const LIST_SELECT = `SELECT i.*, f.name AS form_name, f.classification AS form_classification FROM meta_lead_ingestions i LEFT JOIN meta_forms f ON f.form_id = i.form_id`;
 
 export async function listIngestions(
   db: SqlDb,

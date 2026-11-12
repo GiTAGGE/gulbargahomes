@@ -530,6 +530,39 @@ export const MIGRATIONS: Migration[] = [
        )`,
     ],
   },
+  {
+    // Version 7 stays unused. Do not renumber versions 1–14.
+    // Agricultural land JV is its own enquiry. It is not an owner lead and it does not create a property.
+    version: 15,
+    name: "land_jv_enquiries",
+    statements: [
+      `ALTER TABLE contacts ADD COLUMN is_land_jv INTEGER NOT NULL DEFAULT 0`,
+      `CREATE TABLE IF NOT EXISTS land_jv_enquiries (
+         id TEXT PRIMARY KEY,
+         code TEXT NOT NULL UNIQUE,
+         contact_id TEXT NOT NULL REFERENCES contacts (id),
+         source_id TEXT NOT NULL UNIQUE REFERENCES lead_sources (id),
+         taluk TEXT NOT NULL DEFAULT '',
+         village TEXT NOT NULL DEFAULT '',
+         acre_band TEXT NOT NULL DEFAULT '',
+         ownership TEXT NOT NULL DEFAULT '',
+         rtc_available TEXT NOT NULL DEFAULT '',
+         road_access TEXT NOT NULL DEFAULT '',
+         owners_agree TEXT NOT NULL DEFAULT '',
+         answers_json TEXT NOT NULL DEFAULT '[]',
+         notes TEXT NOT NULL DEFAULT '',
+         status TEXT NOT NULL DEFAULT 'New',
+         status_reason TEXT NOT NULL DEFAULT '',
+         created_at TEXT NOT NULL,
+         created_by TEXT NOT NULL,
+         updated_at TEXT NOT NULL,
+         updated_by TEXT NOT NULL,
+         row_version INTEGER NOT NULL DEFAULT 1
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_land_jv_contact ON land_jv_enquiries (contact_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_land_jv_status ON land_jv_enquiries (status, created_at)`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

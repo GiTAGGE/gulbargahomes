@@ -22,6 +22,7 @@ export async function AdminShell({
     { href: "/admin/forms", label: "Forms" },
     { href: "/admin/campaigns", label: "Campaigns" },
     { href: "/admin/owner-leads", label: "Owner leads" },
+    { href: "/admin/land-jv", label: "Land JV" },
     { href: "/admin/requirements", label: "Requirements" },
     { href: "/admin/properties", label: "Inventory" },
     { href: "/admin/contacts", label: "Contacts" },

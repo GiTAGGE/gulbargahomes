@@ -1,6 +1,7 @@
 import { auditStatement, type AuditActor } from "../admin/audit";
 import { HttpError } from "../admin/errors";
 import { findContactByPhone } from "../crm/contacts";
+import { createLandJvEnquiry } from "../crm/land-jv";
 import { noMatching, type MatchingTrigger } from "../crm/matching-hook";
 import { createOwnerLead } from "../crm/owner-leads";
 import { normalizeIndianMobile } from "../crm/phone";
@@ -182,6 +183,11 @@ async function existingEntity(db: SqlDb, leadgenId: string) {
     .bind(sourceId)
     .first<{ id: string; contact_id: string; created_by: string }>();
   if (owner) return { entityType: "owner_lead", entityId: owner.id, contactId: owner.contact_id, ours: owner.created_by === META_ACTOR.id };
+  const land = await db
+    .prepare("SELECT id, contact_id, created_by FROM land_jv_enquiries WHERE source_id = ?1")
+    .bind(sourceId)
+    .first<{ id: string; contact_id: string; created_by: string }>();
+  if (land) return { entityType: "land_jv_enquiry", entityId: land.id, contactId: land.contact_id, ours: land.created_by === META_ACTOR.id };
   const requirement = await db
     .prepare("SELECT id, contact_id, created_by FROM demand_requirements WHERE source_id = ?1")
     .bind(sourceId)
@@ -362,13 +368,18 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
     const source = sourceFor(lead, form, row, mapped);
     const contact = { ...mapped.contact, phone };
 
-    let entityType: "owner_lead" | "requirement";
+    let entityType: "owner_lead" | "requirement" | "land_jv_enquiry";
     let entityId: string;
     let contactId: string;
     try {
       if (mapped.kind === "owner") {
         const created = await createOwnerLead(db, META_ACTOR, contact, mapped.owner, source, at);
         entityType = "owner_lead";
+        entityId = created.id;
+        contactId = created.contactId;
+      } else if (mapped.kind === "land_jv") {
+        const created = await createLandJvEnquiry(db, META_ACTOR, contact, mapped.enquiry, source, at);
+        entityType = "land_jv_enquiry";
         entityId = created.id;
         contactId = created.contactId;
       } else {
@@ -411,7 +422,9 @@ export async function processIngestion(runtime: MetaRuntime, id: string): Promis
     await finish(db, row, at, "done", { entityType, entityId, contactId, contactExisting });
     await touchConnection(db, "last_success_at", at);
     try {
-      await (runtime.matching ?? noMatching).onCaptured(db, { kind: entityType, id: entityId, contactId, origin: row.origin });
+      if (entityType !== "land_jv_enquiry") {
+        await (runtime.matching ?? noMatching).onCaptured(db, { kind: entityType, id: entityId, contactId, origin: row.origin });
+      }
     } catch (error) {
       console.error("matching trigger failed", error);
     }
@@ -475,7 +488,7 @@ export async function processDue(
   return tally;
 }
 
-const IMPORT_AS = ["Buy", "Rent", "Sale", "Lease"] as const;
+const IMPORT_AS = ["Buy", "Rent", "Sale", "Lease", "Land JV"] as const;
 export type ImportAsIntent = (typeof IMPORT_AS)[number];
 
 /**
@@ -491,7 +504,7 @@ export async function resolveIngestionIntent(
   intent: string,
   now: string,
 ): Promise<{ ready: boolean; entityType: string | null; entityId: string | null }> {
-  if (!(IMPORT_AS as readonly string[]).includes(intent)) throw new HttpError(400, "Choose Buy, Rent, Sale or Lease.");
+  if (!(IMPORT_AS as readonly string[]).includes(intent)) throw new HttpError(400, "Choose Buy, Rent, Sale, Lease or Land JV.");
   const row = await db
     .prepare("SELECT id, status, last_error_kind, form_id, entity_type, entity_id FROM meta_lead_ingestions WHERE id = ?1")
     .bind(id)
@@ -501,9 +514,21 @@ export async function resolveIngestionIntent(
     return { ready: false, entityType: row.entity_type, entityId: row.entity_id };
   }
   const form = await getStoredForm(db, row.form_id);
-  const allowed = form?.classification === "owner" ? ["Sale", "Rent", "Lease"] : ["Buy", "Rent"];
+  const allowed =
+    form?.classification === "land_jv"
+      ? ["Land JV", "Sale", "Rent", "Lease"]
+      : form?.classification === "owner"
+        ? ["Sale", "Rent", "Lease"]
+        : ["Buy", "Rent"];
   if (!allowed.includes(intent)) {
-    throw new HttpError(400, form?.classification === "owner" ? "Choose Sale, Rent or Lease." : "Choose Buy or Rent.");
+    throw new HttpError(
+      400,
+      form?.classification === "land_jv"
+        ? "Choose Record as Land JV, or Import as Sale, Rent or Lease."
+        : form?.classification === "owner"
+          ? "Choose Sale, Rent or Lease."
+          : "Choose Buy or Rent.",
+    );
   }
   if (row.status !== "needs_review" || (row.last_error_kind !== "intent_demand" && row.last_error_kind !== "intent_owner")) {
     throw new HttpError(409, "This lead is no longer waiting for that decision.");

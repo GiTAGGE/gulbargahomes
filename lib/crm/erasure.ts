@@ -27,8 +27,8 @@ export function erasureStatements(code: string, by: string, at: string): string[
   if (Number.isNaN(Date.parse(at))) throw new Error("Bad timestamp");
 
   const target = `(SELECT id FROM contacts WHERE code = '${code}' OR merged_into_id IN (SELECT id FROM contacts WHERE code = '${code}'))`;
-  const owned = `(SELECT id FROM owner_leads WHERE contact_id IN ${target} UNION SELECT id FROM demand_requirements WHERE contact_id IN ${target})`;
-  const sources = `(SELECT source_id FROM owner_leads WHERE contact_id IN ${target} UNION SELECT source_id FROM demand_requirements WHERE contact_id IN ${target})`;
+  const owned = `(SELECT id FROM owner_leads WHERE contact_id IN ${target} UNION SELECT id FROM demand_requirements WHERE contact_id IN ${target} UNION SELECT id FROM land_jv_enquiries WHERE contact_id IN ${target})`;
+  const sources = `(SELECT source_id FROM owner_leads WHERE contact_id IN ${target} UNION SELECT source_id FROM demand_requirements WHERE contact_id IN ${target} UNION SELECT source_id FROM land_jv_enquiries WHERE contact_id IN ${target})`;
   // Held leads have no contact yet; match their stored answers on the 10 digits as typed without spaces.
   const ingestions = `(SELECT id FROM meta_lead_ingestions
       WHERE contact_id IN ${target}
@@ -46,6 +46,10 @@ export function erasureStatements(code: string, by: string, at: string): string[
      WHERE contact_id IN ${target} OR entity_id IN ${owned}`,
     `UPDATE owner_leads SET notes = '', location_text = '', status_reason = '${ERASED_REASON}', role_review_note = '', next_followup_at = NULL,
        status = CASE WHEN status IN ('New', 'Contacted', 'Details pending') THEN 'Not interested' ELSE status END,
+       updated_at = '${at}', updated_by = '${ERASURE_ACTOR}', row_version = row_version + 1
+     WHERE contact_id IN ${target}`,
+    `UPDATE land_jv_enquiries SET taluk = '', village = '', acre_band = '', ownership = '', rtc_available = '', road_access = '', owners_agree = '',
+       answers_json = '[]', notes = '', status_reason = '${ERASED_REASON}',
        updated_at = '${at}', updated_by = '${ERASURE_ACTOR}', row_version = row_version + 1
      WHERE contact_id IN ${target}`,
     `UPDATE demand_requirements SET notes = '', status_reason = '${ERASED_REASON}', quality_review_note = '', next_followup_at = NULL,
@@ -74,6 +78,7 @@ export function retentionReviewSql(asOf?: string): string {
   MAX(c.updated_at,
       COALESCE((SELECT MAX(updated_at) FROM owner_leads WHERE contact_id = c.id), ''),
       COALESCE((SELECT MAX(updated_at) FROM demand_requirements WHERE contact_id = c.id), ''),
+      COALESCE((SELECT MAX(updated_at) FROM land_jv_enquiries WHERE contact_id = c.id), ''),
       COALESCE((SELECT MAX(occurred_at) FROM activities WHERE contact_id = c.id), ''),
       COALESCE((SELECT MAX(COALESCE(completed_at, created_at)) FROM followups WHERE contact_id = c.id), '')) AS last_interaction
 FROM contacts c
