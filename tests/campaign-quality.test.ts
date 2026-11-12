@@ -9,6 +9,7 @@ import { addClientRequirements } from "../lib/crm/owner-client";
 import { convertOwnerLead, createOwnerLead, getOwnerLead, listOwnerLeads, setOwnerLeadRoleReview } from "../lib/crm/owner-leads";
 import { maskPhone } from "../lib/crm/phone";
 import { campaignQuality, parseQualityQuery, qualityLabel } from "../lib/crm/quality";
+import { mergeCoverageRanges, rangeCovered } from "../lib/crm/spend-coverage";
 import { createRequirement, getRequirement, parseRequirementInput, setRequirementQuality } from "../lib/crm/requirements";
 import { getSource, parseSourceInput } from "../lib/crm/sources";
 import { todayQueue } from "../lib/crm/today";
@@ -698,5 +699,85 @@ describe("campaign quality", () => {
     assert.equal(campaign?.spendLabel, "₹0");
     assert.equal(campaign?.costLabel, "N/A");
     assert.equal(report.campaigns.some((item) => item.id === "120257536957600091"), true);
+  });
+
+  it("marks spend Incomplete when the selected dates extend outside a successful import", async () => {
+    const db = await setup();
+    const paid = await metaOwner(db, { name: "Paid Lead", phone: "9845020202" }, {
+      metaLeadId: "meta-window",
+      metaCampaignId: "camp-window",
+      metaCampaignName: "Window",
+    });
+    await setOwnerLeadRoleReview(db, executive, paid, "genuine", "Real owner", { now: NOW, expectedVersion: paid.rowVersion });
+    await db
+      .prepare(
+        `INSERT INTO meta_connection (id, status, updated_at, ad_account_id, ad_account_name)
+         VALUES ('primary', 'connected', ?1, 'act_1509113601263131', 'GulbargaHomes')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'act_1509113601263131', '2026-08-14', '2026-11-12', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'camp-window', '2026-11-02', 'INR', 250000, 'meta_insights', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+
+    const inside = await campaignQuality(db, parseQualityQuery({ from: "2026-11-01", to: "2026-11-12" }));
+    assert.equal(inside.summary.spendLabel, "₹2,500");
+    assert.equal(inside.summary.costPerOpportunity, "₹2,500");
+    assert.equal(inside.groups.find((group) => group.id === "camp-window")?.spendMinor, 250000);
+
+    const sixMonths = await campaignQuality(db, parseQualityQuery({ from: "2026-05-12", to: "2026-11-12" }));
+    assert.equal(sixMonths.summary.spendLabel, "Incomplete");
+    assert.equal(sixMonths.summary.costPerLead, "N/A");
+    assert.equal(sixMonths.summary.costPerOpportunity, "N/A");
+    assert.equal(sixMonths.groups.find((group) => group.id === "camp-window")?.spendLabel, "Incomplete");
+    assert.equal(sixMonths.groups.find((group) => group.id === "camp-window")?.spendMinor, null);
+    assert.notEqual(sixMonths.summary.spendLabel, "₹2,500");
+
+    const open = await campaignQuality(db, parseQualityQuery({}));
+    assert.equal(open.summary.spendLabel, "Incomplete");
+    assert.equal(open.summary.costPerOpportunity, "N/A");
+    assert.deepEqual(open.spendCoverage, [{ since: "2026-08-14", until: "2026-11-12" }]);
+
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+         VALUES ('meta', 'campaign', 'act_1509113601263131', '2026-05-01', '2026-05-20', ?1, 'x')`,
+      )
+      .bind(NOW)
+      .run();
+    const gap = await campaignQuality(db, parseQualityQuery({ from: "2026-05-12", to: "2026-11-12" }));
+    assert.equal(gap.summary.spendLabel, "Incomplete");
+    assert.notEqual(gap.summary.spendLabel, "₹2,500");
+    const early = await campaignQuality(db, parseQualityQuery({ from: "2026-05-12", to: "2026-05-20" }));
+    assert.equal(early.summary.spendLabel, "Not imported");
+  });
+
+  it("merges adjacent import windows and rejects a gap", () => {
+    assert.deepEqual(
+      mergeCoverageRanges([
+        { since: "2026-08-15", until: "2026-11-13" },
+        { since: "2026-08-14", until: "2026-11-12" },
+      ]),
+      [{ since: "2026-08-14", until: "2026-11-13" }],
+    );
+    const gapped = [
+      { since: "2026-05-01", until: "2026-05-20" },
+      { since: "2026-08-14", until: "2026-11-12" },
+    ];
+    assert.equal(rangeCovered("2026-08-14", "2026-11-12", gapped), true);
+    assert.equal(rangeCovered("2026-05-12", "2026-11-12", gapped), false);
+    assert.equal(rangeCovered(null, "2026-11-12", gapped), false);
+    assert.equal(rangeCovered("2026-08-14", null, gapped), false);
   });
 });

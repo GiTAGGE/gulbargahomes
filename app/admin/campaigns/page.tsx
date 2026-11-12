@@ -7,7 +7,7 @@ import { Card, Empty, Pill, Stat } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { getConnection, marketingTokenWarning } from "@/lib/meta/connection";
-import { campaignQuality, parseQualityQuery, type QualityGroup, type QualityQuery } from "@/lib/crm/quality";
+import { campaignQuality, parseQualityQuery, type QualityGroup, type QualityQuery, type QualityReport } from "@/lib/crm/quality";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +37,24 @@ function href(current: URLSearchParams, updates: Record<string, string | undefin
   return query ? `/admin/campaigns?${query}` : "/admin/campaigns";
 }
 
+function coverageLabel(ranges: QualityReport["spendCoverage"]): string {
+  return ranges.map((range) => `${range.since} to ${range.until}`).join(" and ");
+}
+
+function spendNote(report: QualityReport): string | null {
+  if (!report.costComparable) return null;
+  const covered = report.spendCoverage.length > 0 ? `Imported campaign spend covers ${coverageLabel(report.spendCoverage)}.` : "";
+  if (report.summary.spendLabel === "Incomplete") {
+    const why =
+      report.spendCoverage.length > 0
+        ? "The selected dates fall outside that window, or only some campaigns, ad sets or ads have spend. The total is not a partial sum."
+        : "A partial ad set or ad import is not shown as the campaign, ad set or overall total.";
+    return [covered, why].filter(Boolean).join(" ");
+  }
+  if (!covered) return null;
+  return `${covered} Dates outside that window are Incomplete rather than a partial sum.`;
+}
+
 function levelLabel(level: QualityGroup["level"]): string {
   if (level === "adset") return "Ad set";
   if (level === "ad") return "Ad";
@@ -58,6 +76,7 @@ export default async function CampaignsPage({
     if (value) current.set(key, value);
   }
   const sortLink = (sort: QualityQuery["sort"]) => href(current, { sort });
+  const note = spendNote(report);
 
   return (
     <AdminShell eyebrow="Gulbarga (Kalaburagi)" title="Campaign quality">
@@ -174,11 +193,7 @@ export default async function CampaignsPage({
             Spend and cost are N/A while a form or intent filter is on. Imported spend covers the whole campaign, ad set or ad.
           </p>
         )}
-        {report.costComparable && report.summary.spendLabel === "Incomplete" && (
-          <p className="mt-3 text-xs text-ink-muted">
-            Spend is incomplete. A partial ad set or ad import is not shown as the campaign, ad set or overall total.
-          </p>
-        )}
+        {note && <p className="mt-3 text-xs text-ink-muted">{note}</p>}
       </Card>
 
       {(query.campaignId !== null || query.adsetId !== null || query.adId !== null) && (
@@ -316,8 +331,9 @@ export default async function CampaignsPage({
           <li>
             Cost uses imported campaign spend, in paise for INR. An imported zero is ₹0. Missing spend or no genuine
             opportunities is N/A. Campaigns from the ad account stay on this list even when they have no submissions.
-            A campaign total uses only campaign-level spend. If spend is imported for only some campaigns, ad sets or ads,
-            the total stays Incomplete rather than a partial sum. Nothing is estimated, and a daily budget is not used.
+            A campaign total uses only campaign-level spend. Spend is Incomplete when the selected dates, including a
+            blank From or To, fall outside a successful import, or when only some campaigns, ad sets or ads have spend.
+            The total is not a partial sum. Nothing is estimated, and a daily budget is not used.
           </li>
           <li>A lead with no campaign id is Unattributed. It is not given another campaign.</li>
           <li>Dates are the original Meta submission time in India Standard Time.</li>

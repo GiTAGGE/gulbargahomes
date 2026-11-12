@@ -164,6 +164,13 @@ describe("campaign spend import", () => {
     const entry = audit.find((item) => item.action === "import_campaign_spend");
     assert.equal(entry?.context.ad_account_id, ACCOUNT);
     assert.equal(entry?.context.since, "2026-11-01");
+    const coverage = await db
+      .prepare("SELECT ad_account_id, covered_since, covered_until FROM ad_spend_coverage")
+      .all<{ ad_account_id: string; covered_since: string; covered_until: string }>();
+    assert.equal(coverage.results.length, 1);
+    assert.equal(coverage.results[0]?.ad_account_id, ACCOUNT);
+    assert.equal(coverage.results[0]?.covered_since, "2026-11-01");
+    assert.equal(coverage.results[0]?.covered_until, "2026-11-12");
     assert.equal(JSON.stringify(entry?.context).includes(USER_TOKEN), false);
     assert.equal(JSON.stringify(entry?.context).includes(PAGE_TOKEN), false);
   });
@@ -175,6 +182,8 @@ describe("campaign spend import", () => {
     assert.equal((await spendRows(db)).length, 0);
     const entities = await db.prepare("SELECT COUNT(*) AS n FROM ad_entities").first<{ n: number }>();
     assert.equal(entities?.n, 0);
+    const coverage = await db.prepare("SELECT COUNT(*) AS n FROM ad_spend_coverage").first<{ n: number }>();
+    assert.equal(coverage?.n, 0);
     assert.equal((await getConnection(db)).status, "connected");
     assert.equal((await getConnection(db)).lastError, "");
 
@@ -257,6 +266,19 @@ describe("campaign spend import", () => {
     assert.equal(rows.every((row) => row.external_id === ACTIVE && row.currency === "INR" && row.spend_minor === 0), true);
     assert.equal(meta.requests.some((request) => request.url.includes("/insights")), true);
     assert.equal((await getConnection(db)).status, "connected");
+    const coverage = await db
+      .prepare("SELECT covered_since, covered_until FROM ad_spend_coverage")
+      .first<{ covered_since: string; covered_until: string }>();
+    assert.equal(coverage?.covered_since, "2026-08-14");
+    assert.equal(coverage?.covered_until, "2026-11-12");
+
+    const { campaignQuality, parseQualityQuery } = await import("../lib/crm/quality");
+    const wide = await campaignQuality(db, parseQualityQuery({ from: "2026-05-12", to: "2026-11-12" }));
+    assert.equal(wide.summary.spendLabel, "Incomplete");
+    assert.equal(wide.groups.every((group) => group.spendLabel === "Incomplete" && group.spendMinor === null), true);
+    const inside = await campaignQuality(db, parseQualityQuery({ from: "2026-08-14", to: "2026-11-12" }));
+    assert.equal(inside.summary.spendLabel, "₹0");
+    assert.equal(inside.groups.every((group) => group.spendMinor === 0), true);
   });
 
   it("does not call the Marketing API when the user token lacks ads_read, even if the Page token list has it", async () => {

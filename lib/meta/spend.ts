@@ -1,5 +1,6 @@
 import { auditStatement, type AuditActor } from "../admin/audit";
 import { HttpError } from "../admin/errors";
+import { mergeCoverageRanges } from "../crm/spend-coverage";
 import type { SqlDb, SqlStatement } from "../db/sql";
 import {
   CONNECTION_ID,
@@ -308,6 +309,29 @@ export async function importCampaignSpend(
     }
 
     const spendRows = discovered.length * dates.length;
+    const covered = await db
+      .prepare(
+        `SELECT covered_since AS since, covered_until AS until FROM ad_spend_coverage
+         WHERE platform = 'meta' AND level = 'campaign' AND ad_account_id = ?1`,
+      )
+      .bind(account.id)
+      .all<{ since: string; until: string }>();
+    const ranges = mergeCoverageRanges([...covered.results, { since: window.since, until: window.until }]);
+    statements.push(
+      db
+        .prepare("DELETE FROM ad_spend_coverage WHERE platform = 'meta' AND level = 'campaign' AND ad_account_id = ?1")
+        .bind(account.id),
+    );
+    for (const range of ranges) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO ad_spend_coverage (platform, level, ad_account_id, covered_since, covered_until, imported_at, imported_by)
+             VALUES ('meta', 'campaign', ?1, ?2, ?3, ?4, ?5)`,
+          )
+          .bind(account.id, range.since, range.until, now, actor.id),
+      );
+    }
     statements.push(
       auditStatement(db, {
         actor,
