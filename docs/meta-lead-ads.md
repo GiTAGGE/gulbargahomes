@@ -107,15 +107,19 @@ today.
 2. The callback exchanges the code for a long-lived user token.
    - Both exchanges are POSTs with the app secret in the body, never in a URL.
    - The token is checked with `debug_token`.
-   - The user token is stored encrypted only until a Page is chosen.
+   - The user token is stored encrypted and kept after a Page is chosen. Campaign,
+     ad set and ad name reads use this user token. Lead Ads calls do not.
 3. The admin picks the Page. The app then:
    - checks the required permissions
    - takes the Page token
-   - subscribes the Page to `leadgen`
+   - subscribes the Page to `leadgen` when it is not already subscribed
    - discovers its forms
-   - deletes the user token
+   - leaves the user token and its permission list in place
+   - stores the Page token's permissions separately. Sync names checks `ads_read`
+     on the user-token list, not on the Page-token list
 
-   Reconnecting the same Page selects it automatically.
+   Reconnecting the same Page refreshes both tokens and does not subscribe the
+   Page again when leadgen is already on.
 
 The redirect URI is `https://<host>/api/admin/integrations/meta/callback`, built
 from the host the admin is using, and must match an entry in Meta's *Valid OAuth
@@ -181,8 +185,10 @@ The integration requests only these. The table lists every Graph call it makes.
 
 **Optional**, requested only if ticked on the Connect card:
 - `ads_read`: campaign, ad set and ad **names**. The ids come with the lead
-  either way. **Sync names** on the Meta page reads those names for ids already
-  stored. It does not re-import leads and it does not read spend.
+  either way. **Sync names** reads those names with the saved user token, not
+  the Page token, and it checks `ads_read` on the user token's own permission
+  list. It does not re-import leads and it does not read spend.
+  A rejected or expired user token does not pause Lead Ads.
   `ads_management` is still not requested.
 - `business_management`: only if the Page is reachable solely through the
   Business portfolio and does not appear in the Page picker. Meta documents it

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     switch (body.action) {
       case "list_pages":
         needsSecrets();
-        return NextResponse.json({ pages: await candidatePages(auth.db, config, runtime.graph) });
+        return NextResponse.json({ pages: await candidatePages(auth.db, config, runtime.graph, now) });
       case "select_page": {
         needsSecrets();
         const pageId = typeof body.pageId === "string" && /^\d{5,40}$/.test(body.pageId) ? body.pageId : "";

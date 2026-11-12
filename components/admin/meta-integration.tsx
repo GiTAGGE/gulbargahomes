@@ -41,6 +41,7 @@ type Props = {
   recent: IngestionSummary[];
   jobs: ImportJob[];
   retentionDays: number;
+  marketingWarning: string | null;
   flash: { error: string; connected: boolean; choosePage: boolean };
 };
 
@@ -146,6 +147,7 @@ function ConnectionCard({
   canManage,
   connection,
   missingSecrets,
+  marketingWarning,
   flash,
   busy,
   act,
@@ -153,8 +155,9 @@ function ConnectionCard({
 }: Props & { busy: string; act: Act; setMessage: (value: { tone: "error" | "ok" | "warn"; text: string } | null) => void }) {
   const [pages, setPages] = useState<{ id: string; name: string; canManageLeads: boolean }[] | null>(null);
   const [checks, setChecks] = useState<{ label: string; ok: boolean; detail: string }[] | null>(null);
+  const grantedForNextConnect = connection.hasUserToken ? connection.userTokenScopes : connection.scopes;
   const [optional, setOptional] = useState<OptionalScope[]>(() =>
-    (Object.keys(OPTIONAL_SCOPES) as OptionalScope[]).filter((scope) => connection.scopes.includes(scope)),
+    (Object.keys(OPTIONAL_SCOPES) as OptionalScope[]).filter((scope) => grantedForNextConnect.includes(scope)),
   );
   const connectHref = `${API}/connect${optional.length ? `?${optional.map((scope) => `optional=${scope}`).join("&")}` : ""}`;
   const choosing = canManage && connection.awaitingPageChoice && (flash.choosePage || connection.status === "pending_page");
@@ -267,6 +270,15 @@ function ConnectionCard({
           <Detail label="Page token">
             {connection.hasPageToken ? (connection.pageTokenExpiresAt ? `Expires ${formatDateTime(connection.pageTokenExpiresAt)}` : "No expiry") : "—"}
           </Detail>
+          <Detail label="Campaign name token">
+            {connection.userTokenError
+              ? "Rejected. Reconnect."
+              : connection.hasUserToken
+                ? connection.userTokenExpiresAt
+                  ? `Expires ${formatDateTime(connection.userTokenExpiresAt)}`
+                  : "No expiry"
+                : "Not saved. Reconnect."}
+          </Detail>
           <Detail label="Data access until">{formatDateTime(connection.dataAccessExpiresAt)}</Detail>
           <Detail label="Last webhook">{formatDateTime(connection.lastWebhookAt)}</Detail>
           <Detail label="Last successful sync">{formatDateTime(connection.lastSuccessAt)}</Detail>
@@ -278,8 +290,14 @@ function ConnectionCard({
           </p>
           {connection.scopes.length > 0 && (
             <p>
-              Granted to this connection: <span className="font-mono">{connection.scopes.join(", ")}</span>. A granted permission
+              Granted to the Page token: <span className="font-mono">{connection.scopes.join(", ")}</span>. A granted permission
               in testing is not the same as Advanced Access from App Review.
+            </p>
+          )}
+          {connection.userTokenScopes.length > 0 && (
+            <p>
+              Granted to the Facebook user token: <span className="font-mono">{connection.userTokenScopes.join(", ")}</span>.
+              Sync names checks ads_read on this list.
             </p>
           )}
         </div>
@@ -303,7 +321,8 @@ function ConnectionCard({
             ))}
           </fieldset>
         )}
-        {connected && !connection.scopes.includes("ads_read") && (
+        {marketingWarning && <Notice tone="warn">{marketingWarning}</Notice>}
+        {connected && connection.hasUserToken && !connection.userTokenScopes.includes("ads_read") && (
           <Notice tone="warn">
             Campaign, ad set and ad names stay blank until this connection has ads_read. Tick ads_read under Optional on next
             connect and reconnect. Sync names reads those ids. It does not re-import leads, does not request ads_management, and

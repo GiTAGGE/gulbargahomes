@@ -29,14 +29,18 @@ export class FakeMeta {
   mode: "ok" | "down" | "expired" | "rate_limited" = "ok";
   calls: string[] = [];
   /** Full request URLs and bodies, to check that secrets never travel in a URL. */
-  requests: { method: string; url: string; body: string }[] = [];
+  requests: { method: string; url: string; body: string; authorization: string }[] = [];
   scopes = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
+  /** When set, debug_token for the Page token returns this list instead of `scopes`. */
+  pageScopes: string[] | null = null;
   /** Simulates a token without advertiser access: ad-level lead fields are refused. */
   refuseAdFields = false;
   /** Campaign, ad set and ad nodes returned by a Marketing API name read. */
   objects: { id: string; name: string }[] = [];
   /** `GET /{id}?fields=id,name` is refused. Lead field reads are unchanged. */
   refuseMarketingRead = false;
+  /** Marketing API calls that present the user token are rejected. Page-token calls still succeed. */
+  invalidUserToken = false;
   /** These ids answer with a rate limit during a name sync. */
   rateLimitIds = new Set<string>();
   /** Forms Meta knows about that belong to a different Page. */
@@ -48,20 +52,24 @@ export class FakeMeta {
     const method = (init.method ?? "GET").toUpperCase();
     this.calls.push(`${method} ${path}`);
     const body = typeof init.body === "string" ? init.body : "";
-    this.requests.push({ method, url: input, body });
+    const auth = new Headers(init.headers).get("authorization") ?? "";
+    this.requests.push({ method, url: input, body, authorization: auth });
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-    const auth = new Headers(init.headers).get("authorization") ?? "";
 
     if (this.mode === "down") return json({ error: { message: "Service temporarily unavailable", code: 2, is_transient: true } }, 503);
     if (this.mode === "rate_limited") return json({ error: { message: "Application request limit reached", code: 4 } }, 400);
     if (path === "/debug_token") {
       const token = url.searchParams.get("input_token");
       const valid = this.mode !== "expired" && (token === PAGE_TOKEN || token === USER_TOKEN);
-      return json({ data: { is_valid: valid, type: token === PAGE_TOKEN ? "PAGE" : "USER", expires_at: 0, data_access_expires_at: 1798761600, scopes: this.scopes } });
+      const scopes = token === PAGE_TOKEN && this.pageScopes ? this.pageScopes : this.scopes;
+      return json({ data: { is_valid: valid, type: token === PAGE_TOKEN ? "PAGE" : "USER", expires_at: 0, data_access_expires_at: 1798761600, scopes } });
     }
     if (this.mode === "expired") {
       return json({ error: { message: "Error validating access token: Session has expired", type: "OAuthException", code: 190, error_subcode: 463 } }, 401);
+    }
+    if (this.invalidUserToken && auth.endsWith(USER_TOKEN)) {
+      return json({ error: { message: "Invalid OAuth access token", type: "OAuthException", code: 190 } }, 401);
     }
     if (auth && !auth.endsWith(PAGE_TOKEN) && !auth.endsWith(USER_TOKEN)) {
       return json({ error: { message: "Invalid OAuth access token", type: "OAuthException", code: 190 } }, 401);

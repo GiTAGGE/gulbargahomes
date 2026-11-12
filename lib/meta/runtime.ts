@@ -14,6 +14,7 @@ export async function metaRuntime(db: SqlDb, origin = "") {
     graph: createGraphClient(config),
     tokenKey: config.tokenKey,
     pageId: connection.pageId,
+    // Lead reads use the Page token, so this follows the Page token's scopes.
     adNames: connection.scopes.includes("ads_read"),
   };
   return { runtime, config, missing, connection };
