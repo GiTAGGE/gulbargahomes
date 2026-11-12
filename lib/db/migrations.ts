@@ -487,6 +487,13 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE demand_requirements ADD COLUMN quality_review_note TEXT NOT NULL DEFAULT ''`,
     ],
   },
+  {
+    // Version 7 stays unused. Production is on version 10. Do not renumber versions 1–10.
+    // A Marketing API rejection is stored here and must not expire the Page token.
+    version: 11,
+    name: "meta_user_token_error",
+    statements: [`ALTER TABLE meta_connection ADD COLUMN user_token_error TEXT NOT NULL DEFAULT ''`],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

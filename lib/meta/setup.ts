@@ -32,8 +32,8 @@ function describe(error: unknown): string {
 }
 
 /** Pages the authorising Facebook user manages. Names and ids only. */
-export async function candidatePages(db: SqlDb, config: MetaConfig, graph: GraphClient) {
-  const userToken = await readUserToken(db, config.tokenKey);
+export async function candidatePages(db: SqlDb, config: MetaConfig, graph: GraphClient, now = new Date().toISOString()) {
+  const userToken = await readUserToken(db, config.tokenKey, now);
   if (!userToken) throw new HttpError(400, "Connect with Facebook first.");
   const pages = await graph.listPages(userToken);
   return pages.map((page) => ({ id: page.id, name: page.name, canManageLeads: page.tasks.length === 0 || page.tasks.some((task) => ["ADVERTISE", "MANAGE"].includes(task)) }));
@@ -47,7 +47,7 @@ export async function selectPage(
   pageId: string,
   now: string,
 ) {
-  const userToken = await readUserToken(db, config.tokenKey);
+  const userToken = await readUserToken(db, config.tokenKey, now);
   if (!userToken) throw new HttpError(400, "The Facebook authorisation has expired. Connect again.");
   const page = (await graph.listPages(userToken)).find((item) => item.id === pageId);
   if (!page) throw new HttpError(400, "That Page is not available to the Facebook account you connected.");
@@ -58,8 +58,11 @@ export async function selectPage(
   if (missing.length) {
     throw new HttpError(400, `Meta did not grant: ${missing.join(", ")}. Connect again and allow every permission.`);
   }
-  await graph.subscribeLeadgen(page.id, page.accessToken);
-  const subscribed = await graph.isLeadgenSubscribed(page.id, page.accessToken).catch(() => false);
+  let subscribed = await graph.isLeadgenSubscribed(page.id, page.accessToken).catch(() => false);
+  if (!subscribed) {
+    await graph.subscribeLeadgen(page.id, page.accessToken);
+    subscribed = await graph.isLeadgenSubscribed(page.id, page.accessToken).catch(() => false);
+  }
 
   await storePageConnection(db, actor, {
     tokenKey: config.tokenKey,

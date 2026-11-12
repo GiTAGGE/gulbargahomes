@@ -1,7 +1,14 @@
 import { auditStatement, type AuditActor } from "../admin/audit";
 import { HttpError } from "../admin/errors";
 import { changedRows, type SqlDb } from "../db/sql";
-import { getConnection, markTokenRejected, readPageToken } from "./connection";
+import {
+  getConnection,
+  MARKETING_TOKEN_EXPIRED,
+  MARKETING_TOKEN_INVALID,
+  MARKETING_TOKEN_MISSING,
+  markUserTokenRejected,
+  readUserToken,
+} from "./connection";
 import { MetaApiError, type GraphClient } from "./graph";
 
 const LEVELS = ["campaign", "adset", "ad"] as const;
@@ -63,8 +70,23 @@ export async function syncCampaignNames(
     await record(db, actor, now, emptyResult(ADS_READ_MESSAGE), ADS_READ_MESSAGE);
     throw new HttpError(400, ADS_READ_MESSAGE);
   }
-  const token = await readPageToken(db, tokenKey);
-  if (!token) throw new HttpError(400, "Connect a Facebook Page before syncing campaign names.");
+  if (connection.userTokenError) {
+    await record(db, actor, now, emptyResult(MARKETING_TOKEN_INVALID), connection.userTokenError);
+    throw new HttpError(401, MARKETING_TOKEN_INVALID);
+  }
+  if (!connection.hasUserToken) {
+    await record(db, actor, now, emptyResult(MARKETING_TOKEN_MISSING), MARKETING_TOKEN_MISSING);
+    throw new HttpError(400, MARKETING_TOKEN_MISSING);
+  }
+  if (connection.userTokenExpiresAt && connection.userTokenExpiresAt <= now) {
+    await record(db, actor, now, emptyResult(MARKETING_TOKEN_EXPIRED), MARKETING_TOKEN_EXPIRED);
+    throw new HttpError(401, MARKETING_TOKEN_EXPIRED);
+  }
+  const token = await readUserToken(db, tokenKey, now);
+  if (!token) {
+    await record(db, actor, now, emptyResult(MARKETING_TOKEN_MISSING), MARKETING_TOKEN_MISSING);
+    throw new HttpError(400, MARKETING_TOKEN_MISSING);
+  }
 
   const targets = await knownTargets(db);
   const found: { level: Level; id: string; name: string }[] = [];
@@ -86,10 +108,9 @@ export async function syncCampaignNames(
   }
 
   if (stop === "auth") {
-    await markTokenRejected(db, errors[0] ?? "Meta rejected the Page token.", now);
-    const message = "Meta rejected the Page token. Reconnect with ads_read ticked, then run Sync names again. No names were changed.";
-    await record(db, actor, now, emptyResult(message), errors.join(" | "));
-    throw new HttpError(401, message);
+    await markUserTokenRejected(db, errors[0] ?? "Meta rejected the user token.", now);
+    await record(db, actor, now, emptyResult(MARKETING_TOKEN_INVALID), errors.join(" | "));
+    throw new HttpError(401, MARKETING_TOKEN_INVALID);
   }
   if (stop === "permission" && found.length === 0) {
     const message =

@@ -113,7 +113,9 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11]);
+    const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
+    assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     const columns = await db.prepare("PRAGMA table_info(demand_requirements)").all<{ name: string }>();
     assert.ok(columns.results.some((column) => column.name === "idempotency_key"));
     assert.ok(columns.results.some((column) => column.name === "origin_owner_lead_id"));

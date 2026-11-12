@@ -6,6 +6,7 @@ import { requirePageAdmin } from "@/lib/admin/page";
 import { listForms } from "@/lib/meta/forms";
 import { LEAD_RETENTION_DAYS, listImportJobs } from "@/lib/meta/imports";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
+import { marketingTokenWarning } from "@/lib/meta/connection";
 import { metaRuntime } from "@/lib/meta/runtime";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export default async function MetaIntegrationPage({
         recent={recent}
         jobs={jobs}
         retentionDays={LEAD_RETENTION_DAYS}
+        marketingWarning={marketingTokenWarning(connection, new Date().toISOString())}
         flash={{ error: query.error ?? "", connected: query.connected === "1", choosePage: query.step === "page" }}
       />
     </AdminShell>

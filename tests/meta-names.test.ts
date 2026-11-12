@@ -7,10 +7,13 @@ import { createOwnerLead, getOwnerLead } from "../lib/crm/owner-leads";
 import { getSource, parseSourceInput } from "../lib/crm/sources";
 import { prepareDatabase } from "../lib/db/prepare";
 import { readMetaConfig, requestedScopes } from "../lib/meta/config";
-import { getConnection, storePageConnection } from "../lib/meta/connection";
+import { MARKETING_TOKEN_EXPIRED, MARKETING_TOKEN_INVALID, MARKETING_TOKEN_MISSING, getConnection, readPageToken, readUserToken, storePageConnection, storeUserToken } from "../lib/meta/connection";
+import { decryptToken } from "../lib/meta/crypto";
 import { createGraphClient } from "../lib/meta/graph";
+import { enqueueLead, processIngestion } from "../lib/meta/ingest";
 import { syncCampaignNames } from "../lib/meta/names";
-import { FakeMeta, PAGE_ID, PAGE_TOKEN } from "./helpers/fake-meta";
+import { selectPage } from "../lib/meta/setup";
+import { FakeMeta, PAGE_ID, PAGE_TOKEN, USER_TOKEN } from "./helpers/fake-meta";
 import { createTestDb } from "./helpers/sqlite";
 
 const ENV = {
@@ -27,10 +30,20 @@ const AD = "120257043784750091";
 const OTHER = "120257536957600091";
 const SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
 
-async function connect(scopes = SCOPES) {
+async function connect(scopes = SCOPES, options: { userToken?: boolean; userExpiresAt?: string | null } = {}) {
   const db = createTestDb();
   await prepareDatabase(db, () => [], NOW);
   const meta = new FakeMeta();
+  if (options.userToken !== false) {
+    await storeUserToken(db, actor, {
+      tokenKey: config.tokenKey,
+      token: USER_TOKEN,
+      expiresAt: options.userExpiresAt === undefined ? "2027-01-01T00:00:00.000Z" : options.userExpiresAt,
+      userName: "Hubli Homes",
+      scopes,
+      now: NOW,
+    });
+  }
   await storePageConnection(db, actor, {
     tokenKey: config.tokenKey,
     pageId: PAGE_ID,
@@ -131,7 +144,10 @@ describe("campaign name sync", () => {
     assert.equal(owner?.status, "New");
     assert.equal(owner?.notes, "Keep this note");
     assert.equal(meta.requests.some((request) => request.url.includes("ads_management")), false);
-    assert.ok(meta.requests.some((request) => request.url.includes("fields=id%2Cname") || request.url.includes("fields=id,name")));
+    const nameReads = meta.requests.filter((request) => request.url.includes("fields=id%2Cname") || request.url.includes("fields=id,name"));
+    assert.ok(nameReads.length > 0);
+    assert.ok(nameReads.every((request) => request.authorization.endsWith(USER_TOKEN)));
+    assert.equal(await readUserToken(db, config.tokenKey, NOW), USER_TOKEN);
     const audit = await listAudit(db, { entityType: "integration", entityId: "meta" });
     assert.ok(audit.some((entry) => entry.action === "sync_campaign_names"));
   });
@@ -245,5 +261,113 @@ describe("campaign name sync", () => {
     assert.equal((await getSource(db, lead.sourceId))?.metaCampaignName, "Keep me");
     const audit = await listAudit(db, { entityType: "integration", entityId: "meta" });
     assert.ok(audit.some((entry) => entry.action === "sync_campaign_names"));
+  });
+
+  it("does not call the Marketing API when the user token was not kept", async () => {
+    const { db, meta, graph } = await connect(SCOPES, { userToken: false });
+    await historicalLead(db);
+    await assert.rejects(syncCampaignNames(db, actor, config.tokenKey, graph, NOW), (error: unknown) => {
+      return error instanceof HttpError && error.status === 400 && error.message === MARKETING_TOKEN_MISSING;
+    });
+    assert.equal(meta.requests.length, 0);
+    assert.equal((await getConnection(db)).status, "connected");
+    assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
+  });
+
+  it("does not call the Marketing API when the user token has expired", async () => {
+    const { db, meta, graph } = await connect(SCOPES, { userExpiresAt: "2026-11-01T00:00:00.000Z" });
+    await historicalLead(db);
+    await assert.rejects(syncCampaignNames(db, actor, config.tokenKey, graph, NOW), (error: unknown) => {
+      return error instanceof HttpError && error.status === 401 && error.message === MARKETING_TOKEN_EXPIRED;
+    });
+    assert.equal(meta.requests.length, 0);
+    const connection = await getConnection(db);
+    assert.equal(connection.status, "connected");
+    assert.equal(connection.userTokenError, "");
+    assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
+  });
+
+  it("keeps the Page token connected when Meta rejects the user token, and still ingests a lead", async () => {
+    const { db, meta, graph } = await connect();
+    await historicalLead(db);
+    meta.objects = [{ id: CAMPAIGN, name: "Should stay unread" }];
+    meta.invalidUserToken = true;
+    await assert.rejects(syncCampaignNames(db, actor, config.tokenKey, graph, NOW), (error: unknown) => {
+      return error instanceof HttpError && error.status === 401 && error.message === MARKETING_TOKEN_INVALID;
+    });
+    const connection = await getConnection(db);
+    assert.equal(connection.status, "connected");
+    assert.match(connection.userTokenError, /user token/);
+    assert.equal(connection.lastError, "");
+    assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
+    assert.equal(await readUserToken(db, config.tokenKey, NOW), null);
+    assert.ok(meta.requests.every((request) => !request.authorization.endsWith(PAGE_TOKEN)));
+
+    meta.forms = [{ id: "2023485355008623", name: "Gulbarga Property Owner", questions: [] }];
+    meta.leads.push({
+      id: "910000000000099",
+      form_id: "2023485355008623",
+      created_time: "2026-11-11T12:00:00+0000",
+      field_data: [{ name: "full_name", values: ["New owner"] }, { name: "phone_number", values: ["9845022222"] }],
+    });
+    const queued = await enqueueLead(db, { leadgenId: "910000000000099", pageId: PAGE_ID, formId: "2023485355008623", origin: "webhook" }, NOW);
+    const outcome = await processIngestion(
+      { db, graph, tokenKey: config.tokenKey, pageId: PAGE_ID, adNames: true, now: () => new Date(NOW) },
+      queued.id,
+    );
+    assert.equal(outcome, "needs_mapping");
+    const leadFetch = meta.requests.find((request) => request.url.includes("/910000000000099"));
+    assert.ok(leadFetch?.authorization.endsWith(PAGE_TOKEN));
+  });
+
+  it("refreshes both tokens on reconnect without subscribing the Page twice or reopening a finished lead", async () => {
+    const db = createTestDb();
+    await prepareDatabase(db, () => [], NOW);
+    const meta = new FakeMeta();
+    meta.forms = [{ id: "2023485355008623", name: "Gulbarga Property Owner", questions: [] }];
+    const graph = createGraphClient(config, meta.fetch);
+    await storeUserToken(db, actor, {
+      tokenKey: config.tokenKey,
+      token: USER_TOKEN,
+      expiresAt: "2027-01-01T00:00:00.000Z",
+      userName: "Hubli Homes",
+      scopes: SCOPES,
+      now: NOW,
+    });
+    await selectPage(db, actor, config, graph, PAGE_ID, NOW);
+    assert.equal(meta.calls.filter((call) => call === `POST /${PAGE_ID}/subscribed_apps`).length, 1);
+    await db
+      .prepare(
+        `INSERT INTO meta_lead_ingestions (id, leadgen_id, page_id, form_id, origin, status, next_attempt_at, received_at, updated_at)
+         VALUES ('mli_done', '910000000000088', ?1, '2023485355008623', 'webhook', 'done', ?2, ?2, ?2)`,
+      )
+      .bind(PAGE_ID, NOW)
+      .run();
+
+    await db.prepare("UPDATE meta_connection SET user_token_error = 'Meta rejected the Facebook user token: old'").run();
+    await storeUserToken(db, actor, {
+      tokenKey: config.tokenKey,
+      token: USER_TOKEN,
+      expiresAt: "2027-06-01T00:00:00.000Z",
+      userName: "Hubli Homes",
+      scopes: SCOPES,
+      now: "2026-11-12T00:00:00.000Z",
+    });
+    await selectPage(db, actor, config, graph, PAGE_ID, "2026-11-12T00:00:00.000Z");
+
+    assert.equal(meta.calls.filter((call) => call === `POST /${PAGE_ID}/subscribed_apps`).length, 1);
+    assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
+    assert.equal(await decryptToken(config.tokenKey, (await db.prepare("SELECT user_token_enc FROM meta_connection").first<{ user_token_enc: string }>())!.user_token_enc, "meta_connection.user_token"), USER_TOKEN);
+    const connection = await getConnection(db);
+    assert.equal(connection.status, "connected");
+    assert.equal(connection.userTokenError, "");
+    assert.equal(connection.userTokenExpiresAt, "2027-06-01T00:00:00.000Z");
+    assert.equal(connection.pageTokenExpiresAt, null);
+    assert.equal(connection.awaitingPageChoice, false);
+    const view = JSON.stringify(connection);
+    assert.equal(view.includes(USER_TOKEN), false);
+    assert.equal(view.includes(PAGE_TOKEN), false);
+    const done = await db.prepare("SELECT status FROM meta_lead_ingestions WHERE id = 'mli_done'").first<{ status: string }>();
+    assert.equal(done?.status, "done");
   });
 });

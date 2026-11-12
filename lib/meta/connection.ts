@@ -27,6 +27,7 @@ type ConnectionRow = {
   last_error: string;
   last_webhook_at: string | null;
   last_success_at: string | null;
+  user_token_error: string;
   updated_at: string;
   row_version: number;
 };
@@ -38,7 +39,12 @@ export type MetaConnectionView = {
   pageName: string;
   metaUserName: string;
   hasPageToken: boolean;
+  hasUserToken: boolean;
+  /** True only while a user token is saved and no Page has been chosen yet. */
   awaitingPageChoice: boolean;
+  userTokenExpiresAt: string | null;
+  /** Set when Meta rejects the user token. Empty when the token is usable. The Page status stays connected. */
+  userTokenError: string;
   pageTokenExpiresAt: string | null;
   dataAccessExpiresAt: string | null;
   scopes: string[];
@@ -73,7 +79,10 @@ export async function getConnection(db: SqlDb): Promise<MetaConnectionView> {
     pageName: current?.page_name ?? "",
     metaUserName: current?.meta_user_name ?? "",
     hasPageToken: Boolean(current?.page_token_enc),
-    awaitingPageChoice: Boolean(current?.user_token_enc),
+    hasUserToken: Boolean(current?.user_token_enc),
+    awaitingPageChoice: Boolean(current?.user_token_enc) && !current?.page_token_enc,
+    userTokenExpiresAt: current?.user_token_expires_at ?? null,
+    userTokenError: current?.user_token_error ?? "",
     pageTokenExpiresAt: current?.page_token_expires_at ?? null,
     dataAccessExpiresAt: current?.data_access_expires_at ?? null,
     scopes: parseJson<string[]>(current?.scopes_json, []),
@@ -94,13 +103,36 @@ export async function readPageToken(db: SqlDb, tokenKey: string): Promise<string
   return decryptToken(tokenKey, current.page_token_enc, PURPOSE.page);
 }
 
-export async function readUserToken(db: SqlDb, tokenKey: string): Promise<string | null> {
+/**
+ * The long-lived user token used for Marketing API reads.
+ * Expiry and a previous Meta rejection are checked here and do not affect the Page token.
+ * Omit `now` only when the caller is about to replace this token.
+ */
+export async function readUserToken(db: SqlDb, tokenKey: string, now?: string): Promise<string | null> {
   const current = await row(db);
   if (!current?.user_token_enc || !tokenKey) return null;
+  if (current.user_token_error) return null;
+  if (now && current.user_token_expires_at && current.user_token_expires_at <= now) return null;
   return decryptToken(tokenKey, current.user_token_enc, PURPOSE.user);
 }
 
-/** After OAuth: keep the long-lived user token only until a Page is chosen. */
+export const MARKETING_TOKEN_MISSING =
+  "Campaign names need the Facebook user token from Connect. Reconnect and tick ads_read. Lead Ads on this Page stay connected.";
+export const MARKETING_TOKEN_EXPIRED =
+  "The Facebook user token used for campaign names has expired. Reconnect and tick ads_read. Lead Ads on this Page stay connected.";
+export const MARKETING_TOKEN_INVALID =
+  "Meta rejected the Facebook user token used for campaign names. Reconnect and tick ads_read. No names were changed, and Lead Ads on this Page stay connected.";
+
+/** Shown on the Meta page and Campaign quality. Null when name sync can use the saved user token. */
+export function marketingTokenWarning(connection: MetaConnectionView, now: string): string | null {
+  if (connection.status !== "connected") return null;
+  if (connection.userTokenError) return MARKETING_TOKEN_INVALID;
+  if (!connection.hasUserToken) return MARKETING_TOKEN_MISSING;
+  if (connection.userTokenExpiresAt && connection.userTokenExpiresAt <= now) return MARKETING_TOKEN_EXPIRED;
+  return null;
+}
+
+/** After OAuth: store the long-lived user token. Page selection keeps it for Marketing API reads. */
 export async function storeUserToken(
   db: SqlDb,
   actor: AuditActor,
@@ -112,6 +144,7 @@ export async function storeUserToken(
     db
       .prepare(
         `UPDATE meta_connection SET user_token_enc = ?1, user_token_expires_at = ?2, meta_user_name = ?3, scopes_json = ?4,
+           user_token_error = '',
            status = CASE WHEN status = 'connected' THEN status ELSE 'pending_page' END,
            last_error = '', updated_at = ?5, row_version = row_version + 1
          WHERE id = ?6`,
@@ -152,7 +185,7 @@ export async function storePageConnection(
       .prepare(
         `UPDATE meta_connection SET status = 'connected', page_id = ?1, page_name = ?2, page_token_enc = ?3,
            page_token_expires_at = ?4, data_access_expires_at = ?5, scopes_json = ?6, webhook_subscribed = ?7,
-           user_token_enc = '', user_token_expires_at = NULL, connected_by = ?8, connected_at = ?9,
+           connected_by = ?8, connected_at = ?9,
            last_checked_at = ?9, last_error = '', updated_at = ?9, row_version = row_version + 1
          WHERE id = ?10`,
       )
@@ -223,6 +256,20 @@ export async function recordCheck(
     .run();
 }
 
+/**
+ * Meta rejected the user token used for campaign names.
+ * The Page token, webhook subscription and lead queue are left as they are.
+ */
+export async function markUserTokenRejected(db: SqlDb, message: string, now: string) {
+  const text = `Meta rejected the Facebook user token: ${redactTokens(message)}`.slice(0, 300);
+  await db
+    .prepare(
+      `UPDATE meta_connection SET user_token_error = ?1, updated_at = ?2, row_version = row_version + 1 WHERE id = ?3`,
+    )
+    .bind(text, now, CONNECTION_ID)
+    .run();
+}
+
 /** Called when Graph rejects the Page token. Processing pauses until someone reconnects. */
 export async function markTokenRejected(db: SqlDb, message: string, now: string) {
   await db
@@ -247,7 +294,7 @@ export async function disconnect(db: SqlDb, actor: AuditActor, now: string, note
     db
       .prepare(
         `UPDATE meta_connection SET status = 'disconnected', page_token_enc = '', user_token_enc = '',
-           user_token_expires_at = NULL, page_token_expires_at = NULL, data_access_expires_at = NULL,
+           user_token_expires_at = NULL, user_token_error = '', page_token_expires_at = NULL, data_access_expires_at = NULL,
            webhook_subscribed = 0, last_error = '', updated_at = ?1, row_version = row_version + 1
          WHERE id = ?2`,
       )

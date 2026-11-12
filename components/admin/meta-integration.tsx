@@ -41,6 +41,7 @@ type Props = {
   recent: IngestionSummary[];
   jobs: ImportJob[];
   retentionDays: number;
+  marketingWarning: string | null;
   flash: { error: string; connected: boolean; choosePage: boolean };
 };
 
@@ -146,6 +147,7 @@ function ConnectionCard({
   canManage,
   connection,
   missingSecrets,
+  marketingWarning,
   flash,
   busy,
   act,
@@ -267,6 +269,15 @@ function ConnectionCard({
           <Detail label="Page token">
             {connection.hasPageToken ? (connection.pageTokenExpiresAt ? `Expires ${formatDateTime(connection.pageTokenExpiresAt)}` : "No expiry") : "—"}
           </Detail>
+          <Detail label="Campaign name token">
+            {connection.userTokenError
+              ? "Rejected. Reconnect."
+              : connection.hasUserToken
+                ? connection.userTokenExpiresAt
+                  ? `Expires ${formatDateTime(connection.userTokenExpiresAt)}`
+                  : "No expiry"
+                : "Not saved. Reconnect."}
+          </Detail>
           <Detail label="Data access until">{formatDateTime(connection.dataAccessExpiresAt)}</Detail>
           <Detail label="Last webhook">{formatDateTime(connection.lastWebhookAt)}</Detail>
           <Detail label="Last successful sync">{formatDateTime(connection.lastSuccessAt)}</Detail>
@@ -303,6 +314,7 @@ function ConnectionCard({
             ))}
           </fieldset>
         )}
+        {marketingWarning && <Notice tone="warn">{marketingWarning}</Notice>}
         {connected && !connection.scopes.includes("ads_read") && (
           <Notice tone="warn">
             Campaign, ad set and ad names stay blank until this connection has ads_read. Tick ads_read under Optional on next
