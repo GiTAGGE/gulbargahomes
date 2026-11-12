@@ -181,7 +181,9 @@ The integration requests only these. The table lists every Graph call it makes.
 
 **Optional**, requested only if ticked on the Connect card:
 - `ads_read`: campaign, ad set and ad **names**. The ids come with the lead
-  either way.
+  either way. **Sync names** on the Meta page reads those names for ids already
+  stored. It does not re-import leads and it does not read spend.
+  `ads_management` is still not requested.
 - `business_management`: only if the Page is reachable solely through the
   Business portfolio and does not appear in the Page picker. Meta documents it
   for Business Manager assets and system-user tokens, which this flow does not
@@ -552,9 +554,10 @@ later deploy:
   still visible under Form answers.
 - Funnel counts reflect current statuses, not stage history. Spend import is
   not built yet, so cost metrics stay empty.
-- Campaign, ad set and ad names need the optional `ads_read`. Ad-level ids may
-  need advertiser access on the ad account. Without either, the answers still
-  import.
+- Campaign, ad set and ad names need the optional `ads_read`, then **Sync names**.
+  Re-importing a lead does not fill a name that was missing the first time.
+  Ad-level ids may need advertiser access on the ad account. Without either,
+  the answers still import. Spend import is a separate, unbuilt step.
 - Retries, reconciliation and retention rely on the cron trigger, which runs
   only on the deployed Worker. Locally, use *Process queue now*.
 - There is no erasure screen. Erasure is a Super Admin SQL procedure

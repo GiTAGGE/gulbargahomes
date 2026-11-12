@@ -15,6 +15,7 @@ import {
 } from "@/lib/meta/ingest";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
 import { metaRuntime } from "@/lib/meta/runtime";
+import { syncCampaignNames } from "@/lib/meta/names";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
       case "sync_forms":
         needsSecrets();
         return NextResponse.json({ ok: true, ...(await syncForms(auth.db, auth.admin, config, runtime.graph, now)) });
+      case "sync_names":
+        needsSecrets();
+        return NextResponse.json({ ok: true, ...(await syncCampaignNames(auth.db, auth.admin, config.tokenKey, runtime.graph, now)) });
       case "disconnect":
         return NextResponse.json({ ok: true, ...(await disconnectMeta(auth.db, auth.admin, config, runtime.graph, now)) });
       case "process":
