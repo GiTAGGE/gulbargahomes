@@ -162,6 +162,16 @@ async function count(db: Awaited<ReturnType<typeof connect>>["db"], sql: string)
   return Number(row?.n ?? 0);
 }
 
+async function seedRun(db: Awaited<ReturnType<typeof connect>>["db"], clock: Clock, runId: string) {
+  await db
+    .prepare(
+      `INSERT INTO meta_buyer_recovery_runs (id, status, form_ids_json, preview_json, created_by, created_at, updated_at)
+       VALUES (?1, 'running', '[]', '{}', ?2, ?3, ?3)`,
+    )
+    .bind(runId, admin.id, clock.iso())
+    .run();
+}
+
 async function finish(runtime: MetaRuntime, clock: Clock, runId: string) {
   let run = (await runBuyerRecoveryStep(runtime, admin, runId, clock.iso())) as BuyerRecoveryRun;
   for (let step = 0; step < 20 && run.status === "running"; step += 1) {
@@ -454,6 +464,143 @@ describe("historical buyer and renter recovery", () => {
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM properties"), 0);
     await assert.rejects(runBuyerRecoveryStep(runtime, admin, runId, clock.iso()), /no recovery in progress/);
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 3);
+  });
+
+  it("does not treat an early Continue as progress and retries only after the scheduled time", async () => {
+    const lead = leadAt(20);
+    const { db, meta, clock, runtime } = await connect([lead]);
+    await classify(db, clock.iso());
+    const runId = "mbr_aaaaaaaaaaaaaaaaaaaa";
+    await seedRun(db, clock, runId);
+    meta.rateLimitIds.add(lead.id);
+    await enqueueLead(
+      db,
+      { leadgenId: lead.id, pageId: PAGE_ID, formId: COPY, origin: "recovery", recoveryRunId: runId },
+      clock.iso(),
+    );
+    const eligibleAt = new Date(clock.now().getTime() + 15 * 60_000).toISOString();
+
+    const paused = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(paused.status, "running");
+    assert.equal(paused.imported, 0);
+    assert.equal(paused.nextEligibleAt, eligibleAt);
+    assert.match(paused.lastError, /rate-limited/);
+    assert.match(paused.lastError, /does not import anything/);
+    assert.match(paused.lastError, /eligible at 2026-11-12T12:15:00.000Z/);
+    const scheduled = await db
+      .prepare("SELECT status, next_attempt_at FROM meta_lead_ingestions WHERE leadgen_id = ?1")
+      .bind(lead.id)
+      .first<{ status: string; next_attempt_at: string }>();
+    assert.equal(scheduled?.status, "retry");
+    assert.equal(scheduled?.next_attempt_at, eligibleAt);
+
+    const early = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(early.status, "running");
+    assert.equal(early.imported, 0);
+    assert.equal(early.nextEligibleAt, eligibleAt);
+    assert.match(early.lastError, /^Nothing was processed\./);
+    assert.match(early.lastError, /does not import anything/);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
+    const repeated = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(repeated.imported, 0);
+    assert.equal(repeated.nextEligibleAt, eligibleAt);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
+    assert.equal(
+      (await db.prepare("SELECT status FROM meta_lead_ingestions WHERE leadgen_id = ?1").bind(lead.id).first<{ status: string }>())?.status,
+      "retry",
+    );
+
+    meta.rateLimitIds.clear();
+    clock.current = new Date(eligibleAt);
+    const done = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(done.status, "completed");
+    assert.equal(done.imported, 1);
+    assert.equal(done.nextEligibleAt, "");
+    assert.equal(done.lastError, "");
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements WHERE status = 'New'"), 1);
+    await assert.rejects(runBuyerRecoveryStep(runtime, admin, runId, clock.iso()), /no recovery in progress/);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 1);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM owner_leads"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM properties"), 0);
+  });
+
+  it("recovers an expired processing lock once and ignores a repeated Continue", async () => {
+    const lead = leadAt(21);
+    const { db, clock, runtime } = await connect([lead]);
+    await classify(db, clock.iso());
+    const runId = "mbr_bbbbbbbbbbbbbbbbbbbb";
+    await seedRun(db, clock, runId);
+    const item = leadAt(21);
+    await enqueueLead(
+      db,
+      {
+        leadgenId: item.id,
+        pageId: PAGE_ID,
+        formId: COPY,
+        origin: "recovery",
+        recoveryRunId: runId,
+        lead: {
+          id: item.id,
+          createdTime: item.created_time,
+          formId: COPY,
+          adId: "701",
+          adName: "Buyer ad",
+          adsetId: "801",
+          adsetName: "Buyer ad set",
+          campaignId: CAMPAIGN,
+          campaignName: "GH | Buyers & Renters | Gulbarga",
+          platform: "fb",
+          isOrganic: false,
+          fieldData: item.field_data,
+        },
+      },
+      clock.iso(),
+    );
+    const lockedUntil = new Date(clock.now().getTime() + 5 * 60_000).toISOString();
+    await db
+      .prepare("UPDATE meta_lead_ingestions SET status = 'processing', locked_until = ?1 WHERE leadgen_id = ?2")
+      .bind(lockedUntil, item.id)
+      .run();
+
+    const early = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(early.status, "running");
+    assert.equal(early.imported, 0);
+    assert.equal(early.nextEligibleAt, lockedUntil);
+    assert.match(early.lastError, /^Nothing was processed\./);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
+    const repeated = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(repeated.imported, 0);
+    assert.equal(repeated.nextEligibleAt, lockedUntil);
+    assert.equal(
+      (await db.prepare("SELECT status FROM meta_lead_ingestions WHERE leadgen_id = ?1").bind(item.id).first<{ status: string }>())?.status,
+      "processing",
+    );
+
+    clock.current = new Date(new Date(lockedUntil).getTime() + 1);
+    const recovered = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(recovered.status, "completed");
+    assert.equal(recovered.imported, 1);
+    assert.equal(recovered.nextEligibleAt, "");
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 1);
+
+    await db.prepare("UPDATE meta_buyer_recovery_runs SET status = 'running', finished_at = NULL, last_error = '' WHERE id = ?1").bind(runId).run();
+    await db
+      .prepare("UPDATE meta_lead_ingestions SET status = 'processing', locked_until = ?1 WHERE leadgen_id = ?2")
+      .bind(new Date(clock.now().getTime() - 60_000).toISOString(), item.id)
+      .run();
+    const replay = await runBuyerRecoveryStep(runtime, admin, runId, clock.iso());
+    assert.equal(replay.status, "completed");
+    assert.equal(replay.imported, 1);
+    const row = await db
+      .prepare("SELECT status, last_error FROM meta_lead_ingestions WHERE leadgen_id = ?1")
+      .bind(item.id)
+      .first<{ status: string; last_error: string }>();
+    assert.equal(row?.status, "done");
+    assert.match(row?.last_error ?? "", /Recovered/);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 1);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM lead_sources"), 1);
+    await assert.rejects(runBuyerRecoveryStep(runtime, admin, runId, clock.iso()), /no recovery in progress/);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 1);
   });
 });
 

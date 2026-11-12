@@ -876,11 +876,11 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
   }, [recovery]);
 
   useEffect(() => {
-    if (!polling || !run || run.status !== "running") return;
+    if (!polling || !run || run.status !== "running" || run.nextEligibleAt) return;
     const timer = window.setTimeout(async () => {
       const result = await send<{ run?: BuyerRecoveryRun }>(API, "POST", { action: "step_buyer_recovery", runId: run.id });
       if (result.data?.run) setRun(result.data.run);
-      if (!result.data?.run || result.data.run.status !== "running") setPolling(false);
+      if (!result.data?.run || result.data.run.status !== "running" || result.data.run.nextEligibleAt) setPolling(false);
       router.refresh();
     }, 600);
     return () => window.clearTimeout(timer);
@@ -973,7 +973,7 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
               const next = result.data?.run as BuyerRecoveryRun | undefined;
               if (next) {
                 setRun(next);
-                if (next.status === "running") setPolling(true);
+                setPolling(next.status === "running" && !next.nextEligibleAt);
               }
             }}
           >
@@ -990,6 +990,11 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
             {run.finishedAt ? ` Finished ${formatDateTime(run.finishedAt)}.` : ""}
           </p>
           {run.lastError && <Notice tone="warn">{run.lastError}</Notice>}
+          {run.nextEligibleAt && (
+            <p className="text-ink">
+              Next batch eligible at {formatDateTime(run.nextEligibleAt)}. Continuing before then does not import anything.
+            </p>
+          )}
           {run.status === "running" && !polling && (
             <button
               type="button"
@@ -1000,7 +1005,7 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
                 const next = result.data?.run as BuyerRecoveryRun | undefined;
                 if (next) {
                   setRun(next);
-                  if (next.status === "running") setPolling(true);
+                  setPolling(next.status === "running" && !next.nextEligibleAt);
                 }
               }}
             >

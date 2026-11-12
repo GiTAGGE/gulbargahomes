@@ -242,6 +242,11 @@ property type becomes a requirement, not a Land JV enquiry or a property.
 Requirements start as New. Repeating the recovery counts existing lead ids as
 duplicates. The run records who started it, the forms, the preview and the
 imported, duplicate, held and failed counts. Migration 16 stores the run.
+Continue processes only leads that are already due, up to 20 at a time. A rate
+limit schedules that lead at least 15 minutes ahead, and the page shows when
+the next batch is eligible. Continue before that time imports nothing. An
+expired processing lock is picked up. A finished run cannot be continued, and a
+lead that already created a requirement is not created again.
 
 The job reads each selected form's leads page by page with a `time_created`
 filter and queues them in the **same** `meta_lead_ingestions` queue the webhook
@@ -302,7 +307,7 @@ Public listings stay `Rent` | `Sale`. A lease lead does not become a listing by 
 
 ## Agricultural land JV
 
-Classification `land_jv` records `land_jv_enquiries` (migration 15). Taluk, the original village answer, acre band, ownership, RTC / Pahani, road access and whether the owners agree are stored on that row, and the original Meta answers are kept in `answers_json`. Migration 16 adds `verified_village` and `additional_phone_e164`. Staff type those. The original village answer is not parsed, and lists use the verified village or “Village not verified”. The contact is marked `is_land_jv` and is not marked as a residential owner. Nothing is created in `properties`, `owner_leads` or `demand_requirements`, and the enquiry status stays `New`.
+Classification `land_jv` records `land_jv_enquiries` (migration 15). Taluk, the original village answer, acre band, ownership, RTC / Pahani, road access and whether the owners agree are stored on that row, and the original Meta answers are kept in `answers_json`. Migration 16 adds `verified_village` and `additional_phone_e164`. Staff type those. Leaving the verified village blank clears a name that was saved earlier. The original village answer is not parsed, and lists use the verified village or “Village not verified”. The contact is marked `is_land_jv` and is not marked as a residential owner. Nothing is created in `properties`, `owner_leads` or `demand_requirements`, and the enquiry status stays `New`.
 
 A form that was classified as owner and held for Sale / Rent / Lease stays held after it is reclassified. Saving the classification does not replay those rows. **Record as Land JV** stores `intent_override = 'Land JV'` and then imports that one lead. **Import as Sale**, **Import as Rent** and **Import as Lease** stay available as a deliberate residential choice and still do not create a property by themselves.
 

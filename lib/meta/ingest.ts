@@ -463,7 +463,11 @@ export async function dueIngestions(db: SqlDb, now: Date, limit: number, filter:
   if (filter.ids?.length) {
     const placeholders = filter.ids.map((_, index) => `?${index + 2}`).join(", ");
     const { results } = await db
-      .prepare(`SELECT id FROM meta_lead_ingestions WHERE id IN (${placeholders}) AND status IN ('pending', 'retry') AND next_attempt_at <= ?1`)
+      .prepare(
+        `SELECT id FROM meta_lead_ingestions
+         WHERE id IN (${placeholders})
+           AND ((status IN ('pending', 'retry') AND next_attempt_at <= ?1) OR (status = 'processing' AND locked_until < ?1))`,
+      )
       .bind(at, ...filter.ids)
       .all<{ id: string }>();
     return results.map((item) => item.id);

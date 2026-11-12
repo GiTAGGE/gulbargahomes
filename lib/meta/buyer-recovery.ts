@@ -85,6 +85,8 @@ export type BuyerRecoveryRun = {
   held: number;
   failed: number;
   lastError: string;
+  /** Earliest time a Continue will import something. Empty when leads are already due, or the run is not running. */
+  nextEligibleAt: string;
 };
 
 type RunRow = {
@@ -120,7 +122,46 @@ function toRun(row: RunRow): BuyerRecoveryRun {
     held: Number(row.held),
     failed: Number(row.failed),
     lastError: row.last_error,
+    nextEligibleAt: "",
   };
+}
+
+const DUE_RECOVERY = `(
+  (status IN ('pending', 'retry') AND next_attempt_at <= ?2)
+  OR (status = 'processing' AND locked_until < ?2)
+)`;
+
+function recoveryInstant(runtime: MetaRuntime, now: string): string {
+  if (!runtime.now) return now;
+  const clock = runtime.now();
+  return Number.isNaN(clock.getTime()) ? now : clock.toISOString();
+}
+
+/** When the next Continue can import. Empty while any lead for this run is already due. */
+async function nextEligibleAt(db: SqlDb, runId: string, at: string): Promise<string> {
+  const due = await db
+    .prepare(`SELECT COUNT(*) AS n FROM meta_lead_ingestions WHERE recovery_run_id = ?1 AND ${DUE_RECOVERY}`)
+    .bind(runId, at)
+    .first<{ n: number }>();
+  if (Number(due?.n ?? 0) > 0) return "";
+  const waiting = await db
+    .prepare(
+      `SELECT MIN(ready_at) AS ready_at FROM (
+         SELECT next_attempt_at AS ready_at FROM meta_lead_ingestions
+         WHERE recovery_run_id = ?1 AND status IN ('pending', 'retry') AND next_attempt_at > ?2
+         UNION ALL
+         SELECT locked_until AS ready_at FROM meta_lead_ingestions
+         WHERE recovery_run_id = ?1 AND status = 'processing' AND locked_until > ?2
+       )`,
+    )
+    .bind(runId, at)
+    .first<{ ready_at: string | null }>();
+  return waiting?.ready_at ?? "";
+}
+
+async function withSchedule(db: SqlDb, run: BuyerRecoveryRun, at: string): Promise<BuyerRecoveryRun> {
+  if (run.status !== "running") return run;
+  return { ...run, nextEligibleAt: await nextEligibleAt(db, run.id, at) };
 }
 
 export function approvedRecoveryFormIds(value: unknown): string[] {
@@ -300,14 +341,14 @@ async function loadLeads(runtime: MetaRuntime, formIds: string[]): Promise<{ lea
   return { leads: raw, preview: summarize(leads, forms) };
 }
 
-export async function latestBuyerRecovery(db: SqlDb): Promise<BuyerRecoveryRun | null> {
+export async function latestBuyerRecovery(db: SqlDb, at = new Date().toISOString()): Promise<BuyerRecoveryRun | null> {
   const row = await db.prepare(`SELECT * FROM meta_buyer_recovery_runs ORDER BY created_at DESC, id DESC LIMIT 1`).first<RunRow>();
-  return row ? toRun(row) : null;
+  return row ? withSchedule(db, toRun(row), at) : null;
 }
 
-export async function getBuyerRecovery(db: SqlDb, id: string): Promise<BuyerRecoveryRun | null> {
+export async function getBuyerRecovery(db: SqlDb, id: string, at = new Date().toISOString()): Promise<BuyerRecoveryRun | null> {
   const row = await db.prepare(`SELECT * FROM meta_buyer_recovery_runs WHERE id = ?1`).bind(id).first<RunRow>();
-  return row ? toRun(row) : null;
+  return row ? withSchedule(db, toRun(row), at) : null;
 }
 
 /** Reads Meta and stores a preview. It does not enqueue or create CRM records. */
@@ -420,26 +461,33 @@ export async function confirmBuyerRecovery(runtime: MetaRuntime, actor: AuditAct
   return runBuyerRecoveryStep(runtime, actor, runId, now);
 }
 
-/** Processes the next batch of this run. Safe to call again after a partial failure. */
+/** Processes the next batch of this run. A future retry time is left until it is due. */
 export async function runBuyerRecoveryStep(runtime: MetaRuntime, actor: AuditActor, runId: string, now: string): Promise<BuyerRecoveryRun> {
-  const current = await getBuyerRecovery(runtime.db, runId);
-  if (!current || (current.status !== "running" && current.status !== "previewed")) {
+  const at = recoveryInstant(runtime, now);
+  const current = await getBuyerRecovery(runtime.db, runId, at);
+  if (!current || current.status !== "running") {
     throw new HttpError(409, "There is no recovery in progress.");
   }
   const { results } = await runtime.db
     .prepare(
       `SELECT id FROM meta_lead_ingestions
-       WHERE recovery_run_id = ?1 AND status IN ('pending', 'retry', 'processing')
-       ORDER BY received_at LIMIT ?2`,
+       WHERE recovery_run_id = ?1 AND ${DUE_RECOVERY}
+       ORDER BY next_attempt_at LIMIT ?3`,
     )
-    .bind(runId, BATCH)
+    .bind(runId, at, BATCH)
     .all<{ id: string }>();
   let lastError = "";
   if (results.length) {
     const tally = await processDue(runtime, { ids: results.map((row) => row.id), limit: BATCH });
-    if (tally.rate_limited) lastError = "Meta rate-limited this batch. Continue the recovery to retry the remaining leads.";
-    else if (tally.waiting_token) lastError = "The Page token could not be read. Reconnect Meta, then continue the recovery.";
-    else if (!Object.keys(tally).length) lastError = "The next batch is waiting for Meta's retry window. Continue the recovery again shortly.";
+    const eligible = await nextEligibleAt(runtime.db, runId, at);
+    if (tally.rate_limited) {
+      lastError = eligible
+        ? `Meta rate-limited this batch. Nothing more is due. The next batch is eligible at ${eligible}. Continuing before then does not import anything.`
+        : "Meta rate-limited this batch. Leads that are already due can be continued now. Waiting leads stay on their scheduled time.";
+    } else if (tally.waiting_token) lastError = "The Page token could not be read. Reconnect Meta, then continue the recovery.";
+  } else {
+    const eligible = await nextEligibleAt(runtime.db, runId, at);
+    if (eligible) lastError = `Nothing was processed. The next batch is eligible at ${eligible}. Continuing before then does not import anything.`;
   }
   const counts = await recount(runtime.db, runId, current.enqueueDuplicates);
   const done = counts.open === 0 && !lastError;
@@ -465,5 +513,5 @@ export async function runBuyerRecoveryStep(runtime: MetaRuntime, actor: AuditAct
       }),
     ]);
   }
-  return (await getBuyerRecovery(runtime.db, runId))!;
+  return (await getBuyerRecovery(runtime.db, runId, at))!;
 }

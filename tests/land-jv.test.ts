@@ -363,5 +363,26 @@ describe("land JV enquiries", () => {
     assert.equal(withPhone.village, message);
     const answers = withPhone.answers.find((answer) => answer.value === message);
     assert.ok(answers);
+    await assert.rejects(
+      updateLandJvVerification(db, admin, withPhone, { verifiedVillage: message, additionalPhone: "9845099999", rowVersion: withPhone.rowVersion }, NOW),
+      /village name only/,
+    );
+    const cleared = await updateLandJvVerification(
+      db,
+      admin,
+      withPhone,
+      { verifiedVillage: "  ", additionalPhone: "9845099999", rowVersion: withPhone.rowVersion },
+      NOW,
+    );
+    assert.equal(cleared.verifiedVillage, "");
+    assert.equal(cleared.additionalPhone, "+919845099999");
+    assert.equal(cleared.village, message);
+    assert.equal(landJvPlace(cleared), "Village not verified");
+    assert.ok(cleared.answers.some((answer) => answer.value === message));
+    const audits = await db
+      .prepare("SELECT changes_json FROM audit_log WHERE entity_type = 'land_jv_enquiry' AND entity_id = ?1")
+      .bind(cleared.id)
+      .all<{ changes_json: string }>();
+    assert.ok(audits.results.some((row) => row.changes_json.includes('"verified_village":["Kamalapur",""]')));
   });
 });
