@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auditStatement } from "@/lib/admin/audit";
 import { can } from "@/lib/admin/permissions";
-import { authorize, errorResponse, HttpError, readJson } from "@/lib/admin/route";
+import { authorize, errorResponse, HttpError, jsonError, readJson } from "@/lib/admin/route";
 import { nowIso } from "@/lib/db/sql";
 import { listForms } from "@/lib/meta/forms";
 import { listImportJobs } from "@/lib/meta/imports";
@@ -20,6 +20,7 @@ import { importCampaignSpend, listMarketingAccounts, selectMarketingAccount } fr
 import { confirmBuyerRecovery, previewBuyerRecovery, runBuyerRecoveryStep } from "@/lib/meta/buyer-recovery";
 import { denyBuyerRecoveryAction } from "@/lib/meta/buyer-recovery-access";
 import { denySpendApiAction } from "@/lib/meta/spend-access";
+import { MetaApiError } from "@/lib/meta/graph";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
         throw new HttpError(400, "Unknown action.");
     }
   } catch (error) {
+    if (error instanceof MetaApiError) return jsonError(error.status >= 400 && error.status < 600 ? error.status : 502, error.message);
     return errorResponse(error);
   }
 }
