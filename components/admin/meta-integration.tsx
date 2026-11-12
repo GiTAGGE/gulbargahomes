@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatDateTime } from "@/lib/admin/format";
 import { OPTIONAL_SCOPES, REQUIRED_SCOPES, type OptionalScope } from "@/lib/meta/config";
+import { BUYER_RECOVERY_FORM_IDS, type BuyerRecoveryRun } from "@/lib/meta/buyer-recovery";
 import type { MetaConnectionView } from "@/lib/meta/connection";
 import type { StoredForm } from "@/lib/meta/forms";
 import type { ImportJob } from "@/lib/meta/imports";
@@ -28,6 +29,8 @@ import { Card, Empty, Pill, Stat, controlClass } from "./ui";
 
 type Props = {
   canManage: boolean;
+  canRecover: boolean;
+  recovery: BuyerRecoveryRun | null;
   connection: MetaConnectionView;
   missingSecrets: string[];
   appId: string;
@@ -133,6 +136,7 @@ export function MetaIntegration(props: Props) {
       <FormsCard {...props} busy={busy} act={act} />
       <AttentionCard {...props} busy={busy} act={act} />
       <ImportCard {...props} busy={busy} act={act} />
+      {props.canRecover && <RecoveryCard {...props} busy={busy} act={act} />}
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <RecentCard recent={props.recent} />
         <WebhookCard {...props} />
@@ -845,6 +849,172 @@ function AttentionCard({ canManage, attention, busy, act }: Props & { busy: stri
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; act: Act }) {
+  const router = useRouter();
+  const [run, setRun] = useState(recovery);
+  const [selected, setSelected] = useState<string[]>([...BUYER_RECOVERY_FORM_IDS]);
+  const [confirmed, setConfirmed] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const preview = run?.preview ?? null;
+  const eligible = BUYER_RECOVERY_FORM_IDS.map((formId) => {
+    const stored = forms.find((form) => form.formId === formId);
+    return {
+      formId,
+      name: stored?.name || formId,
+      classification: stored ? CLASSIFICATION_LABEL[stored.classification] : "Not stored",
+    };
+  });
+  const countsMatch = preview && !preview.blocked && preview.total === preview.expected.total && preview.buy === preview.expected.buy && preview.rent === preview.expected.rent;
+  const canConfirm = run?.status === "previewed" && countsMatch && confirmed && !busy;
+
+  useEffect(() => {
+    setRun(recovery);
+  }, [recovery]);
+
+  useEffect(() => {
+    if (!polling || !run || run.status !== "running" || run.nextEligibleAt) return;
+    const timer = window.setTimeout(async () => {
+      const result = await send<{ run?: BuyerRecoveryRun }>(API, "POST", { action: "step_buyer_recovery", runId: run.id });
+      if (result.data?.run) setRun(result.data.run);
+      if (!result.data?.run || result.data.run.status !== "running" || result.data.run.nextEligibleAt) setPolling(false);
+      router.refresh();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [polling, run, router]);
+
+  return (
+    <Card
+      title="Historical Buyer & Renter Recovery"
+      hint="This is a separate super-admin recovery for two forms. It is not webhook processing and it is not the Historical import above. Mixed forms stay out of that import."
+    >
+      <p className="mb-3 text-sm text-ink-muted">
+        Eligible forms only: Gulbarga Buyer & Renter-copy ({BUYER_RECOVERY_FORM_IDS[0]}) and Gulbarga Buyer & Renter ({BUYER_RECOVERY_FORM_IDS[1]}). Classify both as Buyer or tenant, from the answer, and save Purchase budget and Monthly rental budget before previewing. Recovery does not classify them and does not run on deploy.
+      </p>
+      <ul className="mb-3 space-y-2 text-sm">
+        {eligible.map((form) => (
+          <li key={form.formId} className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={selected.includes(form.formId)}
+              onChange={(event) =>
+                setSelected((current) => (event.target.checked ? [...current, form.formId] : current.filter((id) => id !== form.formId)))
+              }
+            />
+            <span>
+              <span className="font-medium text-ink">{form.name}</span>
+              <span className="block font-mono text-xs text-ink-faint">{form.formId}</span>
+              <span className="text-ink-muted">Saved as {form.classification}.</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="btn-secondary"
+        disabled={Boolean(busy) || selected.length === 0}
+        onClick={async () => {
+          setConfirmed(false);
+          setPolling(false);
+          const result = await act("buyer-preview", API, "POST", { action: "preview_buyer_recovery", formIds: selected });
+          const next = result.data?.run as BuyerRecoveryRun | undefined;
+          if (next) setRun(next);
+        }}
+      >
+        {busy === "buyer-preview" ? "Reading Meta…" : "Preview Meta leads"}
+      </button>
+      {preview && (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-ink">
+            Date range on the leads Meta returned: {preview.createdMin ? formatDateTime(preview.createdMin) : "none"} to {preview.createdMax ? formatDateTime(preview.createdMax) : "none"}. There is no date filter. Every lead on the selected forms is included.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Source leads" value={preview.total} />
+            <Stat label="Buy" value={preview.buy} />
+            <Stat label="Rent" value={preview.rent} />
+            <Stat label="Unclassified" value={preview.unclassified} tone={preview.unclassified ? "alert" : undefined} />
+            <Stat label="Already in CRM" value={preview.alreadyQueued} />
+            <Stat label="Existing contacts" value={preview.existingContacts} />
+            <Stat label="Invalid phones" value={preview.invalidPhone} tone={preview.invalidPhone ? "alert" : undefined} />
+            <Stat label="Expected" value={`${preview.expected.buy} Buy / ${preview.expected.rent} Rent`} />
+          </div>
+          <p className="text-sm text-ink-muted">
+            Campaigns: {preview.campaigns.length ? preview.campaigns.map((campaign) => `${campaign.id} (${campaign.count})`).join(", ") : "none"}. Expected {preview.expected.campaignId}.
+          </p>
+          {preview.forms.map((form) => (
+            <p key={form.formId} className="text-sm text-ink-muted">
+              {form.name}: {form.total} leads, {form.buy} Buy, {form.rent} Rent.{form.reason ? ` ${form.reason}` : " Mapping is ready."}
+            </p>
+          ))}
+          {preview.discrepancies.map((item) => (
+            <Notice key={item} tone="error">{item}</Notice>
+          ))}
+          {preview.mappingIssues.map((item) => (
+            <Notice key={item} tone="warn">{item}</Notice>
+          ))}
+          <p className="text-xs text-ink-faint">{preview.leadIds.length} Meta lead IDs are in this preview. Import stays blocked until the live counts are {preview.expected.total} leads, {preview.expected.buy} Buy and {preview.expected.rent} Rent. It also stays blocked when any lead changes Buy or Rent, form, or campaign since this preview, even if the totals still match.</p>
+          {run?.status === "previewed" && countsMatch && (
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+              <span>I have checked this preview. Import these leads as new Buy and Rent requirements. Do not qualify them.</span>
+            </label>
+          )}
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!canConfirm}
+            onClick={async () => {
+              if (!run) return;
+              const result = await act("buyer-confirm", API, "POST", { action: "confirm_buyer_recovery", runId: run.id });
+              const next = result.data?.run as BuyerRecoveryRun | undefined;
+              if (next) {
+                setRun(next);
+                setPolling(next.status === "running" && !next.nextEligibleAt);
+              }
+            }}
+          >
+            {busy === "buyer-confirm" ? "Importing the first batch…" : "Import the previewed leads"}
+          </button>
+        </div>
+      )}
+      {run && run.status !== "previewed" && run.status !== "blocked" && (
+        <div className="mt-4 space-y-2 text-sm">
+          <p className="font-medium text-ink">Recovery report · {run.status}</p>
+          <p className="text-ink-muted">
+            Imported {run.imported}. Duplicates {run.duplicates}. Held {run.held}. Failed {run.failed}.
+            {run.confirmedAt ? ` Started ${formatDateTime(run.confirmedAt)}.` : ""}
+            {run.finishedAt ? ` Finished ${formatDateTime(run.finishedAt)}.` : ""}
+          </p>
+          {run.lastError && <Notice tone="warn">{run.lastError}</Notice>}
+          {run.nextEligibleAt && (
+            <p className="text-ink">
+              Next batch eligible at {formatDateTime(run.nextEligibleAt)}. Continuing before then does not import anything.
+            </p>
+          )}
+          {run.status === "running" && !polling && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={Boolean(busy)}
+              onClick={async () => {
+                const result = await act("buyer-step", API, "POST", { action: "step_buyer_recovery", runId: run.id });
+                const next = result.data?.run as BuyerRecoveryRun | undefined;
+                if (next) {
+                  setRun(next);
+                  setPolling(next.status === "running" && !next.nextEligibleAt);
+                }
+              }}
+            >
+              Continue recovery
+            </button>
+          )}
+        </div>
+      )}
+      {run?.status === "blocked" && run.lastError && <div className="mt-3"><Notice tone="error">{run.lastError}</Notice></div>}
     </Card>
   );
 }

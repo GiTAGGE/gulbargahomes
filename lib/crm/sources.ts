@@ -29,7 +29,7 @@ export type LeadSource = {
   rawPayload: Record<string, unknown>;
 };
 
-export const INGESTION_ORIGINS = ["manual", "webhook", "historical_import", "reconciliation"] as const;
+export const INGESTION_ORIGINS = ["manual", "webhook", "historical_import", "reconciliation", "buyer_recovery"] as const;
 export type IngestionOrigin = (typeof INGESTION_ORIGINS)[number];
 
 export type LeadSourceRow = {

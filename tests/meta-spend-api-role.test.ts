@@ -86,4 +86,29 @@ describe("Meta spend API super_admin gate", () => {
     const account = await state.db.prepare("SELECT ad_account_id FROM meta_connection").first<{ ad_account_id: string }>();
     assert.equal(account?.ad_account_id ?? "", "");
   });
+
+  it("rejects buyer recovery for every role except super admin", async () => {
+    const { createTestDb } = await import("./helpers/sqlite");
+    const { prepareDatabase } = await import("../lib/db/prepare");
+    state.db = createTestDb();
+    await prepareDatabase(state.db, () => [], "2026-11-12T06:00:00.000Z");
+    const { POST } = await import("../app/api/admin/integrations/meta/route");
+    const denial = "Only a super admin can recover historical Buyer & Renter leads.";
+    const actions = ["preview_buyer_recovery", "confirm_buyer_recovery", "step_buyer_recovery"];
+
+    for (const role of ROLES) {
+      state.role = role;
+      for (const action of actions) {
+        const response = await POST(spendRequest(action));
+        assert.equal(response.status, 403, `${role} ${action}`);
+        const body = (await response.json()) as { error?: string };
+        assert.equal(body.error, denial);
+      }
+    }
+
+    const runs = await state.db.prepare("SELECT COUNT(*) AS n FROM meta_buyer_recovery_runs").first<{ n: number }>();
+    assert.equal(runs?.n, 0);
+    const requirements = await state.db.prepare("SELECT COUNT(*) AS n FROM demand_requirements").first<{ n: number }>();
+    assert.equal(requirements?.n, 0);
+  });
 });

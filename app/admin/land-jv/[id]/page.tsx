@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/admin-shell";
+import { LandJvVerification } from "@/components/admin/land-jv-verification";
 import { Card, Pill } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
@@ -10,9 +11,8 @@ import { maskPhone } from "@/lib/crm/phone";
 
 export const dynamic = "force-dynamic";
 
-const FIELDS: { label: string; key: "taluk" | "village" | "acreBand" | "ownership" | "rtcAvailable" | "roadAccess" | "ownersAgree" }[] = [
+const FIELDS: { label: string; key: "taluk" | "acreBand" | "ownership" | "rtcAvailable" | "roadAccess" | "ownersAgree" }[] = [
   { label: "Taluk", key: "taluk" },
-  { label: "Village", key: "village" },
   { label: "Acres", key: "acreBand" },
   { label: "Ownership", key: "ownership" },
   { label: "RTC / Pahani", key: "rtcAvailable" },
@@ -43,6 +43,12 @@ export default async function LandJvDetailPage({ params }: { params: Promise<{ i
           <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-y-2 text-sm">
             <dt className="text-ink-faint">Phone</dt>
             <dd>{phone}</dd>
+            <dt className="text-ink-faint">Original village answer</dt>
+            <dd>{enquiry.village || "Not answered"}</dd>
+            <dt className="text-ink-faint">Verified village</dt>
+            <dd>{enquiry.verifiedVillage || "Village not verified"}</dd>
+            <dt className="text-ink-faint">Additional phone</dt>
+            <dd>{enquiry.additionalPhone ? (caps.viewPhone ? enquiry.additionalPhone : maskPhone(enquiry.additionalPhone)) : "None verified"}</dd>
             {FIELDS.map((field) => (
               <div key={field.key} className="contents">
                 <dt className="text-ink-faint">{field.label}</dt>
@@ -52,7 +58,17 @@ export default async function LandJvDetailPage({ params }: { params: Promise<{ i
             <dt className="text-ink-faint">Received</dt>
             <dd>{formatDateTime(enquiry.submittedAt)}</dd>
           </dl>
-          <p className="mt-3 text-xs text-ink-muted">This enquiry does not create a residential property. It is not marked Qualified.</p>
+          <p className="mt-3 text-xs text-ink-muted">The original village answer stays as Meta sent it. Location uses the verified village only. This enquiry does not create a residential property and it is not marked Qualified.</p>
+          {caps.editCrm && (
+            <div className="mt-4 border-t border-brand-50 pt-4">
+              <LandJvVerification
+                id={enquiry.id}
+                rowVersion={enquiry.rowVersion}
+                verifiedVillage={enquiry.verifiedVillage}
+                additionalPhone={caps.viewPhone ? enquiry.additionalPhone : ""}
+              />
+            </div>
+          )}
         </Card>
         <Card title="Meta source">
           <dl className="grid grid-cols-[9rem_minmax(0,1fr)] gap-y-2 text-sm">

@@ -2,6 +2,8 @@ import { auditStatement, diffFields, type AuditActor } from "../admin/audit";
 import { HttpError, isUniqueViolation } from "../admin/errors";
 import { formatCode, newId, nextSequence, type SqlDb } from "../db/sql";
 import { resolveContact, type ContactInput } from "./contacts";
+import { assertVersion } from "./input";
+import { normalizeIndianMobile } from "./phone";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
 
 export type LandJvAnswer = { key: string; label: string; value: string };
@@ -34,6 +36,8 @@ export type LandJvEnquiry = {
   submittedAt: string;
   taluk: string;
   village: string;
+  verifiedVillage: string;
+  additionalPhone: string;
   acreBand: string;
   ownership: string;
   rtcAvailable: string;
@@ -62,6 +66,8 @@ type LandJvRow = {
   submitted_at: string;
   taluk: string;
   village: string;
+  verified_village: string;
+  additional_phone_e164: string;
   acre_band: string;
   ownership: string;
   rtc_available: string;
@@ -76,7 +82,7 @@ type LandJvRow = {
 
 const SELECT = `SELECT e.id, e.code, e.contact_id, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
   e.source_id, s.meta_campaign_id, s.meta_campaign_name, s.meta_form_id, s.meta_form_name, s.meta_lead_id, s.submitted_at,
-  e.taluk, e.village, e.acre_band, e.ownership, e.rtc_available, e.road_access, e.owners_agree, e.answers_json, e.notes,
+  e.taluk, e.village, e.verified_village, e.additional_phone_e164, e.acre_band, e.ownership, e.rtc_available, e.road_access, e.owners_agree, e.answers_json, e.notes,
   e.status, e.created_at, e.row_version
   FROM land_jv_enquiries e
   JOIN contacts c ON c.id = e.contact_id
@@ -111,6 +117,8 @@ function toEnquiry(row: LandJvRow): LandJvEnquiry {
     submittedAt: row.submitted_at,
     taluk: row.taluk,
     village: row.village,
+    verifiedVillage: row.verified_village,
+    additionalPhone: row.additional_phone_e164,
     acreBand: row.acre_band,
     ownership: row.ownership,
     rtcAvailable: row.rtc_available,
@@ -211,4 +219,65 @@ export async function listLandJvEnquiries(
     ? await db.prepare(`${SELECT} WHERE e.contact_id = ?1 ORDER BY e.created_at DESC, e.id LIMIT ?2`).bind(filter.contactId, limit).all<LandJvRow>()
     : await db.prepare(`${SELECT} ORDER BY e.created_at DESC, e.id LIMIT ?1`).bind(limit).all<LandJvRow>();
   return results.map(toEnquiry);
+}
+
+/** Staff-entered village name. The original Meta answer in `village` is never changed. */
+export function verifiedVillageName(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const name = value.trim();
+  if (name.length > 80) {
+    throw new HttpError(400, "Enter the village name only. The original message stays in the original village answer.");
+  }
+  return name;
+}
+
+/** A phone a staff member typed. The village answer is never scanned for a number. */
+export function verifiedAdditionalPhone(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const phone = normalizeIndianMobile(value);
+  if (!phone) throw new HttpError(400, "That additional number is not a 10-digit Indian mobile.");
+  return phone;
+}
+
+export async function updateLandJvVerification(
+  db: SqlDb,
+  actor: AuditActor,
+  current: LandJvEnquiry,
+  input: { verifiedVillage: unknown; additionalPhone: unknown; rowVersion?: number },
+  now: string,
+): Promise<LandJvEnquiry> {
+  assertVersion(input.rowVersion, current.rowVersion);
+  const verifiedVillage = verifiedVillageName(input.verifiedVillage);
+  const additionalPhone = verifiedAdditionalPhone(input.additionalPhone);
+  const changes = diffFields(
+    { verified_village: current.verifiedVillage, additional_phone: current.additionalPhone },
+    { verified_village: verifiedVillage, additional_phone: additionalPhone },
+  );
+  if (Object.keys(changes).length === 0) return current;
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE land_jv_enquiries
+         SET verified_village = ?1, additional_phone_e164 = ?2, updated_at = ?3, updated_by = ?4, row_version = row_version + 1
+         WHERE id = ?5 AND row_version = ?6`,
+      )
+      .bind(verifiedVillage, additionalPhone, now, actor.id, current.id, current.rowVersion),
+    auditStatement(db, {
+      actor,
+      entityType: "land_jv_enquiry",
+      entityId: current.id,
+      entityLabel: current.code,
+      action: "update",
+      changes,
+      at: now,
+    }),
+  ]);
+  return (await getLandJvEnquiry(db, current.id))!;
+}
+
+/** Location line for lists. The raw village answer is never used as a place name. */
+export function landJvPlace(enquiry: Pick<LandJvEnquiry, "taluk" | "verifiedVillage">): string {
+  const village = enquiry.verifiedVillage.trim();
+  if (!village) return enquiry.taluk ? `${enquiry.taluk} · Village not verified` : "Village not verified";
+  return enquiry.taluk ? `${enquiry.taluk} · ${village}` : village;
 }

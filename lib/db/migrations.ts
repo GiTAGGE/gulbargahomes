@@ -563,6 +563,36 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_land_jv_status ON land_jv_enquiries (status, created_at)`,
     ],
   },
+  {
+    // Version 7 stays unused. Do not renumber versions 1–15.
+    // Verified village is staff-entered. The original Meta village answer stays in `village` and answers_json.
+    // Buyer recovery runs are a separate audit from historical import jobs.
+    version: 16,
+    name: "verified_village_and_buyer_recovery",
+    statements: [
+      `ALTER TABLE land_jv_enquiries ADD COLUMN verified_village TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE land_jv_enquiries ADD COLUMN additional_phone_e164 TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE meta_lead_ingestions ADD COLUMN recovery_run_id TEXT NOT NULL DEFAULT ''`,
+      `CREATE INDEX IF NOT EXISTS idx_meta_ingestions_recovery ON meta_lead_ingestions (recovery_run_id, status)`,
+      `CREATE TABLE IF NOT EXISTS meta_buyer_recovery_runs (
+         id TEXT PRIMARY KEY,
+         status TEXT NOT NULL,
+         form_ids_json TEXT NOT NULL,
+         preview_json TEXT NOT NULL DEFAULT '{}',
+         created_by TEXT NOT NULL,
+         created_at TEXT NOT NULL,
+         confirmed_at TEXT,
+         finished_at TEXT,
+         enqueue_duplicates INTEGER NOT NULL DEFAULT 0,
+         imported INTEGER NOT NULL DEFAULT 0,
+         duplicates INTEGER NOT NULL DEFAULT 0,
+         held INTEGER NOT NULL DEFAULT 0,
+         failed INTEGER NOT NULL DEFAULT 0,
+         last_error TEXT NOT NULL DEFAULT '',
+         updated_at TEXT NOT NULL
+       )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

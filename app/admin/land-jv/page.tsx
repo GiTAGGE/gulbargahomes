@@ -4,7 +4,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { Card, Empty, Pill } from "@/components/admin/ui";
 import { relativeTime } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
-import { listLandJvEnquiries } from "@/lib/crm/land-jv";
+import { landJvPlace, listLandJvEnquiries } from "@/lib/crm/land-jv";
 import { maskPhone } from "@/lib/crm/phone";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +31,7 @@ export default async function LandJvPage() {
                     {enquiry.code} · {enquiry.contactName}
                   </Link>
                   <p className="text-sm text-ink-muted">
-                    {enquiry.taluk || "Taluk not answered"}
-                    {enquiry.village ? ` · ${enquiry.village}` : ""}
+                    {landJvPlace(enquiry)}
                     {enquiry.acreBand ? ` · ${enquiry.acreBand}` : ""}
                     {" · "}
                     {caps.viewPhone ? enquiry.contactPhone : maskPhone(enquiry.contactPhone)}

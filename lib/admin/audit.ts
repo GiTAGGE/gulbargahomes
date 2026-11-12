@@ -18,7 +18,7 @@ export type AuditEntity =
 
 export type FieldChanges = Record<string, [unknown, unknown]>;
 
-const PHONE_FIELDS = new Set(["phone_e164", "alt_phone_e164", "whatsapp_e164", "phone"]);
+const PHONE_FIELDS = new Set(["phone_e164", "alt_phone_e164", "whatsapp_e164", "phone", "additional_phone", "additional_phone_e164"]);
 const EMAIL_FIELDS = new Set(["email"]);
 const LONG_TEXT_LIMIT = 300;
 

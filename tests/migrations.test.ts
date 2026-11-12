@@ -113,7 +113,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
@@ -122,6 +122,12 @@ describe("migrations", () => {
     const land = await db.prepare("PRAGMA table_info(land_jv_enquiries)").all<{ name: string }>();
     assert.ok(land.results.some((column) => column.name === "acre_band"));
     assert.ok(land.results.some((column) => column.name === "answers_json"));
+    assert.ok(land.results.some((column) => column.name === "verified_village"));
+    assert.ok(land.results.some((column) => column.name === "additional_phone_e164"));
+    const recovery = await db.prepare("PRAGMA table_info(meta_buyer_recovery_runs)").all<{ name: string }>();
+    assert.ok(recovery.results.some((column) => column.name === "preview_json"));
+    const ingestionColumns = await db.prepare("PRAGMA table_info(meta_lead_ingestions)").all<{ name: string }>();
+    assert.ok(ingestionColumns.results.some((column) => column.name === "recovery_run_id"));
     const contactColumns = await db.prepare("PRAGMA table_info(contacts)").all<{ name: string }>();
     assert.ok(contactColumns.results.some((column) => column.name === "is_land_jv"));
     const coverage = await db.prepare("PRAGMA table_info(ad_spend_coverage)").all<{ name: string }>();
@@ -140,6 +146,77 @@ describe("migrations", () => {
       .first<{ status: string; intent_override: string; resolved_by: string; resolved_at: string | null }>();
     assert.deepEqual({ ...row }, { status: "needs_review", intent_override: "", resolved_by: "", resolved_at: null });
     assert.deepEqual(await applyMigrations(db), []);
+  });
+
+  it("migration 16 adds empty staff fields and leaves land answers, owner leads and spend unchanged", async () => {
+    const db = createTestDb();
+    await db
+      .prepare("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+      .run();
+    for (const migration of MIGRATIONS.filter((item) => item.version < 16)) {
+      await db.batch([
+        ...migration.statements.map((sql) => db.prepare(sql)),
+        db
+          .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)")
+          .bind(migration.version, migration.name, "2026-11-12T00:00:00.000Z"),
+      ]);
+    }
+    await db
+      .prepare(
+        `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+         VALUES ('con_land', 'GH-C1', 'Existing Land', '+919111111111', 't', 'a', 't', 'a'),
+                ('con_owner', 'GH-C2', 'Existing Owner', '+919000000001', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, submitted_at, created_at, created_by)
+         VALUES ('src_land', 'meta_lead_form', 't', 't', 'a'),
+                ('src_owner', 'meta_lead_form', 't', 't', 'a')`,
+      )
+      .run();
+    const village = "Subhash village near the tank, call 9845012347";
+    const answers = JSON.stringify([{ key: "village", label: "Village", value: village }]);
+    await db
+      .prepare(
+        `INSERT INTO land_jv_enquiries (id, code, contact_id, source_id, taluk, village, answers_json, notes, created_at, created_by, updated_at, updated_by)
+         VALUES ('ljv_existing', 'GH-L1', 'con_land', 'src_land', 'Aland', ?1, ?2, 'keep', 't', 'a', 't', 'a')`,
+      )
+      .bind(village, answers)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO owner_leads (id, code, contact_id, intent, notes, status, created_at, created_by, updated_at, updated_by)
+         VALUES ('own_existing', 'GH-O1', 'con_owner', 'Rent', 'owner-note', 'New', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO ad_spend_daily (platform, level, external_id, spend_date, currency, spend_minor, source, imported_at, imported_by)
+         VALUES ('meta', 'campaign', '120257140076410091', '2026-11-01', 'INR', 373046, 'meta_insights', 't', 'a')`,
+      )
+      .run();
+    const propertiesBefore = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
+
+    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16]);
+
+    const land = await db
+      .prepare("SELECT village, answers_json, notes, verified_village, additional_phone_e164 FROM land_jv_enquiries WHERE id = 'ljv_existing'")
+      .first<{ village: string; answers_json: string; notes: string; verified_village: string; additional_phone_e164: string }>();
+    assert.equal(land?.village, village);
+    assert.equal(land?.answers_json, answers);
+    assert.equal(land?.notes, "keep");
+    assert.equal(land?.verified_village, "");
+    assert.equal(land?.additional_phone_e164, "");
+    const owner = await db.prepare("SELECT intent, notes, status FROM owner_leads WHERE id = 'own_existing'").first<{ intent: string; notes: string; status: string }>();
+    assert.equal(owner?.intent, "Rent");
+    assert.equal(owner?.notes, "owner-note");
+    assert.equal(owner?.status, "New");
+    const spend = await db.prepare("SELECT spend_minor, currency FROM ad_spend_daily").first<{ spend_minor: number; currency: string }>();
+    assert.equal(Number(spend?.spend_minor), 373046);
+    assert.equal(spend?.currency, "INR");
+    const propertiesAfter = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
+    assert.equal(propertiesAfter, propertiesBefore);
   });
 
   it("keeps the audit log append-only", async () => {

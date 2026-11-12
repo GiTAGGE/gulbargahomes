@@ -48,7 +48,7 @@ export function erasureStatements(code: string, by: string, at: string): string[
        status = CASE WHEN status IN ('New', 'Contacted', 'Details pending') THEN 'Not interested' ELSE status END,
        updated_at = '${at}', updated_by = '${ERASURE_ACTOR}', row_version = row_version + 1
      WHERE contact_id IN ${target}`,
-    `UPDATE land_jv_enquiries SET taluk = '', village = '', acre_band = '', ownership = '', rtc_available = '', road_access = '', owners_agree = '',
+    `UPDATE land_jv_enquiries SET taluk = '', village = '', verified_village = '', additional_phone_e164 = '', acre_band = '', ownership = '', rtc_available = '', road_access = '', owners_agree = '',
        answers_json = '[]', notes = '', status_reason = '${ERASED_REASON}',
        updated_at = '${at}', updated_by = '${ERASURE_ACTOR}', row_version = row_version + 1
      WHERE contact_id IN ${target}`,
