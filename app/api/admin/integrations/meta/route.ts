@@ -17,6 +17,7 @@ import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/ove
 import { metaRuntime } from "@/lib/meta/runtime";
 import { syncCampaignNames } from "@/lib/meta/names";
 import { importCampaignSpend, listMarketingAccounts, selectMarketingAccount } from "@/lib/meta/spend";
+import { denySpendApiAction } from "@/lib/meta/spend-access";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
   if ("response" in auth) return auth.response;
   try {
     const body = await readJson(request);
+    const action = typeof body.action === "string" ? body.action : "";
+    const denied = denySpendApiAction(auth.admin.role, action);
+    if (denied) return denied;
     const { runtime, config, missing } = await metaRuntime(auth.db, new URL(request.url).origin);
     const now = nowIso();
     const needsSecrets = () => {

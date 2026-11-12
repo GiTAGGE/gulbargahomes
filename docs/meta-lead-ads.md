@@ -245,10 +245,13 @@ qualified, visited, rented and sold per campaign from current statuses.
 `ad_spend_daily` stores one row per campaign per day. **Import spend** fills it
 from the Marketing API Insights endpoint with the saved user token and
 `ads_read`. The amount is delivered spend in INR, stored as paise. The same
-day is replaced on the next import, not added again. A campaign Meta did not
-return is stored as zero only after every Insights page has been read. An
-account that is not INR is refused and nothing is stored. The Page token is
-not used, and a failed import does not pause Lead Ads.
+day is replaced on the next import, not added again. Every date in the
+requested window is stored; the importer does not drop the tail of a long
+window. A campaign Meta did not return is stored as zero only after every
+Insights page has been read. An account that is not INR is refused and nothing
+is stored. Listing ad accounts, choosing one, and importing spend require a
+super admin, in addition to `integrations.manage`. The Page token is not used,
+and a failed import does not pause Lead Ads.
 
 ## Permissions
 

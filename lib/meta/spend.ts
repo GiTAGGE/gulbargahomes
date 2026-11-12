@@ -54,12 +54,33 @@ export function spendWindow(nowIso: string, earliestSubmissionIso: string | null
   return { since: since > until ? until : since, until };
 }
 
+function inclusiveDays(since: string, until: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || !/^\d{4}-\d{2}-\d{2}$/.test(until) || since > until) return -1;
+  const start = Date.parse(`${since}T00:00:00.000Z`);
+  const end = Date.parse(`${until}T00:00:00.000Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return -1;
+  return Math.round((end - start) / DAY_MS) + 1;
+}
+
+/**
+ * Every calendar day from `since` through `until`, inclusive.
+ * A range that cannot be covered throws. It never returns a shorter list.
+ */
 export function eachDate(since: string, until: string): string[] {
+  const expected = inclusiveDays(since, until);
+  if (expected < 1) {
+    throw new HttpError(400, "The spend date range is not valid. Nothing was stored.");
+  }
   const dates: string[] = [];
   let cursor = since;
-  while (cursor <= until && dates.length < 120) {
+  while (cursor <= until && dates.length < expected) {
     dates.push(cursor);
-    cursor = addCalendarDays(cursor, 1);
+    const next = addCalendarDays(cursor, 1);
+    if (next <= cursor) break;
+    cursor = next;
+  }
+  if (dates.length !== expected || dates[0] !== since || dates[dates.length - 1] !== until) {
+    throw new HttpError(400, "The spend date range could not be covered. Nothing was stored.");
   }
   return dates;
 }
@@ -220,13 +241,13 @@ export async function importCampaignSpend(
     }
     if (!inrAccount(account)) throw new HttpError(400, foreignCurrencyMessage(account.currency));
 
+    // Cover the whole window before Insights. A short date list must not become a partial batch.
+    const dates = eachDate(window.since, window.until);
     const discovered = (await graph.listAdCampaigns(account.id, token)).filter((campaign) => campaign.effectiveStatus !== "DELETED");
     const insights = await graph.campaignInsights(account.id, token, window.since, window.until);
     for (const row of insights) {
       if (row.currency && row.currency !== "INR") throw new HttpError(400, foreignCurrencyMessage(row.currency));
     }
-
-    const dates = eachDate(window.since, window.until);
     const byKey = new Map<string, { spend: string; impressions: number | null; clicks: number | null }>();
     for (const row of insights) {
       if (!/^\d{3,32}$/.test(row.campaignId) || !/^\d{4}-\d{2}-\d{2}$/.test(row.date)) continue;

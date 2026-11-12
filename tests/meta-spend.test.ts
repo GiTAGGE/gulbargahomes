@@ -13,7 +13,8 @@ import {
   storeUserToken,
 } from "../lib/meta/connection";
 import { createGraphClient } from "../lib/meta/graph";
-import { importCampaignSpend, selectMarketingAccount, spendWindow } from "../lib/meta/spend";
+import { addCalendarDays, eachDate, importCampaignSpend, selectMarketingAccount, spendWindow } from "../lib/meta/spend";
+import { denySpendApiAction } from "../lib/meta/spend-access";
 import { FakeMeta, PAGE_ID, PAGE_TOKEN, USER_TOKEN } from "./helpers/fake-meta";
 import { createTestDb } from "./helpers/sqlite";
 
@@ -91,6 +92,26 @@ describe("campaign spend import", () => {
     assert.equal(can("super_admin", "integrations.manage"), true);
     assert.equal(can("lead_executive", "integrations.manage"), false);
     assert.equal(can("inventory_manager", "integrations.manage"), false);
+    assert.equal(can("viewer", "integrations.manage"), false);
+    for (const role of ["inventory_manager", "lead_executive", "viewer"] as const) {
+      for (const action of ["list_ad_accounts", "select_ad_account", "import_spend"] as const) {
+        assert.equal(denySpendApiAction(role, action)?.status, 403);
+      }
+    }
+    assert.equal(denySpendApiAction("super_admin", "import_spend"), null);
+    assert.equal(denySpendApiAction("viewer", "sync_names"), null);
+    assert.equal(denySpendApiAction("inventory_manager", "sync_forms"), null);
+  });
+
+  it("returns every date in a range longer than 120 days, or refuses the range", () => {
+    const dates = eachDate("2026-01-01", "2026-06-30");
+    assert.ok(dates.length > 120);
+    assert.equal(dates[0], "2026-01-01");
+    assert.equal(dates[dates.length - 1], "2026-06-30");
+    for (let index = 1; index < dates.length; index += 1) {
+      assert.equal(dates[index], addCalendarDays(dates[index - 1], 1));
+    }
+    assert.throws(() => eachDate("2026-11-12", "2026-08-14"), /Nothing was stored/);
   });
 
   it("imports INR spend for active, paused and archived campaigns, replaces it on the next run, and leaves lead attribution alone", async () => {
@@ -202,6 +223,40 @@ describe("campaign spend import", () => {
     assert.equal(connection.lastError, "");
     assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
     assert.equal((await spendRows(db)).length, 0);
+  });
+
+  it("stores every day of the window when the earliest submission is more than 120 days ago", async () => {
+    const { db, meta, graph } = await connect();
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, meta_lead_id, meta_campaign_id, meta_campaign_name, submitted_at, created_at, created_by)
+         VALUES ('src_old', 'meta_lead_form', 'lead-old', ?1, 'Rent Owners - Area Wise', '2026-03-01T00:00:00.000Z', ?2, 'x')`,
+      )
+      .bind(ACTIVE, NOW)
+      .run();
+    meta.adCampaigns = [{ id: ACTIVE, name: "Rent Owners - Area Wise", effective_status: "ACTIVE" }];
+    meta.insights = [];
+    const result = await importCampaignSpend(db, actor, config.tokenKey, graph, NOW);
+    const expected: string[] = [];
+    let cursor = "2026-08-14";
+    while (cursor <= "2026-11-12") {
+      expected.push(cursor);
+      cursor = addCalendarDays(cursor, 1);
+    }
+    const submissionSpan = eachDate("2026-03-01", "2026-11-12").length;
+    assert.ok(submissionSpan > 120);
+    assert.equal(result.since, "2026-08-14");
+    assert.equal(result.until, "2026-11-12");
+    assert.equal(result.spendRows, expected.length);
+    assert.ok(expected.length < 120);
+    const rows = await spendRows(db);
+    assert.deepEqual(
+      rows.map((row) => row.spend_date),
+      expected,
+    );
+    assert.equal(rows.every((row) => row.external_id === ACTIVE && row.currency === "INR" && row.spend_minor === 0), true);
+    assert.equal(meta.requests.some((request) => request.url.includes("/insights")), true);
+    assert.equal((await getConnection(db)).status, "connected");
   });
 
   it("does not call the Marketing API when the user token lacks ads_read, even if the Page token list has it", async () => {
