@@ -51,6 +51,14 @@ export type BuyerRecoveryLead = {
   existingContact: boolean;
 };
 
+/** Identity of one previewed lead. No name and no phone number. */
+export type BuyerRecoveryLeadSnapshot = {
+  leadgenId: string;
+  formId: string;
+  intent: BuyerRecoveryLead["intent"];
+  campaignId: string;
+};
+
 export type BuyerRecoveryPreview = {
   total: number;
   buy: number;
@@ -63,6 +71,7 @@ export type BuyerRecoveryPreview = {
   createdMin: string;
   createdMax: string;
   leadIds: string[];
+  leads: BuyerRecoveryLeadSnapshot[];
   forms: { formId: string; name: string; total: number; buy: number; rent: number; ready: boolean; reason: string }[];
   expected: typeof BUYER_RECOVERY_EXPECTED;
   discrepancies: string[];
@@ -293,6 +302,12 @@ function summarize(
     createdMin,
     createdMax,
     leadIds: leads.map((lead) => lead.leadgenId),
+    leads: leads.map((lead) => ({
+      leadgenId: lead.leadgenId,
+      formId: lead.formId,
+      intent: lead.intent,
+      campaignId: lead.campaignId,
+    })),
     forms,
     expected: BUYER_RECOVERY_EXPECTED,
     discrepancies,
@@ -402,8 +417,24 @@ async function recount(db: SqlDb, runId: string, enqueueDuplicates: number) {
   };
 }
 
+/** Per-lead differences that totals can hide, such as two leads swapping Buy and Rent. */
+function leadSnapshotChanges(stored: BuyerRecoveryLeadSnapshot[] | undefined, fresh: BuyerRecoveryLeadSnapshot[]): string[] {
+  if (!stored?.length) return ["This preview has no per-lead intent snapshot. Preview the forms again. Nothing was imported."];
+  const freshById = new Map(fresh.map((lead) => [lead.leadgenId, lead]));
+  const changes: string[] = [];
+  for (const lead of stored) {
+    const live = freshById.get(lead.leadgenId);
+    if (!live) continue;
+    if (live.formId === lead.formId && live.intent === lead.intent && live.campaignId === lead.campaignId) continue;
+    changes.push(
+      `Lead ${lead.leadgenId} changed since the preview: intent ${lead.intent} → ${live.intent}, form ${lead.formId} → ${live.formId}, campaign ${lead.campaignId} → ${live.campaignId}. Nothing was imported.`,
+    );
+  }
+  return changes;
+}
+
 /**
- * Re-reads Meta, and enqueues only when the live result still matches the preview
+ * Re-reads Meta, and enqueues only when every lead still matches the preview
  * and the expected 104 Buy / 39 Rent split. A difference blocks the run.
  */
 export async function confirmBuyerRecovery(runtime: MetaRuntime, actor: AuditActor, runId: string, now: string): Promise<BuyerRecoveryRun> {
@@ -414,8 +445,13 @@ export async function confirmBuyerRecovery(runtime: MetaRuntime, actor: AuditAct
   const { leads, preview } = await loadLeads(runtime, current.formIds);
   const previewIds = new Set(current.preview.leadIds);
   const sameIds = preview.leadIds.length === current.preview.leadIds.length && preview.leadIds.every((id) => previewIds.has(id));
-  if (preview.blocked || !sameIds) {
-    const discrepancies = sameIds ? preview.discrepancies : ["Meta returned a different set of lead IDs than the preview. Nothing was imported.", ...preview.discrepancies];
+  const leadChanges = leadSnapshotChanges(current.preview.leads, preview.leads);
+  if (preview.blocked || !sameIds || leadChanges.length > 0) {
+    const discrepancies = [
+      ...(sameIds ? [] : ["Meta returned a different set of lead IDs than the preview. Nothing was imported."]),
+      ...leadChanges,
+      ...preview.discrepancies,
+    ];
     const blockedPreview = { ...preview, discrepancies, blocked: true };
     await runtime.db
       .prepare(`UPDATE meta_buyer_recovery_runs SET status = 'blocked', preview_json = ?2, last_error = ?3, updated_at = ?4 WHERE id = ?1`)

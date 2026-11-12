@@ -233,6 +233,10 @@ It does not run on deploy, does not change the 48-hour reconciliation window,
 and does not import unless the live preview is 143 leads, 104 Buy
 (`buy_madbeku`) and 39 Rent (`rent_ge_beku`), all on campaign
 `120257140076410091`. A different count, intent or campaign blocks the import.
+The preview stores each lead's Meta id, form id, Buy or Rent answer, and campaign
+id, and does not store a name or phone number. Confirmation compares that
+snapshot with a fresh read. Two leads that swap Buy and Rent, keeping 104 and
+39, still block the import and enqueue nothing.
 Both forms must already be saved as Buyer or tenant, from the answer. That
 dropdown choice is stored as classification `mixed`. Buyer requirement and
 Tenant requirement are different saved values and stay blocked. Intent, purchase

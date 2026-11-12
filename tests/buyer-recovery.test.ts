@@ -398,6 +398,58 @@ describe("historical buyer and renter recovery", () => {
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM ad_spend_daily"), 0);
   });
 
+  it("blocks confirmation when two leads swap Buy and Rent without changing the totals", async () => {
+    const leads = allLeads();
+    const { db, clock, runtime } = await connect(leads);
+    await classify(db, clock.iso());
+    const preview = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(preview.status, "previewed");
+    assert.equal(preview.preview?.blocked, false);
+    assert.equal(preview.preview?.total, 143);
+    assert.equal(preview.preview?.buy, 104);
+    assert.equal(preview.preview?.rent, 39);
+    const buyId = String(860000000000000 + 1);
+    const rentId = String(860000000000000 + 103);
+    const snapshotted = preview.preview?.leads ?? [];
+    assert.equal(snapshotted.length, 143);
+    assert.deepEqual(snapshotted.find((lead) => lead.leadgenId === buyId), { leadgenId: buyId, formId: COPY, intent: "Buy", campaignId: CAMPAIGN });
+    assert.deepEqual(snapshotted.find((lead) => lead.leadgenId === rentId), { leadgenId: rentId, formId: COPY, intent: "Rent", campaignId: CAMPAIGN });
+    const stored = await db.prepare("SELECT preview_json FROM meta_buyer_recovery_runs WHERE id = ?1").bind(preview.id).first<{ preview_json: string }>();
+    assert.equal(stored?.preview_json.includes("9000000001"), false);
+    assert.equal(stored?.preview_json.includes("9845012345"), false);
+    assert.equal(stored?.preview_json.includes("Person "), false);
+    for (const lead of JSON.parse(stored?.preview_json ?? "{}").leads as Record<string, string>[]) {
+      assert.deepEqual(Object.keys(lead).sort(), ["campaignId", "formId", "intent", "leadgenId"]);
+    }
+
+    const buy = leads[1]!.field_data.find((field) => field.name === "nimge_yen_beku?");
+    const rent = leads[103]!.field_data.find((field) => field.name === "nimge_yen_beku?");
+    assert.ok(buy && rent);
+    buy.values = ["rent_ge_beku"];
+    rent.values = ["buy_madbeku"];
+    const swapped = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(swapped.status, "previewed");
+    assert.equal(swapped.preview?.blocked, false);
+    assert.equal(swapped.preview?.buy, 104);
+    assert.equal(swapped.preview?.rent, 39);
+    assert.equal(swapped.preview?.forms.find((form) => form.formId === COPY)?.buy, 103);
+    assert.equal(swapped.preview?.forms.find((form) => form.formId === COPY)?.rent, 39);
+
+    await assert.rejects(confirmBuyerRecovery(runtime, admin, preview.id, clock.iso()), /Nothing was imported/);
+    const blocked = await db
+      .prepare("SELECT status, last_error FROM meta_buyer_recovery_runs WHERE id = ?1")
+      .bind(preview.id)
+      .first<{ status: string; last_error: string }>();
+    assert.equal(blocked?.status, "blocked");
+    assert.match(blocked?.last_error ?? "", new RegExp(`${buyId} changed since the preview: intent Buy → Rent`));
+    assert.match(blocked?.last_error ?? "", new RegExp(`${rentId} changed since the preview: intent Rent → Buy`));
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM meta_lead_ingestions"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM owner_leads"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM properties"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM land_jv_enquiries"), 0);
+  });
+
   it("retries a rate-limited batch without creating a second requirement", async () => {
     const leads = [leadAt(20), leadAt(21), leadAt(22)];
     const { db, meta, clock, runtime } = await connect(leads);

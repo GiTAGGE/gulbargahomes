@@ -956,7 +956,7 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
           {preview.mappingIssues.map((item) => (
             <Notice key={item} tone="warn">{item}</Notice>
           ))}
-          <p className="text-xs text-ink-faint">{preview.leadIds.length} Meta lead IDs are in this preview. Import stays blocked until the live counts are {preview.expected.total} leads, {preview.expected.buy} Buy and {preview.expected.rent} Rent.</p>
+          <p className="text-xs text-ink-faint">{preview.leadIds.length} Meta lead IDs are in this preview. Import stays blocked until the live counts are {preview.expected.total} leads, {preview.expected.buy} Buy and {preview.expected.rent} Rent. It also stays blocked when any lead changes Buy or Rent, form, or campaign since this preview, even if the totals still match.</p>
           {run?.status === "previewed" && countsMatch && (
             <label className="flex items-start gap-2 text-sm text-ink">
               <input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
