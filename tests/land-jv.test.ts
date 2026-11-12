@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { getContact } from "../lib/crm/contacts";
 import { erasureStatements } from "../lib/crm/erasure";
-import { getLandJvEnquiry } from "../lib/crm/land-jv";
+import { getLandJvEnquiry, landJvPlace, updateLandJvVerification } from "../lib/crm/land-jv";
 import { getOwnerLead } from "../lib/crm/owner-leads";
 import { getRequirement } from "../lib/crm/requirements";
 import { prepareDatabase } from "../lib/db/prepare";
@@ -325,12 +325,43 @@ describe("land JV enquiries", () => {
     assert.equal(await processIngestion(runtime, queued.id), "done");
     const contactId = (await db.prepare("SELECT contact_id FROM meta_lead_ingestions WHERE id = ?1").bind(queued.id).first<{ contact_id: string }>())!.contact_id;
     const code = (await getContact(db, contactId))!.code;
+    await db.prepare("UPDATE land_jv_enquiries SET verified_village = 'Kamalapur', additional_phone_e164 = '+919845099999'").run();
     await db.batch(erasureStatements(code, "owner@example.com", NOW).map((sql) => db.prepare(sql)));
-    const left = await db.prepare("SELECT village, answers_json, notes FROM land_jv_enquiries").first<{ village: string; answers_json: string; notes: string }>();
+    const left = await db.prepare("SELECT village, verified_village, additional_phone_e164, answers_json, notes FROM land_jv_enquiries").first<{ village: string; verified_village: string; additional_phone_e164: string; answers_json: string; notes: string }>();
     assert.equal(left?.village, "");
+    assert.equal(left?.verified_village, "");
+    assert.equal(left?.additional_phone_e164, "");
     assert.equal(left?.answers_json, "[]");
     assert.equal(left?.notes, "");
     const source = await db.prepare("SELECT meta_lead_id FROM lead_sources").first<{ meta_lead_id: string }>();
     assert.equal(source?.meta_lead_id, "200000000000005");
+  });
+
+  it("keeps the original village answer and stores a village name only when staff type it", async () => {
+    const { db, runtime } = await database();
+    await classify(db, JV, landQuestions, "Agricultural Land JV | Kalaburagi", "land_jv");
+    const message = `Subhash village near the tank, call 9845012347. ${"road ".repeat(12)}`.trim();
+    const item = lead(JV, "200000000000006", { full_name: "Subhash", phone_number: "9845012348", "nimma_jameenu_yaava_oorinallide?": message }, "120257659162130091");
+    const queued = await enqueueLead(db, { leadgenId: item.id, pageId: PAGE_ID, origin: "webhook", lead: item }, NOW);
+    assert.equal(await processIngestion(runtime, queued.id), "done");
+    const current = (await getLandJvEnquiry(db, (await db.prepare("SELECT entity_id FROM meta_lead_ingestions WHERE id = ?1").bind(queued.id).first<{ entity_id: string }>())!.entity_id))!;
+    assert.equal(current.village, message);
+    assert.equal(current.verifiedVillage, "");
+    assert.equal(current.additionalPhone, "");
+    assert.equal(landJvPlace(current), "Village not verified");
+    await assert.rejects(
+      updateLandJvVerification(db, admin, current, { verifiedVillage: message, additionalPhone: "", rowVersion: current.rowVersion }, NOW),
+      /village name only/,
+    );
+    const named = await updateLandJvVerification(db, admin, current, { verifiedVillage: "Kamalapur", additionalPhone: "", rowVersion: current.rowVersion }, NOW);
+    assert.equal(named.village, message);
+    assert.equal(named.verifiedVillage, "Kamalapur");
+    assert.equal(named.additionalPhone, "");
+    assert.equal(landJvPlace(named), "Kamalapur");
+    const withPhone = await updateLandJvVerification(db, admin, named, { verifiedVillage: "Kamalapur", additionalPhone: "9845099999", rowVersion: named.rowVersion }, NOW);
+    assert.equal(withPhone.additionalPhone, "+919845099999");
+    assert.equal(withPhone.village, message);
+    const answers = withPhone.answers.find((answer) => answer.value === message);
+    assert.ok(answers);
   });
 });

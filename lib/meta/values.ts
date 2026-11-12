@@ -109,6 +109,16 @@ export function parseDemandIntent(value: string): DemandIntent | null {
   return found.length === 1 ? found[0] : null;
 }
 
+/**
+ * The two approved Gulbarga Buyer & Renter option keys.
+ * Only the exact key counts. Wording that merely contains "buy" or "rent" does not.
+ */
+export function approvedBuyerRenterIntent(value: string): DemandIntent | null {
+  if (value === "buy_madbeku") return "Buy";
+  if (value === "rent_ge_beku") return "Rent";
+  return null;
+}
+
 /** "Sedam Road, Jewargi Road / Aland Road" → three localities. */
 export function splitLocalities(value: string): string[] {
   return cleanAnswer(value)

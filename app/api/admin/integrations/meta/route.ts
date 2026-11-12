@@ -17,6 +17,8 @@ import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/ove
 import { metaRuntime } from "@/lib/meta/runtime";
 import { syncCampaignNames } from "@/lib/meta/names";
 import { importCampaignSpend, listMarketingAccounts, selectMarketingAccount } from "@/lib/meta/spend";
+import { confirmBuyerRecovery, previewBuyerRecovery, runBuyerRecoveryStep } from "@/lib/meta/buyer-recovery";
+import { denyBuyerRecoveryAction } from "@/lib/meta/buyer-recovery-access";
 import { denySpendApiAction } from "@/lib/meta/spend-access";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
 
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
   try {
     const body = await readJson(request);
     const action = typeof body.action === "string" ? body.action : "";
-    const denied = denySpendApiAction(auth.admin.role, action);
+    const denied = denySpendApiAction(auth.admin.role, action) ?? denyBuyerRecoveryAction(auth.admin.role, action);
     if (denied) return denied;
     const { runtime, config, missing } = await metaRuntime(auth.db, new URL(request.url).origin);
     const now = nowIso();
@@ -124,6 +126,17 @@ export async function POST(request: Request) {
           .bind(id)
           .first<{ entity_type: string | null; entity_id: string | null }>();
         return NextResponse.json({ ok: true, outcome, entityType: saved?.entity_type ?? null, entityId: saved?.entity_id ?? null });
+      }
+      case "preview_buyer_recovery":
+        return NextResponse.json({ ok: true, run: await previewBuyerRecovery(runtime, auth.admin, body.formIds, now) });
+      case "confirm_buyer_recovery":
+      case "step_buyer_recovery": {
+        const runId = typeof body.runId === "string" && /^mbr_[0-9a-f]{20}$/.test(body.runId) ? body.runId : "";
+        if (!runId) throw new HttpError(400, "Choose the recovery preview.");
+        const run = body.action === "confirm_buyer_recovery"
+          ? await confirmBuyerRecovery(runtime, auth.admin, runId, now)
+          : await runBuyerRecoveryStep(runtime, auth.admin, runId, now);
+        return NextResponse.json({ ok: true, run });
       }
       case "dismiss": {
         const ids = idList(body.ids);

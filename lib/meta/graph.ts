@@ -519,6 +519,26 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
       }
     },
 
+    /**
+     * Every lead on a form, with no time filter. A missing page throws.
+     * Used by the explicit buyer recovery, not by the 48-hour reconcile.
+     */
+    async listAllFormLeads(formId: string, pageToken: string, options: LeadFieldOptions = {}): Promise<MetaLead[]> {
+      const load = (withAdFields: boolean) =>
+        pagedComplete<Record<string, unknown>>(`/${encodeURIComponent(formId)}/leads`, pageToken, {
+          fields: leadFields(options, withAdFields),
+          limit: "100",
+        });
+      let rows: Record<string, unknown>[];
+      try {
+        rows = await load(true);
+      } catch (error) {
+        if (!adFieldsRefused(error)) throw error;
+        rows = await load(false);
+      }
+      return rows.map((lead) => toMetaLead({ form_id: formId, ...lead }));
+    },
+
     /** One page of a form's leads created inside [since, until). */
     async listFormLeads(
       formId: string,

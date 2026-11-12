@@ -52,6 +52,7 @@ const ORIGIN_LABEL: Record<LeadSource["ingestionOrigin"], string> = {
   webhook: "Meta webhook",
   historical_import: "Historical import",
   reconciliation: "Reconciliation",
+  buyer_recovery: "Buyer & renter recovery",
 };
 
 type StoredAnswer = { key: string; label?: string; value: string; target: string };

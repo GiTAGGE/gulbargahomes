@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { MetaIntegration } from "@/components/admin/meta-integration";
 import { requirePageAdmin } from "@/lib/admin/page";
+import { latestBuyerRecovery } from "@/lib/meta/buyer-recovery";
 import { listForms } from "@/lib/meta/forms";
 import { LEAD_RETENTION_DAYS, listImportJobs } from "@/lib/meta/imports";
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
@@ -16,7 +17,7 @@ export default async function MetaIntegrationPage({
 }: {
   searchParams: Promise<{ error?: string; connected?: string; step?: string }>;
 }) {
-  const { db, caps } = await requirePageAdmin("integrations.view");
+  const { admin, db, caps } = await requirePageAdmin("integrations.view");
   const query = await searchParams;
   const head = await headers();
   const host = head.get("x-forwarded-host") ?? head.get("host") ?? "gulbargahomes.com";
@@ -24,7 +25,8 @@ export default async function MetaIntegrationPage({
   const origin = `${proto}://${host}`;
 
   const { connection, missing, config } = await metaRuntime(db, origin);
-  const [forms, stats, deliveries, attention, recent, jobs] = await Promise.all([
+  const canRecover = admin.role === "super_admin";
+  const [forms, stats, deliveries, attention, recent, jobs, recovery] = await Promise.all([
     listForms(db, connection.pageId || undefined),
     ingestionStats(db),
     recentDeliveries(db),
@@ -34,12 +36,15 @@ export default async function MetaIntegrationPage({
     }),
     listIngestions(db, { statuses: ["done", "duplicate"], limit: 10, canViewPhone: caps.viewPhone }),
     listImportJobs(db),
+    canRecover ? latestBuyerRecovery(db) : Promise.resolve(null),
   ]);
 
   return (
     <AdminShell eyebrow="Integrations" title="Meta Lead Ads">
       <MetaIntegration
         canManage={caps.manageIntegrations}
+        canRecover={canRecover}
+        recovery={recovery}
         connection={connection}
         missingSecrets={missing}
         appId={config.appId}

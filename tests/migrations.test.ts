@@ -113,7 +113,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
@@ -122,6 +122,12 @@ describe("migrations", () => {
     const land = await db.prepare("PRAGMA table_info(land_jv_enquiries)").all<{ name: string }>();
     assert.ok(land.results.some((column) => column.name === "acre_band"));
     assert.ok(land.results.some((column) => column.name === "answers_json"));
+    assert.ok(land.results.some((column) => column.name === "verified_village"));
+    assert.ok(land.results.some((column) => column.name === "additional_phone_e164"));
+    const recovery = await db.prepare("PRAGMA table_info(meta_buyer_recovery_runs)").all<{ name: string }>();
+    assert.ok(recovery.results.some((column) => column.name === "preview_json"));
+    const ingestionColumns = await db.prepare("PRAGMA table_info(meta_lead_ingestions)").all<{ name: string }>();
+    assert.ok(ingestionColumns.results.some((column) => column.name === "recovery_run_id"));
     const contactColumns = await db.prepare("PRAGMA table_info(contacts)").all<{ name: string }>();
     assert.ok(contactColumns.results.some((column) => column.name === "is_land_jv"));
     const coverage = await db.prepare("PRAGMA table_info(ad_spend_coverage)").all<{ name: string }>();

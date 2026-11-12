@@ -19,7 +19,7 @@ export const META_ACTOR: AuditActor = { id: "meta_lead_ads", email: "meta-lead-a
 
 export { INGESTION_STATUS_LABEL, INGESTION_STATUSES, type IngestionStatus } from "./labels";
 
-export type IngestionOriginKind = "webhook" | "import" | "reconcile";
+export type IngestionOriginKind = "webhook" | "import" | "reconcile" | "recovery";
 
 export type MetaRuntime = {
   db: SqlDb;
@@ -48,6 +48,7 @@ export type EnqueueInput = {
   createdTime?: string | null;
   origin: IngestionOriginKind;
   importJobId?: string | null;
+  recoveryRunId?: string | null;
   lead?: MetaLead | null;
 };
 
@@ -66,8 +67,8 @@ export async function enqueueLead(db: SqlDb, input: EnqueueInput, now: string): 
   const id = existing?.id ?? newId("mli");
   await db
     .prepare(
-      `INSERT INTO meta_lead_ingestions (id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, next_attempt_at, lead_created_at, payload_json, received_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', ?8, ?9, ?10, ?8, ?8)
+      `INSERT INTO meta_lead_ingestions (id, leadgen_id, page_id, form_id, ad_id, origin, import_job_id, status, next_attempt_at, lead_created_at, payload_json, received_at, updated_at, recovery_run_id)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', ?8, ?9, ?10, ?8, ?8, ?11)
        ON CONFLICT(leadgen_id) DO UPDATE SET
          deliveries = meta_lead_ingestions.deliveries + CASE WHEN excluded.origin = 'webhook' THEN 1 ELSE 0 END,
          payload_json = CASE WHEN meta_lead_ingestions.payload_json = '' AND meta_lead_ingestions.status NOT IN ('done', 'duplicate')
@@ -86,6 +87,7 @@ export async function enqueueLead(db: SqlDb, input: EnqueueInput, now: string): 
       now,
       input.createdTime ?? input.lead?.createdTime ?? null,
       input.lead ? JSON.stringify(input.lead) : "",
+      input.recoveryRunId ?? "",
     )
     .run();
   if (!existing) await logEvent(db, id, now, "received", "queued", `via ${input.origin}`);
@@ -220,7 +222,14 @@ function sourceFor(lead: MetaLead, form: { formId: string; name: string }, row: 
     submittedAt: lead.createdTime,
     metaPageId: row.page_id,
     metaIsOrganic: lead.isOrganic,
-    ingestionOrigin: row.origin === "webhook" ? "webhook" : row.origin === "reconcile" ? "reconciliation" : "historical_import",
+    ingestionOrigin:
+      row.origin === "webhook"
+        ? "webhook"
+        : row.origin === "reconcile"
+          ? "reconciliation"
+          : row.origin === "recovery"
+            ? "buyer_recovery"
+            : "historical_import",
     receivedAt: row.received_at,
     rawPayload: {
       meta: {

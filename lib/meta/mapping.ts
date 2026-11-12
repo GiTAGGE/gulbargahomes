@@ -9,6 +9,7 @@ import {
   cleanAnswer,
   demandIntentsIn,
   ownerIntentsIn,
+  approvedBuyerRenterIntent,
   parseBhk,
   parseDemandIntent,
   parseMoney,
@@ -528,7 +529,8 @@ export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice =
   let questionKey = valuesFor("intent")[0]?.key ?? "";
   let answerText = intentAnswer;
   if (form.classification === "mixed" || staffDemand) {
-    const parsed = intentAnswer ? parseDemandIntent(intentAnswer) : null;
+    const approved = intentAnswer ? approvedBuyerRenterIntent(intentAnswer) : null;
+    const parsed = approved ?? (intentAnswer ? parseDemandIntent(intentAnswer) : null);
     if (staffDemand) {
       intent = staffDemand;
       basis = "staff";

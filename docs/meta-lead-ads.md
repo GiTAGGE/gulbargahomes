@@ -221,7 +221,25 @@ for 90 days). Mixed, unclassified and Ignore forms are rejected by the import
 job and are not listed on the historical-import card. A mixed form's recent
 leads are covered by reconciliation instead, which reads the last 48 hours.
 Leads older than that stay on Meta until a later import is approved for that
-form.
+form. The two Gulbarga Buyer & Renter forms are not imported this way.
+
+## Historical Buyer & Renter Recovery
+
+A super admin can preview and import forms `1071121499253613` and
+`1489593689660590` from **Historical Buyer & Renter Recovery** on the Meta
+page. No other form id is accepted, and mixed forms stay off the historical
+import above. The action reads every lead on those forms with the Page token.
+It does not run on deploy, does not change the 48-hour reconciliation window,
+and does not import unless the live preview is 143 leads, 104 Buy
+(`buy_madbeku`) and 39 Rent (`rent_ge_beku`), all on campaign
+`120257140076410091`. A different count, intent or campaign blocks the import.
+Both forms must already be saved as Buyer or tenant, from the answer, with
+intent, purchase budget and rental budget mapped. The recovery does not save
+that classification. “Budget decide madilla” stays a valid empty budget. A Land
+property type becomes a requirement, not a Land JV enquiry or a property.
+Requirements start as New. Repeating the recovery counts existing lead ids as
+duplicates. The run records who started it, the forms, the preview and the
+imported, duplicate, held and failed counts. Migration 16 stores the run.
 
 The job reads each selected form's leads page by page with a `time_created`
 filter and queues them in the **same** `meta_lead_ingestions` queue the webhook
@@ -237,7 +255,7 @@ attention list.
 campaign, ad set, ad and lead ids and names, organic flag, the original
 submission time (`submitted_at`), when the CRM received it (`received_at`), how
 it arrived (`ingestion_origin`: manual, webhook, historical_import,
-reconciliation) and the raw answers. Campaign, ad set and ad ids and names are
+reconciliation, buyer_recovery) and the raw answers. Campaign, ad set and ad ids and names are
 also collected in `ad_entities`.
 
 `campaign_lead_funnel` (view) counts leads, owner leads, requirements,
@@ -282,7 +300,7 @@ Public listings stay `Rent` | `Sale`. A lease lead does not become a listing by 
 
 ## Agricultural land JV
 
-Classification `land_jv` records `land_jv_enquiries` (migration 15). Taluk, village, acre band, ownership, RTC / Pahani, road access and whether the owners agree are stored on that row, and the original Meta answers are kept in `answers_json`. The contact is marked `is_land_jv` and is not marked as a residential owner. Nothing is created in `properties`, `owner_leads` or `demand_requirements`, and the enquiry status stays `New`.
+Classification `land_jv` records `land_jv_enquiries` (migration 15). Taluk, the original village answer, acre band, ownership, RTC / Pahani, road access and whether the owners agree are stored on that row, and the original Meta answers are kept in `answers_json`. Migration 16 adds `verified_village` and `additional_phone_e164`. Staff type those. The original village answer is not parsed, and lists use the verified village or “Village not verified”. The contact is marked `is_land_jv` and is not marked as a residential owner. Nothing is created in `properties`, `owner_leads` or `demand_requirements`, and the enquiry status stays `New`.
 
 A form that was classified as owner and held for Sale / Rent / Lease stays held after it is reclassified. Saving the classification does not replay those rows. **Record as Land JV** stores `intent_override = 'Land JV'` and then imports that one lead. **Import as Sale**, **Import as Rent** and **Import as Lease** stay available as a deliberate residential choice and still do not create a property by themselves.
 
