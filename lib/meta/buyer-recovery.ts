@@ -5,8 +5,26 @@ import { newId, parseJson, type SqlDb } from "../db/sql";
 import { getStoredForm, type StoredForm } from "./forms";
 import type { MetaLead } from "./graph";
 import { enqueueLead, processDue, type MetaRuntime } from "./ingest";
+import { CLASSIFICATION_LABEL, type FormClassification } from "./mapping";
 import { approvedBuyerRenterIntent } from "./values";
 import { readPageToken } from "./connection";
+
+/** Staff label for the only classification this recovery accepts. */
+export const BUYER_TENANT_FROM_ANSWER_LABEL = "Buyer or tenant, from the answer";
+
+/**
+ * The value `updateFormSettings` stores when someone picks
+ * “Buyer or tenant, from the answer”. Buyer and Tenant are different saved values.
+ */
+export function buyerTenantFromAnswerClassification(): FormClassification {
+  const matches = (Object.entries(CLASSIFICATION_LABEL) as [FormClassification, string][]).filter(
+    ([, label]) => label === BUYER_TENANT_FROM_ANSWER_LABEL,
+  );
+  if (matches.length !== 1) {
+    throw new Error(`${BUYER_TENANT_FROM_ANSWER_LABEL} must be exactly one saved classification.`);
+  }
+  return matches[0][0];
+}
 
 /** The only forms this recovery may read. Mixed historical import stays closed. */
 export const BUYER_RECOVERY_FORM_IDS = ["1071121499253613", "1489593689660590"] as const;
@@ -140,11 +158,13 @@ function phoneOf(lead: MetaLead): string {
 
 function formReady(form: StoredForm | null, formId: string): { ready: boolean; reason: string; name: string } {
   if (!form) return { ready: false, name: formId, reason: "Refresh forms before recovery. This form is not stored yet." };
-  if (form.classification !== "mixed") {
+  const required = buyerTenantFromAnswerClassification();
+  if (form.classification !== required) {
+    const saved = CLASSIFICATION_LABEL[form.classification] ?? form.classification;
     return {
       ready: false,
       name: form.name,
-      reason: `${form.name} is not classified as Buyer or tenant, from the answer. Save that classification before recovery. Recovery will not classify it for you.`,
+      reason: `${form.name} is saved as ${saved}. Save it as ${BUYER_TENANT_FROM_ANSWER_LABEL}. Buyer requirement and Tenant requirement are different classifications. Recovery will not change it.`,
     };
   }
   const mapping = form.mapping;

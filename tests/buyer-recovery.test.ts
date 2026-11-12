@@ -10,10 +10,12 @@ import { storePageConnection } from "../lib/meta/connection";
 import { getStoredForm, parseFormSettings, updateFormSettings, upsertDiscoveredForms } from "../lib/meta/forms";
 import { createGraphClient, type MetaQuestion } from "../lib/meta/graph";
 import { enqueueLead, type MetaRuntime } from "../lib/meta/ingest";
-import { isHistoricalImportClassification } from "../lib/meta/mapping";
+import { CLASSIFICATION_LABEL, isHistoricalImportClassification, type FormClassification } from "../lib/meta/mapping";
 import {
   BUYER_RECOVERY_CAMPAIGN_ID,
   BUYER_RECOVERY_FORM_IDS,
+  BUYER_TENANT_FROM_ANSWER_LABEL,
+  buyerTenantFromAnswerClassification,
   confirmBuyerRecovery,
   previewBuyerRecovery,
   runBuyerRecoveryStep,
@@ -140,9 +142,18 @@ async function connect(leads: FakeLead[]) {
 }
 
 async function classify(db: Awaited<ReturnType<typeof connect>>["db"], now: string) {
+  await saveClassification(db, now, "mixed", mapping);
+}
+
+async function saveClassification(
+  db: Awaited<ReturnType<typeof connect>>["db"],
+  now: string,
+  classification: FormClassification,
+  nextMapping: Record<string, string>,
+) {
   for (const formId of BUYER_RECOVERY_FORM_IDS) {
     const form = (await getStoredForm(db, formId))!;
-    await updateFormSettings(db, admin, form, parseFormSettings({ classification: "mixed", mapping }, form), { now });
+    await updateFormSettings(db, admin, form, parseFormSettings({ classification, mapping: nextMapping }, form), { now });
   }
 }
 
@@ -169,6 +180,10 @@ describe("historical buyer and renter recovery", () => {
     assert.equal(approvedBuyerRenterIntent("Rent ge beku"), null);
     assert.equal(approvedBuyerRenterIntent("buy"), null);
     assert.equal(isHistoricalImportClassification("mixed"), false);
+    assert.equal(buyerTenantFromAnswerClassification(), "mixed");
+    assert.equal(CLASSIFICATION_LABEL[buyerTenantFromAnswerClassification()], BUYER_TENANT_FROM_ANSWER_LABEL);
+    assert.notEqual(CLASSIFICATION_LABEL.buyer, BUYER_TENANT_FROM_ANSWER_LABEL);
+    assert.notEqual(CLASSIFICATION_LABEL.tenant, BUYER_TENANT_FROM_ANSWER_LABEL);
   });
 
   it("imports 104 Buy and 39 Rent once, reuses contacts, and leaves land JV and owner leads alone", async () => {
@@ -317,6 +332,60 @@ describe("historical buyer and renter recovery", () => {
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM owner_leads"), 0);
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM land_jv_enquiries"), 0);
     await assert.rejects(previewBuyerRecovery(runtime, admin, ["999999999999999"], clock.iso()), /approved Buyer/);
+  });
+
+  it("accepts only Buyer or tenant, from the answer, and refuses a preview that no longer matches", async () => {
+    const leads = allLeads();
+    const { db, clock, runtime } = await connect(leads);
+    await saveClassification(db, clock.iso(), "buyer", mapping);
+    const asBuyer = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(asBuyer.status, "blocked");
+    assert.match(asBuyer.preview?.mappingIssues.join(" ") ?? "", /Buyer requirement/);
+    await assert.rejects(confirmBuyerRecovery(runtime, admin, asBuyer.id, clock.iso()));
+
+    await saveClassification(db, clock.iso(), "tenant", mapping);
+    const asTenant = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(asTenant.status, "blocked");
+    assert.match(asTenant.preview?.mappingIssues.join(" ") ?? "", /Tenant requirement/);
+
+    const stored = (await getStoredForm(db, BUYER_RECOVERY_FORM_IDS[0]))!;
+    assert.throws(
+      () => parseFormSettings({ classification: "mixed", mapping: { ...mapping, "buy_madbekadre_nimma_budget_eshtu?": "budget" } }, stored),
+      /Purchase budget or Monthly rental budget/,
+    );
+    await db
+      .prepare("UPDATE meta_forms SET classification = 'mixed', mapping_json = ?1")
+      .bind(JSON.stringify({ ...mapping, "buy_madbekadre_nimma_budget_eshtu?": "budget" }))
+      .run();
+    const generic = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(generic.status, "blocked");
+    assert.match(generic.preview?.mappingIssues.join(" ") ?? "", /generic budget/);
+
+    await saveClassification(db, clock.iso(), "mixed", { ...mapping, "rent_ge_monthly_budget_eshtu?": "preferences" });
+    const missingRent = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(missingRent.status, "blocked");
+    assert.match(missingRent.preview?.mappingIssues.join(" ") ?? "", /rental budget/);
+
+    await classify(db, clock.iso());
+    const preview = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(preview.status, "previewed");
+    assert.equal(preview.preview?.total, 143);
+    assert.equal(preview.preview?.buy, 104);
+    assert.equal(preview.preview?.rent, 39);
+    assert.equal(preview.preview?.campaigns[0]?.id, CAMPAIGN);
+    assert.equal(preview.preview?.leadIds.length, 143);
+    assert.equal(preview.preview?.blocked, false);
+
+    leads[4]!.campaign_id = "120257043784730091";
+    await assert.rejects(confirmBuyerRecovery(runtime, admin, preview.id, clock.iso()), /Nothing was imported|campaign/);
+    const blocked = await db.prepare("SELECT status FROM meta_buyer_recovery_runs WHERE id = ?1").bind(preview.id).first<{ status: string }>();
+    assert.equal(blocked?.status, "blocked");
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM meta_lead_ingestions"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM owner_leads"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM properties"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM land_jv_enquiries"), 0);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM ad_spend_daily"), 0);
   });
 
   it("retries a rate-limited batch without creating a second requirement", async () => {

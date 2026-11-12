@@ -862,7 +862,11 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
   const preview = run?.preview ?? null;
   const eligible = BUYER_RECOVERY_FORM_IDS.map((formId) => {
     const stored = forms.find((form) => form.formId === formId);
-    return { formId, name: stored?.name || formId, classification: stored?.classification || "not stored" };
+    return {
+      formId,
+      name: stored?.name || formId,
+      classification: stored ? CLASSIFICATION_LABEL[stored.classification] : "Not stored",
+    };
   });
   const countsMatch = preview && !preview.blocked && preview.total === preview.expected.total && preview.buy === preview.expected.buy && preview.rent === preview.expected.rent;
   const canConfirm = run?.status === "previewed" && countsMatch && confirmed && !busy;
@@ -904,7 +908,7 @@ function RecoveryCard({ forms, recovery, busy, act }: Props & { busy: string; ac
             <span>
               <span className="font-medium text-ink">{form.name}</span>
               <span className="block font-mono text-xs text-ink-faint">{form.formId}</span>
-              <span className="text-ink-muted">Stored classification: {form.classification}</span>
+              <span className="text-ink-muted">Saved as {form.classification}.</span>
             </span>
           </li>
         ))}

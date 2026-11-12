@@ -233,9 +233,11 @@ It does not run on deploy, does not change the 48-hour reconciliation window,
 and does not import unless the live preview is 143 leads, 104 Buy
 (`buy_madbeku`) and 39 Rent (`rent_ge_beku`), all on campaign
 `120257140076410091`. A different count, intent or campaign blocks the import.
-Both forms must already be saved as Buyer or tenant, from the answer, with
-intent, purchase budget and rental budget mapped. The recovery does not save
-that classification. “Budget decide madilla” stays a valid empty budget. A Land
+Both forms must already be saved as Buyer or tenant, from the answer. That
+dropdown choice is stored as classification `mixed`. Buyer requirement and
+Tenant requirement are different saved values and stay blocked. Intent, purchase
+budget and rental budget must be mapped. The recovery does not save that
+classification. “Budget decide madilla” stays a valid empty budget. A Land
 property type becomes a requirement, not a Land JV enquiry or a property.
 Requirements start as New. Repeating the recovery counts existing lead ids as
 duplicates. The run records who started it, the forms, the preview and the
