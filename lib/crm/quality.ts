@@ -2,6 +2,7 @@ import { formatInr } from "../admin/format";
 import type { SqlDb, SqlValue } from "../db/sql";
 import { maskPhone } from "./phone";
 import { reviewLabel, type StoredReview } from "./review";
+import { mergeCoverageRanges, rangeCovered, type CoverageRange } from "./spend-coverage";
 
 const IST_OFFSET_MS = 330 * 60_000;
 
@@ -103,6 +104,8 @@ export type QualityReport = {
   groupLevel: "campaign" | "adset" | "ad" | null;
   /** Spend is for a whole campaign, ad set or ad. A form or intent filter makes cost N/A. */
   costComparable: boolean;
+  /** Dates a successful campaign import fully wrote for the selected ad account. */
+  spendCoverage: CoverageRange[];
 };
 
 type Spend = { imported: boolean; minor: number | null; currency: string; mixed: boolean; incomplete: boolean };
@@ -219,12 +222,20 @@ export function spendLabel(spend: Spend, comparable: boolean): string {
   if (!comparable) return "N/A";
   if (spend.incomplete) return "Incomplete";
   if (!spend.imported || spend.minor === null) return "Not imported";
-  if (spend.mixed || spend.minor <= 0) return "N/A";
+  if (spend.mixed || spend.minor < 0) return "N/A";
   return money(spend.minor, spend.currency);
 }
 
 export function costLabel(spend: Spend, comparable: boolean, opportunities: number): string {
-  if (!comparable || spend.incomplete || !spend.imported || spend.mixed || spend.minor === null || spend.minor <= 0 || opportunities <= 0) {
+  if (
+    !comparable ||
+    spend.incomplete ||
+    !spend.imported ||
+    spend.mixed ||
+    spend.minor === null ||
+    spend.minor < 0 ||
+    opportunities <= 0
+  ) {
     return "N/A";
   }
   return money(Math.round(spend.minor / opportunities), spend.currency);
@@ -353,7 +364,9 @@ function resolveSpend(
   id: string,
   nodes: ScopeNode[],
   maps: { campaign: Map<string, Spend>; adset: Map<string, Spend>; ad: Map<string, Spend> },
+  uncovered: boolean,
 ): Spend {
+  if (uncovered) return INCOMPLETE_SPEND;
   const own = (map: Map<string, Spend>) => (id ? map.get(id) : undefined);
   if (level === "ad") return own(maps.ad) ?? UNKNOWN_SPEND;
   if (level === "adset") {
@@ -497,12 +510,26 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     adset: await spendMap(db, "adset", query),
     ad: await spendMap(db, "ad", query),
   };
+  const selectedAccount = await selectedAdAccount(db);
+  const spendCoverage = await campaignCoverage(db, selectedAccount);
+  // A selected account uses only its own saved windows. Another account's coverage is not a substitute.
+  const spendUncovered = selectedAccount !== "" && !rangeCovered(query.from, query.to, spendCoverage);
 
   const submissionById = new Map(submissionRows.map((row) => [row.group_id ?? "", row]));
+  const discoveredCampaigns = (
+    await db
+      .prepare(
+        "SELECT external_id AS id, name FROM ad_entities WHERE platform = 'meta' AND level = 'campaign' AND external_id != ''",
+      )
+      .all<{ id: string; name: string }>()
+  ).results;
   const ids = new Set<string>([
     ...grouped.results.map((row) => row.group_id ?? ""),
     ...submissionRows.map((row) => row.group_id ?? ""),
   ]);
+  if (level === "campaign" && !query.formId) {
+    for (const campaign of discoveredCampaigns) ids.add(campaign.id);
+  }
 
   const groups: QualityGroup[] = level
     ? [...ids].map((id) => {
@@ -512,9 +539,15 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
         const genuine = num(metrics?.genuine_opportunities);
         const reviewed = num(metrics?.reviewed);
         const pending = num(metrics?.pending);
-        const rowSpendValue = resolveSpend(level, id, nodes, spendMaps);
+        const rowSpendValue = resolveSpend(level, id, nodes, spendMaps, spendUncovered);
         const costMinor =
-          comparable && rowSpendValue.imported && !rowSpendValue.mixed && rowSpendValue.minor && rowSpendValue.minor > 0 && genuine > 0
+          comparable &&
+          rowSpendValue.imported &&
+          !rowSpendValue.incomplete &&
+          !rowSpendValue.mixed &&
+          rowSpendValue.minor !== null &&
+          rowSpendValue.minor >= 0 &&
+          genuine > 0
             ? Math.round(rowSpendValue.minor / genuine)
             : null;
         return {
@@ -561,8 +594,8 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
   const summarySpendId = query.adId ?? query.adsetId ?? query.campaignId;
   const summarySpend =
     summarySpendId !== null
-      ? resolveSpend(summaryLevel, summarySpendId, nodes, spendMaps)
-      : combineSpend(groups.map((group) => resolveSpend("campaign", group.id, nodes, spendMaps)));
+      ? resolveSpend(summaryLevel, summarySpendId, nodes, spendMaps, spendUncovered)
+      : combineSpend(groups.map((group) => resolveSpend("campaign", group.id, nodes, spendMaps, spendUncovered)));
   const genuine = num(summaryRow?.genuine_opportunities);
   const reviewed = num(summaryRow?.reviewed);
   const pending = num(summaryRow?.pending);
@@ -660,10 +693,12 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
       };
     }),
     truncated: recordRows.length > 200,
-    campaigns: campaignOptions.results.map((item) => ({
-      id: item.id,
-      name: groupName("campaign", item.id, item.name ?? "", entities),
-    })),
+    campaigns: [...campaignOptions.results, ...discoveredCampaigns.filter((campaign) => !campaignOptions.results.some((item) => item.id === campaign.id))]
+      .map((item) => ({
+        id: item.id,
+        name: groupName("campaign", item.id, item.name ?? "", entities),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     forms: formOptions.results.map((item) => ({ id: item.id, name: item.name || item.id })),
     breadcrumb: {
       campaign: await scopeName("campaign", query.campaignId),
@@ -672,5 +707,27 @@ export async function campaignQuality(db: SqlDb, query: QualityQuery, options: {
     },
     groupLevel: level,
     costComparable: comparable,
+    spendCoverage,
   };
+}
+
+async function selectedAdAccount(db: SqlDb): Promise<string> {
+  const account = await db
+    .prepare("SELECT ad_account_id FROM meta_connection WHERE id = 'primary'")
+    .first<{ ad_account_id: string }>();
+  return account?.ad_account_id ?? "";
+}
+
+/** Windows a successful campaign import fully wrote for the ad account currently selected. */
+async function campaignCoverage(db: SqlDb, accountId: string): Promise<CoverageRange[]> {
+  if (!accountId) return [];
+  const { results } = await db
+    .prepare(
+      `SELECT covered_since AS since, covered_until AS until FROM ad_spend_coverage
+       WHERE platform = 'meta' AND level = 'campaign' AND ad_account_id = ?1
+       ORDER BY covered_since`,
+    )
+    .bind(accountId)
+    .all<CoverageRange>();
+  return mergeCoverageRanges(results);
 }

@@ -501,6 +501,35 @@ export const MIGRATIONS: Migration[] = [
     name: "meta_user_token_scopes",
     statements: [`ALTER TABLE meta_connection ADD COLUMN user_token_scopes_json TEXT NOT NULL DEFAULT '[]'`],
   },
+  {
+    // Version 7 stays unused. Do not renumber versions 1–12.
+    // Which ad account Sync spend reads. Empty until a super admin selects one.
+    version: 13,
+    name: "meta_ad_account",
+    statements: [
+      `ALTER TABLE meta_connection ADD COLUMN ad_account_id TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE meta_connection ADD COLUMN ad_account_name TEXT NOT NULL DEFAULT ''`,
+    ],
+  },
+  {
+    // Version 7 stays unused. Do not renumber versions 1–13.
+    // A successful campaign import records the dates it fully wrote. The quality report uses this
+    // instead of treating whatever spend rows fall inside a filter as the whole selected period.
+    version: 14,
+    name: "ad_spend_coverage",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS ad_spend_coverage (
+         platform TEXT NOT NULL,
+         level TEXT NOT NULL,
+         ad_account_id TEXT NOT NULL,
+         covered_since TEXT NOT NULL,
+         covered_until TEXT NOT NULL,
+         imported_at TEXT NOT NULL,
+         imported_by TEXT NOT NULL,
+         PRIMARY KEY (platform, level, ad_account_id, covered_since)
+       )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

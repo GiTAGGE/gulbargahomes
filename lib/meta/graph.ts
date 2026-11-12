@@ -226,6 +226,31 @@ function toForm(raw: Record<string, unknown>): MetaForm {
   };
 }
 
+export type MetaAdAccount = { id: string; name: string; currency: string; accountStatus: number | null };
+export type MetaAdCampaign = { id: string; name: string; effectiveStatus: string };
+export type MetaInsightRow = {
+  campaignId: string;
+  campaignName: string;
+  spend: string;
+  impressions: number | null;
+  clicks: number | null;
+  currency: string;
+  date: string;
+};
+
+export function normalizeAdAccountId(id: string): string {
+  if (/^act_\d{3,32}$/.test(id)) return id;
+  if (/^\d{3,32}$/.test(id)) return `act_${id}`;
+  return "";
+}
+
+function countOrNull(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
 export type GraphClient = ReturnType<typeof createGraphClient>;
 
 export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fetch) {
@@ -262,6 +287,29 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
       throw classifyMetaError(response.status, body, response.headers);
     }
     return body as T;
+  }
+
+  /**
+   * Follow every cursor. A missing cursor, a repeated cursor, or a page cap
+   * throws, so the caller cannot treat a partial list as finished.
+   */
+  async function pagedComplete<T>(path: string, token: string, query: Record<string, string>, maxPages = 200): Promise<T[]> {
+    const items: T[] = [];
+    let after = "";
+    for (let page = 0; page < maxPages; page += 1) {
+      const body = await request<{ data?: T[]; paging?: { cursors?: { after?: string }; next?: string } }>(path, {
+        token,
+        query: { ...query, limit: query.limit ?? "100", ...(after ? { after } : {}) },
+      });
+      items.push(...(body.data ?? []));
+      if (!body.paging?.next) return items;
+      const cursor = body.paging.cursors?.after ?? "";
+      if (!cursor || cursor === after) {
+        throw new MetaApiError("Meta did not finish this list.", "permanent", 502);
+      }
+      after = cursor;
+    }
+    throw new MetaApiError("Meta did not finish this list.", "permanent", 502);
   }
 
   async function paged<T>(path: string, token: string, query: Record<string, string>, max = 500): Promise<T[]> {
@@ -391,6 +439,70 @@ export function createGraphClient(config: MetaConfig, fetchImpl: FetchLike = fet
         query: { fields: "id,name" },
       });
       return { id: String(raw.id ?? id), name: String(raw.name ?? "").trim().slice(0, 200) };
+    },
+
+    /** Ad accounts the user token can read. This does not use the Page token. */
+    async listAdAccounts(userToken: string): Promise<MetaAdAccount[]> {
+      const rows = await pagedComplete<{ id?: string; name?: string; currency?: string; account_status?: number }>(
+        "/me/adaccounts",
+        userToken,
+        { fields: "id,name,currency,account_status", limit: "100" },
+      );
+      return rows
+        .map((row) => ({
+          id: normalizeAdAccountId(String(row.id ?? "")),
+          name: String(row.name ?? "").trim().slice(0, 200),
+          currency: String(row.currency ?? "").trim().toUpperCase(),
+          accountStatus: typeof row.account_status === "number" ? row.account_status : null,
+        }))
+        .filter((row) => row.id);
+    },
+
+    /** Active, paused, archived and every other status except the caller filters deleted. */
+    async listAdCampaigns(accountId: string, userToken: string): Promise<MetaAdCampaign[]> {
+      const rows = await pagedComplete<{ id?: string; name?: string; effective_status?: string }>(
+        `/${encodeURIComponent(accountId)}/campaigns`,
+        userToken,
+        { fields: "id,name,effective_status", limit: "100" },
+      );
+      return rows
+        .map((row) => ({
+          id: String(row.id ?? ""),
+          name: String(row.name ?? "").trim().slice(0, 200),
+          effectiveStatus: String(row.effective_status ?? "").trim().toUpperCase(),
+        }))
+        .filter((row) => /^\d{3,32}$/.test(row.id));
+    },
+
+    /**
+     * Daily campaign spend from Insights. `spend` is the delivered amount, not a budget.
+     * Throws if any page is missing, so the caller must not invent zeros.
+     */
+    async campaignInsights(accountId: string, userToken: string, since: string, until: string): Promise<MetaInsightRow[]> {
+      const rows = await pagedComplete<{
+        campaign_id?: string;
+        campaign_name?: string;
+        spend?: string;
+        impressions?: string;
+        clicks?: string;
+        account_currency?: string;
+        date_start?: string;
+      }>(`/${encodeURIComponent(accountId)}/insights`, userToken, {
+        level: "campaign",
+        time_increment: "1",
+        fields: "campaign_id,campaign_name,spend,impressions,clicks,account_currency,date_start",
+        time_range: JSON.stringify({ since, until }),
+        limit: "100",
+      });
+      return rows.map((row) => ({
+        campaignId: String(row.campaign_id ?? ""),
+        campaignName: String(row.campaign_name ?? "").trim().slice(0, 200),
+        spend: String(row.spend ?? ""),
+        impressions: countOrNull(row.impressions),
+        clicks: countOrNull(row.clicks),
+        currency: String(row.account_currency ?? "").trim().toUpperCase(),
+        date: String(row.date_start ?? ""),
+      }));
     },
 
     async getLead(leadgenId: string, pageToken: string, options: LeadFieldOptions = {}): Promise<MetaLead> {

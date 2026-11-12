@@ -28,7 +28,7 @@ export function SyncNamesButton() {
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <button type="button" className="btn-ghost" disabled={busy} onClick={() => void sync()}>
         {busy ? "Syncing names…" : "Sync names"}
       </button>

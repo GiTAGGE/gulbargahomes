@@ -9,7 +9,7 @@
     "images": "node scripts/generate-property-media.mjs",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --no-warnings --import tsx --test \"tests/**/*.test.ts\"",
+    "test": "node --no-warnings --experimental-test-module-mocks --import tsx --test \"tests/**/*.test.ts\"",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
     "deploy:staging": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --env staging -- --keep-vars",

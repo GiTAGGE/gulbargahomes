@@ -154,6 +154,7 @@ function ConnectionCard({
   setMessage,
 }: Props & { busy: string; act: Act; setMessage: (value: { tone: "error" | "ok" | "warn"; text: string } | null) => void }) {
   const [pages, setPages] = useState<{ id: string; name: string; canManageLeads: boolean }[] | null>(null);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currency: string }[] | null>(null);
   const [checks, setChecks] = useState<{ label: string; ok: boolean; detail: string }[] | null>(null);
   const grantedForNextConnect = connection.hasUserToken ? connection.userTokenScopes : connection.scopes;
   const [optional, setOptional] = useState<OptionalScope[]>(() =>
@@ -270,6 +271,9 @@ function ConnectionCard({
           <Detail label="Page token">
             {connection.hasPageToken ? (connection.pageTokenExpiresAt ? `Expires ${formatDateTime(connection.pageTokenExpiresAt)}` : "No expiry") : "—"}
           </Detail>
+          <Detail label="Ad account">
+            {connection.adAccountId ? `${connection.adAccountName || "Ad account"} (${connection.adAccountId})` : "Not selected"}
+          </Detail>
           <Detail label="Campaign name token">
             {connection.userTokenError
               ? "Rejected. Reconnect."
@@ -324,9 +328,8 @@ function ConnectionCard({
         {marketingWarning && <Notice tone="warn">{marketingWarning}</Notice>}
         {connected && connection.hasUserToken && !connection.userTokenScopes.includes("ads_read") && (
           <Notice tone="warn">
-            Campaign, ad set and ad names stay blank until this connection has ads_read. Tick ads_read under Optional on next
-            connect and reconnect. Sync names reads those ids. It does not re-import leads, does not request ads_management, and
-            does not import spend.
+            Campaign names and spend stay unavailable until the Facebook user token has ads_read. Tick ads_read under Optional
+            on next connect and reconnect. This does not re-import leads and does not request ads_management.
           </Notice>
         )}
         {checks && (
@@ -337,6 +340,34 @@ function ConnectionCard({
                 <span className="font-semibold">{check.label}:</span> {check.detail}
               </li>
             ))}
+          </ul>
+        )}
+        {accounts && (
+          <ul className="space-y-2 rounded-xl border border-brand-100 p-3">
+            {accounts.length === 0 ? (
+              <li className="text-sm text-ink-muted">Meta returned no ad accounts for this Facebook user.</li>
+            ) : (
+              accounts.map((account) => (
+                <li key={account.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm">
+                    <span className="font-semibold">{account.name || "Ad account"}</span>{" "}
+                    <span className="font-mono text-xs text-ink-faint">{account.id}</span>{" "}
+                    <span className="text-xs text-ink-muted">{account.currency || "Unknown currency"}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={Boolean(busy) || account.currency !== "INR"}
+                    onClick={async () => {
+                      const result = await act(`account-${account.id}`, API, "POST", { action: "select_ad_account", accountId: account.id });
+                      if (result.data) setMessage({ tone: "ok", text: `Spend will be read from ${account.name || account.id}.` });
+                    }}
+                  >
+                    {account.currency === "INR" ? (busy === `account-${account.id}` ? "Saving…" : "Use this account") : "INR only"}
+                  </button>
+                </li>
+              ))
+            )}
           </ul>
         )}
         {canManage && connection.status !== "disconnected" && (
@@ -351,6 +382,29 @@ function ConnectionCard({
               }}
             >
               {busy === "sync" ? "Refreshing…" : "Refresh forms"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={Boolean(busy) || !connected}
+              onClick={async () => {
+                const result = await send<{ accounts: { id: string; name: string; currency: string }[] }>(API, "POST", { action: "list_ad_accounts" });
+                if (result.data) setAccounts(result.data.accounts);
+                else setMessage({ tone: "error", text: result.error ?? "Could not list ad accounts." });
+              }}
+            >
+              {connection.adAccountId ? "Change ad account" : "Choose ad account"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={Boolean(busy) || !connected}
+              onClick={async () => {
+                const result = await act("import_spend", API, "POST", { action: "import_spend" });
+                if (result.data) setMessage({ tone: "ok", text: String(result.data.message ?? "Campaign spend imported.") });
+              }}
+            >
+              {busy === "import_spend" ? "Importing spend…" : "Import spend"}
             </button>
             <button
               type="button"

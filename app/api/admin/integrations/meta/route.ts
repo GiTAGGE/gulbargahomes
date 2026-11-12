@@ -16,6 +16,8 @@ import {
 import { ingestionStats, listIngestions, recentDeliveries } from "@/lib/meta/overview";
 import { metaRuntime } from "@/lib/meta/runtime";
 import { syncCampaignNames } from "@/lib/meta/names";
+import { importCampaignSpend, listMarketingAccounts, selectMarketingAccount } from "@/lib/meta/spend";
+import { denySpendApiAction } from "@/lib/meta/spend-access";
 import { candidatePages, disconnectMeta, selectPage, syncForms, testConnection } from "@/lib/meta/setup";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,9 @@ export async function POST(request: Request) {
   if ("response" in auth) return auth.response;
   try {
     const body = await readJson(request);
+    const action = typeof body.action === "string" ? body.action : "";
+    const denied = denySpendApiAction(auth.admin.role, action);
+    if (denied) return denied;
     const { runtime, config, missing } = await metaRuntime(auth.db, new URL(request.url).origin);
     const now = nowIso();
     const needsSecrets = () => {
@@ -72,6 +77,18 @@ export async function POST(request: Request) {
       case "sync_names":
         needsSecrets();
         return NextResponse.json({ ok: true, ...(await syncCampaignNames(auth.db, auth.admin, config.tokenKey, runtime.graph, now)) });
+      case "list_ad_accounts":
+        needsSecrets();
+        return NextResponse.json({ accounts: await listMarketingAccounts(auth.db, config.tokenKey, runtime.graph, now) });
+      case "select_ad_account": {
+        needsSecrets();
+        const accountId = typeof body.accountId === "string" && /^act_\d{3,32}$/.test(body.accountId) ? body.accountId : "";
+        if (!accountId) throw new HttpError(400, "Choose an ad account.");
+        return NextResponse.json({ ok: true, ...(await selectMarketingAccount(auth.db, auth.admin, config.tokenKey, runtime.graph, accountId, now)) });
+      }
+      case "import_spend":
+        needsSecrets();
+        return NextResponse.json({ ok: true, ...(await importCampaignSpend(auth.db, auth.admin, config.tokenKey, runtime.graph, now)) });
       case "disconnect":
         return NextResponse.json({ ok: true, ...(await disconnectMeta(auth.db, auth.admin, config, runtime.graph, now)) });
       case "process":

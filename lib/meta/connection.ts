@@ -29,6 +29,8 @@ type ConnectionRow = {
   last_success_at: string | null;
   user_token_error: string;
   user_token_scopes_json: string;
+  ad_account_id: string;
+  ad_account_name: string;
   updated_at: string;
   row_version: number;
 };
@@ -50,8 +52,10 @@ export type MetaConnectionView = {
   dataAccessExpiresAt: string | null;
   /** Permissions on the Page token. Lead Ads uses this list. */
   scopes: string[];
-  /** Permissions on the user token. Campaign-name reads use this list. */
+  /** Permissions on the user token. Campaign-name reads and spend import use this list. */
   userTokenScopes: string[];
+  adAccountId: string;
+  adAccountName: string;
   webhookSubscribed: boolean;
   connectedBy: string | null;
   connectedAt: string | null;
@@ -91,6 +95,8 @@ export async function getConnection(db: SqlDb): Promise<MetaConnectionView> {
     dataAccessExpiresAt: current?.data_access_expires_at ?? null,
     scopes: parseJson<string[]>(current?.scopes_json, []),
     userTokenScopes: parseJson<string[]>(current?.user_token_scopes_json, []),
+    adAccountId: current?.ad_account_id ?? "",
+    adAccountName: current?.ad_account_name ?? "",
     webhookSubscribed: Boolean(current?.webhook_subscribed),
     connectedBy: current?.connected_by ?? null,
     connectedAt: current?.connected_at ?? null,
@@ -287,6 +293,28 @@ export async function markTokenRejected(db: SqlDb, message: string, now: string)
     .run();
 }
 
+/** Remember which ad account spend import reads. Does not change the Page token. */
+export async function saveAdAccount(db: SqlDb, actor: AuditActor, input: { id: string; name: string; now: string }) {
+  await ensureRow(db, input.now);
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE meta_connection SET ad_account_id = ?1, ad_account_name = ?2, updated_at = ?3,
+           row_version = row_version + 1 WHERE id = ?4`,
+      )
+      .bind(input.id, input.name, input.now, CONNECTION_ID),
+    auditStatement(db, {
+      actor,
+      entityType: "integration",
+      entityId: "meta",
+      entityLabel: "Meta Lead Ads",
+      action: "select_ad_account",
+      context: { ad_account_id: input.id, ad_account_name: input.name },
+      at: input.now,
+    }),
+  ]);
+}
+
 export async function touchConnection(db: SqlDb, field: "last_webhook_at" | "last_success_at", now: string) {
   await ensureRow(db, now);
   await db.prepare(`UPDATE meta_connection SET ${field} = ?1 WHERE id = ?2`).bind(now, CONNECTION_ID).run();
@@ -300,6 +328,7 @@ export async function disconnect(db: SqlDb, actor: AuditActor, now: string, note
       .prepare(
         `UPDATE meta_connection SET status = 'disconnected', page_token_enc = '', user_token_enc = '',
            user_token_expires_at = NULL, user_token_error = '', user_token_scopes_json = '[]',
+           ad_account_id = '', ad_account_name = '',
            page_token_expires_at = NULL, data_access_expires_at = NULL,
            webhook_subscribed = 0, last_error = '', updated_at = ?1, row_version = row_version + 1
          WHERE id = ?2`,
