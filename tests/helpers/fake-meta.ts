@@ -31,6 +31,8 @@ export class FakeMeta {
   /** Full request URLs and bodies, to check that secrets never travel in a URL. */
   requests: { method: string; url: string; body: string; authorization: string }[] = [];
   scopes = ["pages_show_list", "pages_read_engagement", "pages_manage_metadata", "pages_manage_ads", "leads_retrieval", "ads_read"];
+  /** When set, debug_token for the Page token returns this list instead of `scopes`. */
+  pageScopes: string[] | null = null;
   /** Simulates a token without advertiser access: ad-level lead fields are refused. */
   refuseAdFields = false;
   /** Campaign, ad set and ad nodes returned by a Marketing API name read. */
@@ -60,7 +62,8 @@ export class FakeMeta {
     if (path === "/debug_token") {
       const token = url.searchParams.get("input_token");
       const valid = this.mode !== "expired" && (token === PAGE_TOKEN || token === USER_TOKEN);
-      return json({ data: { is_valid: valid, type: token === PAGE_TOKEN ? "PAGE" : "USER", expires_at: 0, data_access_expires_at: 1798761600, scopes: this.scopes } });
+      const scopes = token === PAGE_TOKEN && this.pageScopes ? this.pageScopes : this.scopes;
+      return json({ data: { is_valid: valid, type: token === PAGE_TOKEN ? "PAGE" : "USER", expires_at: 0, data_access_expires_at: 1798761600, scopes } });
     }
     if (this.mode === "expired") {
       return json({ error: { message: "Error validating access token: Session has expired", type: "OAuthException", code: 190, error_subcode: 463 } }, 401);

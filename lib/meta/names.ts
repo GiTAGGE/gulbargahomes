@@ -66,10 +66,6 @@ export async function syncCampaignNames(
   if (connection.status !== "connected") {
     throw new HttpError(400, "Connect a Facebook Page before syncing campaign names.");
   }
-  if (!connection.scopes.includes("ads_read")) {
-    await record(db, actor, now, emptyResult(ADS_READ_MESSAGE), ADS_READ_MESSAGE);
-    throw new HttpError(400, ADS_READ_MESSAGE);
-  }
   if (connection.userTokenError) {
     await record(db, actor, now, emptyResult(MARKETING_TOKEN_INVALID), connection.userTokenError);
     throw new HttpError(401, MARKETING_TOKEN_INVALID);
@@ -81,6 +77,10 @@ export async function syncCampaignNames(
   if (connection.userTokenExpiresAt && connection.userTokenExpiresAt <= now) {
     await record(db, actor, now, emptyResult(MARKETING_TOKEN_EXPIRED), MARKETING_TOKEN_EXPIRED);
     throw new HttpError(401, MARKETING_TOKEN_EXPIRED);
+  }
+  if (!connection.userTokenScopes.includes("ads_read")) {
+    await record(db, actor, now, emptyResult(ADS_READ_MESSAGE), ADS_READ_MESSAGE);
+    throw new HttpError(400, ADS_READ_MESSAGE);
   }
   const token = await readUserToken(db, tokenKey, now);
   if (!token) {

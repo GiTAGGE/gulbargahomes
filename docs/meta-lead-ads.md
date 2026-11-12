@@ -114,7 +114,9 @@ today.
    - takes the Page token
    - subscribes the Page to `leadgen` when it is not already subscribed
    - discovers its forms
-   - leaves the user token in place
+   - leaves the user token and its permission list in place
+   - stores the Page token's permissions separately. Sync names checks `ads_read`
+     on the user-token list, not on the Page-token list
 
    Reconnecting the same Page refreshes both tokens and does not subscribe the
    Page again when leadgen is already on.
@@ -184,7 +186,8 @@ The integration requests only these. The table lists every Graph call it makes.
 **Optional**, requested only if ticked on the Connect card:
 - `ads_read`: campaign, ad set and ad **names**. The ids come with the lead
   either way. **Sync names** reads those names with the saved user token, not
-  the Page token. It does not re-import leads and it does not read spend.
+  the Page token, and it checks `ads_read` on the user token's own permission
+  list. It does not re-import leads and it does not read spend.
   A rejected or expired user token does not pause Lead Ads.
   `ads_management` is still not requested.
 - `business_management`: only if the Page is reachable solely through the

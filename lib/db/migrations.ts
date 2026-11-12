@@ -494,6 +494,13 @@ export const MIGRATIONS: Migration[] = [
     name: "meta_user_token_error",
     statements: [`ALTER TABLE meta_connection ADD COLUMN user_token_error TEXT NOT NULL DEFAULT ''`],
   },
+  {
+    // Version 7 stays unused. Production is on version 10 until 11 and 12 deploy. Do not renumber versions 1–11.
+    // scopes_json remains the Page token's permissions. Campaign-name reads check this list instead.
+    version: 12,
+    name: "meta_user_token_scopes",
+    statements: [`ALTER TABLE meta_connection ADD COLUMN user_token_scopes_json TEXT NOT NULL DEFAULT '[]'`],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

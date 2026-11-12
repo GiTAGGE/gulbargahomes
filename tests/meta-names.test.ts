@@ -360,6 +360,7 @@ describe("campaign name sync", () => {
     assert.equal(await decryptToken(config.tokenKey, (await db.prepare("SELECT user_token_enc FROM meta_connection").first<{ user_token_enc: string }>())!.user_token_enc, "meta_connection.user_token"), USER_TOKEN);
     const connection = await getConnection(db);
     assert.equal(connection.status, "connected");
+    assert.deepEqual(connection.userTokenScopes, SCOPES);
     assert.equal(connection.userTokenError, "");
     assert.equal(connection.userTokenExpiresAt, "2027-06-01T00:00:00.000Z");
     assert.equal(connection.pageTokenExpiresAt, null);
@@ -369,5 +370,64 @@ describe("campaign name sync", () => {
     assert.equal(view.includes(PAGE_TOKEN), false);
     const done = await db.prepare("SELECT status FROM meta_lead_ingestions WHERE id = 'mli_done'").first<{ status: string }>();
     assert.equal(done?.status, "done");
+  });
+
+  it("checks ads_read on the user token when the Page token permission list differs", async () => {
+    const pageScopes = SCOPES.filter((scope) => scope !== "ads_read");
+    const db = createTestDb();
+    await prepareDatabase(db, () => [], NOW);
+    const meta = new FakeMeta();
+    meta.pageScopes = pageScopes;
+    const graph = createGraphClient(config, meta.fetch);
+    await storeUserToken(db, actor, {
+      tokenKey: config.tokenKey,
+      token: USER_TOKEN,
+      expiresAt: "2027-01-01T00:00:00.000Z",
+      userName: "Hubli Homes",
+      scopes: SCOPES,
+      now: NOW,
+    });
+    await selectPage(db, actor, config, graph, PAGE_ID, NOW);
+    await historicalLead(db);
+    meta.objects = [
+      { id: CAMPAIGN, name: "Rent Owners - Area Wise" },
+      { id: ADSET, name: "Area wise | Ad set" },
+      { id: AD, name: "AreaWise | Ad" },
+    ];
+
+    const result = await syncCampaignNames(db, actor, config.tokenKey, graph, NOW);
+    const saved = await getConnection(db);
+    assert.equal(result.namesFound, 3);
+    assert.equal(saved.scopes.includes("ads_read"), false);
+    assert.equal(saved.userTokenScopes.includes("ads_read"), true);
+    const nameReads = meta.requests.filter((request) => [CAMPAIGN, ADSET, AD].some((id) => request.url.includes(`/${id}`)));
+    assert.equal(nameReads.length, 3);
+    assert.ok(nameReads.every((request) => request.authorization.endsWith(USER_TOKEN)));
+    assert.equal(await readPageToken(db, config.tokenKey), PAGE_TOKEN);
+
+    const other = createTestDb();
+    await prepareDatabase(other, () => [], NOW);
+    const otherMeta = new FakeMeta();
+    otherMeta.pageScopes = SCOPES;
+    const otherGraph = createGraphClient(config, otherMeta.fetch);
+    await storeUserToken(other, actor, {
+      tokenKey: config.tokenKey,
+      token: USER_TOKEN,
+      expiresAt: "2027-01-01T00:00:00.000Z",
+      userName: "Hubli Homes",
+      scopes: pageScopes,
+      now: NOW,
+    });
+    await selectPage(other, actor, config, otherGraph, PAGE_ID, NOW);
+    const callsBeforeSync = otherMeta.requests.length;
+    await assert.rejects(syncCampaignNames(other, actor, config.tokenKey, otherGraph, NOW), (error: unknown) => {
+      return error instanceof HttpError && error.status === 400 && error.message.includes("ads_read");
+    });
+    const refused = await getConnection(other);
+    assert.equal(refused.status, "connected");
+    assert.equal(refused.scopes.includes("ads_read"), true);
+    assert.equal(refused.userTokenScopes.includes("ads_read"), false);
+    assert.equal(otherMeta.requests.slice(callsBeforeSync).some((request) => request.url.includes("fields=id")), false);
+    assert.equal(await readPageToken(other, config.tokenKey), PAGE_TOKEN);
   });
 });

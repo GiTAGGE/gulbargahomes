@@ -28,6 +28,7 @@ type ConnectionRow = {
   last_webhook_at: string | null;
   last_success_at: string | null;
   user_token_error: string;
+  user_token_scopes_json: string;
   updated_at: string;
   row_version: number;
 };
@@ -47,7 +48,10 @@ export type MetaConnectionView = {
   userTokenError: string;
   pageTokenExpiresAt: string | null;
   dataAccessExpiresAt: string | null;
+  /** Permissions on the Page token. Lead Ads uses this list. */
   scopes: string[];
+  /** Permissions on the user token. Campaign-name reads use this list. */
+  userTokenScopes: string[];
   webhookSubscribed: boolean;
   connectedBy: string | null;
   connectedAt: string | null;
@@ -86,6 +90,7 @@ export async function getConnection(db: SqlDb): Promise<MetaConnectionView> {
     pageTokenExpiresAt: current?.page_token_expires_at ?? null,
     dataAccessExpiresAt: current?.data_access_expires_at ?? null,
     scopes: parseJson<string[]>(current?.scopes_json, []),
+    userTokenScopes: parseJson<string[]>(current?.user_token_scopes_json, []),
     webhookSubscribed: Boolean(current?.webhook_subscribed),
     connectedBy: current?.connected_by ?? null,
     connectedAt: current?.connected_at ?? null,
@@ -143,7 +148,7 @@ export async function storeUserToken(
   await db.batch([
     db
       .prepare(
-        `UPDATE meta_connection SET user_token_enc = ?1, user_token_expires_at = ?2, meta_user_name = ?3, scopes_json = ?4,
+        `UPDATE meta_connection SET user_token_enc = ?1, user_token_expires_at = ?2, meta_user_name = ?3, user_token_scopes_json = ?4,
            user_token_error = '',
            status = CASE WHEN status = 'connected' THEN status ELSE 'pending_page' END,
            last_error = '', updated_at = ?5, row_version = row_version + 1
@@ -294,7 +299,8 @@ export async function disconnect(db: SqlDb, actor: AuditActor, now: string, note
     db
       .prepare(
         `UPDATE meta_connection SET status = 'disconnected', page_token_enc = '', user_token_enc = '',
-           user_token_expires_at = NULL, user_token_error = '', page_token_expires_at = NULL, data_access_expires_at = NULL,
+           user_token_expires_at = NULL, user_token_error = '', user_token_scopes_json = '[]',
+           page_token_expires_at = NULL, data_access_expires_at = NULL,
            webhook_subscribed = 0, last_error = '', updated_at = ?1, row_version = row_version + 1
          WHERE id = ?2`,
       )
