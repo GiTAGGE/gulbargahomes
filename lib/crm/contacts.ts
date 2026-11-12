@@ -23,6 +23,7 @@ export type Contact = {
   language: string;
   isOwner: boolean;
   isSeeker: boolean;
+  isLandJv: boolean;
   doNotContact: boolean;
   doNotContactReason: string;
   notes: string;
@@ -42,6 +43,7 @@ type ContactRow = {
   language: string;
   is_owner: number;
   is_seeker: number;
+  is_land_jv: number;
   do_not_contact: number;
   do_not_contact_reason: string;
   notes: string;
@@ -62,6 +64,7 @@ function toContact(row: ContactRow): Contact {
     language: row.language,
     isOwner: Boolean(row.is_owner),
     isSeeker: Boolean(row.is_seeker),
+    isLandJv: Boolean(row.is_land_jv),
     doNotContact: Boolean(row.do_not_contact),
     doNotContactReason: row.do_not_contact_reason,
     notes: row.notes,
@@ -138,12 +141,12 @@ export async function resolveContact(
   db: SqlDb,
   actor: AuditActor,
   input: ContactInput,
-  role: "owner" | "seeker",
+  role: "owner" | "seeker" | "land",
   now: string,
 ): Promise<{ contactId: string; created: boolean; statements: SqlStatement[] }> {
   const phone = normalizeIndianMobile(input.phone);
   if (!phone) throw new HttpError(400, "Enter a valid 10-digit Indian mobile number.");
-  const flag = role === "owner" ? "is_owner" : "is_seeker";
+  const flag = role === "owner" ? "is_owner" : role === "land" ? "is_land_jv" : "is_seeker";
 
   const existing = await findContactByPhone(db, phone);
   if (existing) {

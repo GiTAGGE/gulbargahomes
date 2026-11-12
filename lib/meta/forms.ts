@@ -5,6 +5,7 @@ import { changedRows, parseJson, type SqlDb } from "../db/sql";
 import type { MetaForm, MetaQuestion } from "./graph";
 import { ownerIntentsIn } from "./values";
 import {
+  alignLandTargets,
   FORM_CLASSIFICATIONS,
   isMappingTarget,
   suggestMapping,
@@ -149,7 +150,7 @@ export function parseFormSettings(value: unknown, form: StoredForm): FormSetting
       : "";
   const keys = new Set(form.questions.map((question) => question.key));
   const raw = data.mapping && typeof data.mapping === "object" ? (data.mapping as Record<string, unknown>) : null;
-  const mapping: FieldMapping = raw
+  let mapping: FieldMapping = raw
     ? Object.fromEntries(
         Object.entries(raw).filter(
           (entry): entry is [string, FieldMapping[string]] => keys.has(entry[0]) && isMappingTarget(entry[1]),
@@ -158,7 +159,8 @@ export function parseFormSettings(value: unknown, form: StoredForm): FormSetting
     : Object.keys(form.mapping).length
       ? form.mapping
       : suggestMapping(form.questions, classification);
-  if (["owner", "tenant", "buyer", "mixed"].includes(classification) && form.questions.length > 0) {
+  if (classification === "land_jv") mapping = alignLandTargets(form.questions, classification, mapping);
+  if (["owner", "tenant", "buyer", "mixed", "land_jv"].includes(classification) && form.questions.length > 0) {
     const targets = new Set(Object.values(mapping));
     const hasPhone = targets.has("phone") || form.questions.some((question) => (question.key === "phone_number" || question.key === "phone") && !(question.key in mapping));
     if (!hasPhone) throw new HttpError(400, "Map one question to Mobile. Leads without a mobile number cannot be imported.");
@@ -196,7 +198,7 @@ export async function updateFormSettings(
     { classification: input.classification, owner_intent: input.ownerIntent, mapping: input.mapping },
   );
   if (Object.keys(changes).length === 0) return { form, requeued: 0 };
-  const importable = ["owner", "tenant", "buyer", "mixed"].includes(input.classification);
+  const importable = ["owner", "tenant", "buyer", "mixed", "land_jv"].includes(input.classification);
   const results = await db.batch([
     db
       .prepare(

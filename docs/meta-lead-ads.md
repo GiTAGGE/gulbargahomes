@@ -44,7 +44,7 @@ Reconciliation (last 48 h, every 6 h) ──────────────
   (`*/5 * * * *` in `wrangler.jsonc`). It calls `/api/integrations/meta/sweep`
   with a token derived from the app secret. Any other caller gets a 404. Each
   sweep processes due retries, advances an open import, and every six hours
-  re-reads the last 48 hours of leads from each owner, tenant, buyer and mixed
+  re-reads the last 48 hours of leads from each owner, tenant, buyer, mixed and land JV
   form, in case a webhook never arrived. Unclassified and Ignore forms are not
   read. That scan is reconciliation. It is not a historical import: a historical
   import is a staff-started job and accepts only owner, tenant and buyer forms.
@@ -280,6 +280,14 @@ Owner intent is `Rent`, `Sale` or `Lease` on the existing `owner_leads.intent` t
 
 Public listings stay `Rent` | `Sale`. A lease lead does not become a listing by itself. Staff choose “Draft as rental” or “Draft as sale”; the lead remains Lease, the draft is unpublished, and the notes record the choice. Availability expiry follows the listing they chose (14 days for Rent, 30 for Sale).
 
+## Agricultural land JV
+
+Classification `land_jv` records `land_jv_enquiries` (migration 15). Taluk, village, acre band, ownership, RTC / Pahani, road access and whether the owners agree are stored on that row, and the original Meta answers are kept in `answers_json`. The contact is marked `is_land_jv` and is not marked as a residential owner. Nothing is created in `properties`, `owner_leads` or `demand_requirements`, and the enquiry status stays `New`.
+
+A form that was classified as owner and held for Sale / Rent / Lease stays held after it is reclassified. Saving the classification does not replay those rows. **Record as Land JV** stores `intent_override = 'Land JV'` and then imports that one lead. **Import as Sale**, **Import as Rent** and **Import as Lease** stay available as a deliberate residential choice and still do not create a property by themselves.
+
+Buyer and renter forms keep purchase budget and monthly rent apart. `Buy madbeku` is a buyer requirement. `Rent ge beku` is a tenant requirement. “Budget decide madilla” is a valid answer and leaves the range empty. A missing or combined intent stays held. A property type of Land on a buyer form is still a requirement, not inventory. Mixed forms stay off the historical-import list, so classifying the buyer copy does not pull its older leads. A stale generic Budget mapping is corrected from the question text before a requirement is stored.
+
 ## Database (migration 5, `meta_lead_ads`, and migration 6, `meta_intent_decision`)
 
 - `lead_sources`: new `meta_page_id`, `meta_is_organic`, `ingestion_origin`,
@@ -313,7 +321,7 @@ leads and URLs are untouched.
   - picks up `pending` and `retry` rows that are due, and `processing` rows
     whose lock expired
   - advances imports
-  - reconciles the last 48 hours of owner, tenant, buyer and mixed forms every six hours. Unclassified and Ignore forms are skipped. Historical import is a separate staff job and still accepts only owner, tenant and buyer forms
+  - reconciles the last 48 hours of owner, tenant, buyer, mixed and land JV forms every six hours. Unclassified and Ignore forms are skipped. Historical import is a separate staff job and accepts owner, tenant, buyer and land JV forms. Mixed forms stay off that list
   - applies retention
 
   Verified locally: a stale `processing` row was claimed and processed by the

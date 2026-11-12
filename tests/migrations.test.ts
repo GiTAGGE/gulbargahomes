@@ -113,12 +113,17 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
     assert.ok(connectionColumns.results.some((column) => column.name === "ad_account_id"));
     assert.ok(connectionColumns.results.some((column) => column.name === "ad_account_name"));
+    const land = await db.prepare("PRAGMA table_info(land_jv_enquiries)").all<{ name: string }>();
+    assert.ok(land.results.some((column) => column.name === "acre_band"));
+    assert.ok(land.results.some((column) => column.name === "answers_json"));
+    const contactColumns = await db.prepare("PRAGMA table_info(contacts)").all<{ name: string }>();
+    assert.ok(contactColumns.results.some((column) => column.name === "is_land_jv"));
     const coverage = await db.prepare("PRAGMA table_info(ad_spend_coverage)").all<{ name: string }>();
     assert.ok(coverage.results.some((column) => column.name === "covered_since"));
     assert.ok(coverage.results.some((column) => column.name === "covered_until"));

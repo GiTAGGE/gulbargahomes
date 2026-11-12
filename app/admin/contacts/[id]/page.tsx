@@ -13,6 +13,7 @@ import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities } from "@/lib/crm/activity";
 import { getContact, redactContact } from "@/lib/crm/contacts";
+import { listLandJvEnquiries } from "@/lib/crm/land-jv";
 import { listOwnerLeads } from "@/lib/crm/owner-leads";
 import { listRequirements } from "@/lib/crm/requirements";
 import { listInventoryForContact } from "@/lib/inventory/repository";
@@ -25,8 +26,9 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
   const contact = await getContact(db, id);
   if (!contact) notFound();
 
-  const [leads, requirements, properties, activities, history, names] = await Promise.all([
+  const [leads, landEnquiries, requirements, properties, activities, history, names] = await Promise.all([
     listOwnerLeads(db, { contactId: id, roleReview: "any" }),
+    listLandJvEnquiries(db, { contactId: id }),
     listRequirements(db, { contactId: id }),
     caps.viewOwnerContact ? listInventoryForContact(db, id, { includeDiscreet: caps.viewDiscreet }) : [],
     listActivities(db, { contactId: id }),
@@ -55,6 +57,23 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                         {lead.roleReview === "genuine" ? "Genuine owner" : lead.roleReview === "unqualified" ? "Not genuine" : "Not an owner"}
                       </Pill>
                     )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card title="Land JV enquiries">
+            {landEnquiries.length === 0 ? (
+              <Empty>None.</Empty>
+            ) : (
+              <ul className="divide-y divide-brand-50">
+                {landEnquiries.map((enquiry) => (
+                  <li key={enquiry.id} className="flex items-center gap-2 py-2">
+                    <Link href={`/admin/land-jv/${enquiry.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-800 hover:underline">
+                      {enquiry.code} · {enquiry.taluk || "Taluk not answered"}
+                      {enquiry.acreBand ? ` · ${enquiry.acreBand}` : ""}
+                    </Link>
+                    <Pill tone="stone">{enquiry.status}</Pill>
                   </li>
                 ))}
               </ul>

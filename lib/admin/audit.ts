@@ -8,6 +8,7 @@ export type AuditEntity =
   | "contact"
   | "owner_lead"
   | "requirement"
+  | "land_jv_enquiry"
   | "followup"
   | "admin_user"
   | "session"

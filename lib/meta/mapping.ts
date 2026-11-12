@@ -1,4 +1,5 @@
 import type { ContactInput } from "../crm/contacts";
+import type { LandJvInput } from "../crm/land-jv";
 import { OWNER_INTENTS, type DemandIntent, type OwnerIntent } from "../crm/options";
 import type { OwnerLeadInput } from "../crm/owner-leads";
 import type { RequirementInput } from "../crm/requirements";
@@ -17,7 +18,7 @@ import {
   splitLocalities,
 } from "./values";
 
-export const FORM_CLASSIFICATIONS = ["unclassified", "owner", "tenant", "buyer", "mixed", "ignore"] as const;
+export const FORM_CLASSIFICATIONS = ["unclassified", "owner", "tenant", "buyer", "mixed", "land_jv", "ignore"] as const;
 export type FormClassification = (typeof FORM_CLASSIFICATIONS)[number];
 
 /**
@@ -25,13 +26,14 @@ export type FormClassification = (typeof FORM_CLASSIFICATIONS)[number];
  * because each lead is resolved from its Buy or Rent answer. Unclassified and
  * Ignore stay out, with no form id hardcoded.
  */
-export const RECONCILE_CLASSIFICATIONS = ["owner", "tenant", "buyer", "mixed"] as const satisfies readonly FormClassification[];
+export const RECONCILE_CLASSIFICATIONS = ["owner", "tenant", "buyer", "mixed", "land_jv"] as const satisfies readonly FormClassification[];
 
 /**
  * Forms a staff member may select for a historical import. Mixed stays off
- * this list so a classified copy is not pulled in with a date range.
+ * this list so a buyer-or-tenant copy is not pulled in with a date range.
+ * Land JV is included because its enquiry is not a residential owner lead.
  */
-export const HISTORICAL_IMPORT_CLASSIFICATIONS = ["owner", "tenant", "buyer"] as const satisfies readonly FormClassification[];
+export const HISTORICAL_IMPORT_CLASSIFICATIONS = ["owner", "tenant", "buyer", "land_jv"] as const satisfies readonly FormClassification[];
 
 export function isReconcileClassification(value: string): value is (typeof RECONCILE_CLASSIFICATIONS)[number] {
   return (RECONCILE_CLASSIFICATIONS as readonly string[]).includes(value);
@@ -47,6 +49,7 @@ export const CLASSIFICATION_LABEL: Record<FormClassification, string> = {
   tenant: "Tenant requirement → rental demand",
   buyer: "Buyer requirement → purchase demand",
   mixed: "Buyer or tenant, from the answer",
+  land_jv: "Agricultural land JV enquiry",
   ignore: "Ignore (do not import)",
 };
 
@@ -67,6 +70,13 @@ export const MAPPING_TARGETS = [
   "locality",
   "timeline",
   "preferences",
+  "taluk",
+  "village",
+  "acre_band",
+  "ownership",
+  "rtc_available",
+  "road_access",
+  "owners_agree",
   "ignore",
 ] as const;
 export type MappingTarget = (typeof MAPPING_TARGETS)[number];
@@ -88,6 +98,13 @@ export const TARGET_LABEL: Record<MappingTarget, string> = {
   locality: "Preferred location / locality",
   timeline: "Requirement timeline",
   preferences: "Additional preferences",
+  taluk: "Land JV taluk",
+  village: "Land JV village",
+  acre_band: "Land JV acre band",
+  ownership: "Land JV ownership",
+  rtc_available: "Land JV RTC / Pahani",
+  road_access: "Land JV road access",
+  owners_agree: "Land JV owners agree",
   ignore: "Ignore",
 };
 
@@ -138,6 +155,15 @@ export function suggestTarget(question: MetaQuestion, classification: FormClassi
   const byKey = STANDARD_KEYS[question.key];
   if (byKey) return byKey;
   const text = questionText(question);
+  if (classification === "land_jv") {
+    if (/\b(taluk|taluka)\b/.test(text)) return "taluk";
+    if (/(rtc|pahani)/.test(text)) return "rtc_available";
+    if (/road access/.test(text)) return "road_access";
+    if (/(owners agree|jv maadalu|joint venture)/.test(text)) return "owners_agree";
+    if (/(ownership|hesarallide)/.test(text)) return "ownership";
+    if (/\b(acre|acres)\b/.test(text)) return "acre_band";
+    if (/(oorin|village)/.test(text)) return "village";
+  }
   const optionText = question.options.map((option) => `${option.key} ${option.value}`).join(" ");
   const ownerChoices = ownerIntentsIn(optionText || text);
   const demandChoices = demandIntentsIn(optionText || text);
@@ -203,6 +229,44 @@ export function alignBudgetTargets(
   return changed ? next : mapping;
 }
 
+const RESIDENTIAL_TARGETS = new Set<MappingTarget>([
+  "locality",
+  "expected_price",
+  "preferences",
+  "budget",
+  "purchase_budget",
+  "rent_budget",
+  "intent",
+  "timeline",
+  "bhk",
+  "property_type",
+]);
+
+/**
+ * A land form saved while it was still an owner form points taluk, acres and
+ * road access at residential fields. Put those questions back on the enquiry.
+ * A target that is already a land field, a name, or a phone is left alone.
+ */
+export function alignLandTargets(
+  questions: MetaQuestion[],
+  classification: FormClassification,
+  mapping: FieldMapping,
+): FieldMapping {
+  if (classification !== "land_jv") return mapping;
+  let changed = false;
+  const next: FieldMapping = { ...mapping };
+  for (const question of questions) {
+    const current = next[question.key] ?? "";
+    if (current && !RESIDENTIAL_TARGETS.has(current)) continue;
+    const suggested = suggestTarget(question, "land_jv");
+    if (suggested !== current) {
+      next[question.key] = suggested;
+      changed = true;
+    }
+  }
+  return changed ? next : mapping;
+}
+
 /** Forms that ask sell, rent and lease must not assume one of them. A rent-only form can assume rent. */
 export function suggestOwnerIntent(questions: MetaQuestion[]): OwnerIntent | "" {
   const asks = questions.some((question) => {
@@ -218,7 +282,7 @@ export type MappedAnswer = { key: string; label: string; value: string; target: 
 
 /** How the importer chose the intent and which budget it stored. Kept with the original answers. */
 export type IntentDecision = {
-  intent: OwnerIntent | DemandIntent;
+  intent: OwnerIntent | DemandIntent | "Land JV";
   basis: "answer" | "form_default" | "staff";
   questionKey: string;
   answer: string;
@@ -248,6 +312,15 @@ export type MappedLead =
       problems: string[];
     }
   | {
+      kind: "land_jv";
+      contact: ContactInput;
+      enquiry: LandJvInput;
+      decision: IntentDecision;
+      answers: MappedAnswer[];
+      unmapped: MappedAnswer[];
+      problems: string[];
+    }
+  | {
       kind: "review";
       reason: string;
       choices: readonly ("Buy" | "Rent" | "Sale" | "Lease")[];
@@ -269,9 +342,16 @@ export type IntentChoice = { intent?: string; decidedBy?: string };
 
 /** Turns one Meta lead into CRM input using the form's mapping. Every answer is kept. */
 export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice = {}): MappedLead {
-  if (!["owner", "tenant", "buyer", "mixed"].includes(form.classification)) {
+  if (!["owner", "tenant", "buyer", "mixed", "land_jv"].includes(form.classification)) {
     throw new Error(`Form ${form.formId} is not classified for import.`);
   }
+  const mapping =
+    form.classification === "mixed"
+      ? alignBudgetTargets(form.questions, form.classification, form.mapping)
+      : form.classification === "land_jv"
+        ? alignLandTargets(form.questions, form.classification, form.mapping)
+        : form.mapping;
+  form = { ...form, mapping };
   const answers: MappedAnswer[] = lead.fieldData.map((field) => ({
     key: field.name,
     label: labelFor(form, field.name),
@@ -332,8 +412,41 @@ export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice =
     problems,
   });
 
-  if (form.classification === "owner") {
-    const staffIntent = (OWNER_INTENTS as readonly string[]).includes(choice.intent ?? "") ? (choice.intent as OwnerIntent) : null;
+  const staffOwner = (OWNER_INTENTS as readonly string[]).includes(choice.intent ?? "") ? (choice.intent as OwnerIntent) : null;
+  if (form.classification === "land_jv" && !staffOwner) {
+    const clip = (target: MappingTarget, max: number) => first(target).slice(0, max);
+    notes.unshift("Recorded as an agricultural land JV enquiry. No residential property was created.");
+    return {
+      kind: "land_jv",
+      contact,
+      decision: {
+        intent: "Land JV",
+        basis: choice.intent === "Land JV" ? "staff" : "form_default",
+        questionKey: "",
+        answer: "",
+        budgetBasis: "",
+        budgetKey: "",
+        decidedBy: choice.intent === "Land JV" ? choice.decidedBy ?? "" : "",
+      },
+      enquiry: {
+        taluk: clip("taluk", 80),
+        village: clip("village", 160),
+        acreBand: clip("acre_band", 80),
+        ownership: clip("ownership", 80),
+        rtcAvailable: clip("rtc_available", 40),
+        roadAccess: clip("road_access", 40),
+        ownersAgree: clip("owners_agree", 40),
+        answers: answers.map((answer) => ({ key: answer.key, label: answer.label, value: answer.value })),
+        notes: notes.join("\n").slice(0, 4000),
+      },
+      answers,
+      unmapped,
+      problems,
+    };
+  }
+
+  if (form.classification === "owner" || form.classification === "land_jv") {
+    const staffIntent = staffOwner;
     const parsed = intentAnswer ? parseOwnerIntent(intentAnswer) : null;
     const fromUnmapped = answers
       .filter((answer) => {
@@ -398,7 +511,7 @@ export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice =
         intent,
         propertyType: propertyType ?? "",
         locality: localities[0] ?? "",
-        locationText: locationAnswer.slice(0, 200),
+        locationText: (locationAnswer || (form.classification === "land_jv" ? [first("taluk"), first("village")].filter(Boolean).join(", ") : "")).slice(0, 200),
         expectedPrice: price.max ?? price.min,
         notes: notes.join("\n").slice(0, 4000),
         priority: "Warm",
@@ -446,8 +559,10 @@ export function mapLead(form: MappedForm, lead: MetaLead, choice: IntentChoice =
   // in the original form answers and is never written into the range.
   const purchase = valuesFor("purchase_budget")[0];
   const monthly = valuesFor("rent_budget")[0];
-  const generic = valuesFor("budget")[0];
-  const selected = intent === "Buy" ? purchase ?? generic : monthly ?? generic;
+  // A mixed form must not fall back to a generic budget. That would store a
+  // purchase band and a monthly rent in the same range.
+  const generic = form.classification === "mixed" ? undefined : valuesFor("budget")[0];
+  const selected = intent === "Buy" ? (purchase ?? generic) : (monthly ?? generic);
   if (intent === "Buy" && monthly) notes.push(`Monthly rental answer “${monthly.value}” was kept with the form answers and not stored as the purchase budget.`);
   if (intent === "Rent" && purchase) notes.push(`Purchase answer “${purchase.value}” was kept with the form answers and not stored as the monthly rent.`);
   const budget = selected ? parseMoney(selected.value) : { min: null, max: null };

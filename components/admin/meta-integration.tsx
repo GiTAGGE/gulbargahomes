@@ -580,7 +580,12 @@ function FormRow({
           )}
           {classification === "mixed" && (
             <p className="text-xs text-ink-muted">
-              Purchase budget is the total price. Monthly rental budget is the rent per month. Budget (single-purpose form) cannot be used here.
+              Purchase budget is the total price. Monthly rental budget is the rent per month. Budget (single-purpose form) cannot be used here. Buy madbeku becomes a buyer requirement. Rent ge beku becomes a tenant requirement. A missing or combined answer stays held. Land as the property type stays a requirement and does not create inventory.
+            </p>
+          )}
+          {classification === "land_jv" && (
+            <p className="text-xs text-ink-muted">
+              This records an agricultural land JV enquiry. It does not create a residential property or an owner lead. Taluk, village, acres, ownership, RTC, road access and owner agreement stay on the enquiry. Held leads stay held until someone chooses Record as Land JV. Import as Sale, Rent or Lease remains a separate staff choice.
             </p>
           )}
           {budgetsCorrected && (
@@ -651,7 +656,7 @@ function FormRow({
             className="btn-primary"
             disabled={Boolean(busy)}
             onClick={() => {
-              const importing = ["owner", "tenant", "buyer", "mixed"].includes(classification);
+              const importing = ["owner", "tenant", "buyer", "mixed", "land_jv"].includes(classification);
               if (importing && waiting > 0) {
                 const proceed = window.confirm(
                   `${waiting} lead${waiting === 1 ? "" : "s"} waiting on “${form.name}” will be imported with this mapping. Save only if the rows above are right.`,
@@ -764,21 +769,28 @@ function AttentionCard({ canManage, attention, busy, act }: Props & { busy: stri
                 </p>
                 {canManage && (item.lastErrorKind === "intent_demand" || item.lastErrorKind === "intent_owner") && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {(item.lastErrorKind === "intent_demand"
+                    {(item.formClassification === "land_jv"
                       ? [
-                          ["Buy", "Import as Buy"],
-                          ["Rent", "Import as Rent"],
+                          ["Land JV", "Record as Land JV", "btn-primary"],
+                          ["Sale", "Import as Sale", "btn-ghost"],
+                          ["Rent", "Import as Rent", "btn-ghost"],
+                          ["Lease", "Import as Lease", "btn-ghost"],
                         ]
-                      : [
-                          ["Sale", "Import as Sale"],
-                          ["Rent", "Import as Rent"],
-                          ["Lease", "Import as Lease"],
-                        ]
-                    ).map(([intent, label]) => (
+                      : item.lastErrorKind === "intent_demand"
+                        ? [
+                            ["Buy", "Import as Buy", "btn-primary"],
+                            ["Rent", "Import as Rent", "btn-primary"],
+                          ]
+                        : [
+                            ["Sale", "Import as Sale", "btn-primary"],
+                            ["Rent", "Import as Rent", "btn-primary"],
+                            ["Lease", "Import as Lease", "btn-primary"],
+                          ]
+                    ).map(([intent, label, tone]) => (
                       <button
                         key={intent}
                         type="button"
-                        className="btn-primary"
+                        className={tone}
                         disabled={Boolean(busy)}
                         onClick={() => void act(`import-${item.id}`, API, "POST", { action: "import_as", id: item.id, intent })}
                       >
@@ -985,14 +997,16 @@ function RecentCard({ recent }: { recent: IngestionSummary[] }) {
                 ? `/admin/owner-leads/${item.entityId}`
                 : item.entityType === "requirement"
                   ? `/admin/requirements/${item.entityId}`
-                  : null;
+                  : item.entityType === "land_jv_enquiry"
+                    ? `/admin/land-jv/${item.entityId}`
+                    : null;
             return (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <span className="min-w-0">
                   <Pill tone={STATUS_TONE[item.status]}>{INGESTION_STATUS_LABEL[item.status]}</Pill>{" "}
                   {href ? (
                     <Link href={href} className="font-semibold text-brand-800 hover:underline">
-                      {item.entityType === "owner_lead" ? "Owner lead" : "Requirement"}
+                      {item.entityType === "owner_lead" ? "Owner lead" : item.entityType === "land_jv_enquiry" ? "Land JV" : "Requirement"}
                     </Link>
                   ) : (
                     <span className="font-mono text-xs">{item.leadgenId}</span>

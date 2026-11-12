@@ -260,9 +260,10 @@ const RECONCILE_WINDOW_HOURS = 48;
 
 /**
  * Catches leads whose webhook never arrived: every few hours, list the last
- * two days of leads on each owner, tenant, buyer and mixed form and queue any
- * we have not seen. Unclassified and Ignore forms are not listed. Historical
- * import uses a narrower list and does not accept mixed forms.
+ * two days of leads on each owner, tenant, buyer, mixed and land JV form and
+ * queue any we have not seen. Unclassified and Ignore forms are not listed.
+ * Historical import still does not accept mixed forms, so a buyer-or-tenant
+ * copy is not pulled in with a date range. Land JV can be selected on purpose.
  */
 export async function reconcileRecentLeads(runtime: MetaRuntime, options: { force?: boolean } = {}): Promise<{ checked: number; queued: number } | null> {
   const { db } = runtime;
