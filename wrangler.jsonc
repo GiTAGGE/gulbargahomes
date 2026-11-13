@@ -27,6 +27,14 @@
   // Variables added in the dashboard survive deploys that do not pass --keep-vars (e.g. Workers Builds).
   // Secrets are never stored here and are always kept.
   "keep_vars": true,
+  // Public Turnstile site key. OpenNext copies wrangler vars into the build, and Next inlines NEXT_PUBLIC_*.
+  // ENQUIRY_ATTRIBUTION_SECRET and TURNSTILE_SECRET_KEY are required secrets. Do not put their values here.
+  "vars": {
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAF_jJSnT9ITUBBn_"
+  },
+  "secrets": {
+    "required": ["ENQUIRY_ATTRIBUTION_SECRET", "TURNSTILE_SECRET_KEY"]
+  },
   "images": {
     // Requires Cloudflare Images on the account. If optimization fails,
     // remove this block and set images.unoptimized: true in next.config.mjs.
@@ -80,6 +88,10 @@
   "env": {
     "staging": {
       "name": "gulbargahomes-staging",
+      // Not inherited from production. Values stay on the staging Worker.
+      "secrets": {
+        "required": ["ENQUIRY_ATTRIBUTION_SECRET", "TURNSTILE_SECRET_KEY"]
+      },
       // Must stay empty: routes are inherited, and staging must never claim the production domains.
       "routes": [],
       "workers_dev": true,

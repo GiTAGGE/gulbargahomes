@@ -96,7 +96,7 @@ The Durable Object class `DOQueueHandler` comes from the OpenNext build. The `v1
 
 ### Worker secrets and build variables
 
-Set these in the Worker **Settings → Variables and Secrets**. Also add the `NEXT_PUBLIC_*` values as **build variables** if you use Workers Builds, because Next inlines them at build time.
+Set these in the Worker **Settings → Variables and Secrets**. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is the exception: it is a public value in `wrangler.jsonc` `vars`, because OpenNext reads that file during the build and Next inlines `NEXT_PUBLIC_*`. `ENQUIRY_ATTRIBUTION_SECRET` and `TURNSTILE_SECRET_KEY` are named in `secrets.required`. Their values stay on the Worker and are not committed.
 
 | Variable | Secret | Purpose |
 | --- | --- | --- |
@@ -107,7 +107,7 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 | `NEXT_PUBLIC_CLARITY_ID` | no | Optional Microsoft Clarity id |
 | `REVALIDATE_SECRET` | yes | Optional, for `POST /api/revalidate` |
 | `TURNSTILE_SECRET_KEY` | yes | Verifies public enquiry submissions. The enquiry routes reject every request when it is unset |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | no | Public Turnstile site key. The enquiry wizard keeps Save disabled until this is set at build time |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | no | Public Turnstile site key, in `wrangler.jsonc` `vars`. The enquiry wizard keeps Save disabled until a build inlines it |
 | `ENQUIRY_ATTRIBUTION_SECRET` | yes | `openssl rand -hex 32`. Signs the 90-day `gh_attr` first-touch cookie. Without it, the cookie is not set and a first touch is stored as unverified |
 | `META_APP_SECRET` | yes | Meta app secret. Verifies Lead Ads webhooks and signs Graph calls |
 | `META_WEBHOOK_VERIFY_TOKEN` | yes | Random string, also entered in the Meta webhook settings |
@@ -116,7 +116,7 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 
 Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does not wipe those secrets.
 
-Public enquiries rate-limit with `CF-Connecting-IP`, the address Cloudflare's edge sets on the Worker. `X-Forwarded-For` is ignored. A request without a valid `CF-Connecting-IP` is rejected and is not grouped with other headerless requests. On HTTPS the attribution cookie is `HttpOnly`, `SameSite=Lax`, and `Secure`, and it lasts 90 days. The enquiry wizard asks `GET /api/enquiries/attribution` before saving so that cookie exists. If it still cannot be verified, the saved row sets `first_touch_verified` to 0. Leave the enquiry buttons in place, but do not treat the form as open until `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, and `ENQUIRY_ATTRIBUTION_SECRET` are all configured. Migrations 17, 18, and 19 are applied by the app on the first request after that deploy. Migration 19 adds `demand_requirements.preference_details_json` for the property-type answers. Do not run them by hand before the deploy is approved.
+Public enquiries rate-limit with `CF-Connecting-IP`, the address Cloudflare's edge sets on the Worker. `X-Forwarded-For` is ignored. A request without a valid `CF-Connecting-IP` is rejected and is not grouped with other headerless requests. On HTTPS the attribution cookie is `HttpOnly`, `SameSite=Lax`, and `Secure`, and it lasts 90 days. The enquiry wizard asks `GET /api/enquiries/attribution` before saving so that cookie exists. If it still cannot be verified, the saved row sets `first_touch_verified` to 0. `ENQUIRY_ATTRIBUTION_SECRET` and `TURNSTILE_SECRET_KEY` are set on the Worker as plain text, and `keep_vars` keeps them on deploy. `secrets.required` records those names and does not store the values. The site key reaches the browser only after a production build that includes `wrangler.jsonc`. Until that build is deployed, Save stays closed even though the Worker has the key. Migrations 17, 18, and 19 are applied by the app on the first request after a deploy. Migration 19 adds `demand_requirements.preference_details_json` for the property-type answers. Do not run them by hand before the deploy is approved.
 
 ### Workers Builds
 
