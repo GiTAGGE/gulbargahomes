@@ -7,18 +7,29 @@ import { useEffect, useId, useRef, useState } from "react";
 import { CloseIcon, WhatsAppIcon } from "@/components/icons";
 import { trackWhatsAppClick } from "@/lib/analytics/track";
 import {
+  APPROVAL_PREFERENCES,
+  FACILITY_OPTIONS,
+  FLOOR_PREFERENCES,
+  INTENDED_USES,
+  LEASE_DURATIONS,
+  OCCUPANT_TYPES,
+  SHARING_PREFERENCES,
+  preferenceQuestions,
+} from "@/lib/enquiry/questions";
+import {
   BUYER_TYPES,
   FURNISHING_OPTIONS,
   TENANT_OPTIONS,
   TIMELINE_OPTIONS,
-  bhkApplies,
   UNVERIFIED_ATTRIBUTION_NOTICE,
+  budgetQuestionLabel,
   draftFromLaunch,
   enquiryHandoff,
   finishSave,
   newIdempotencyKey,
   ownerPayload,
   requirementPayload,
+  selectRequirement,
   startSave,
   stepError,
   stepsFor,
@@ -154,6 +165,11 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
     setError(null);
   }
 
+  function replace(next: WizardDraft) {
+    setDraft(next);
+    setError(null);
+  }
+
   function continueStep() {
     const problem = stepError(draft, step);
     if (problem) {
@@ -268,30 +284,18 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
               <legend className="text-sm font-semibold text-ink">What are you looking for?</legend>
               <div className="flex flex-wrap gap-2">
                 {(["Buy", "Rent"] as const).map((intent) => (
-                  <Chip key={intent} selected={draft.intent === intent} onClick={() => update({ intent })}>
+                  <Chip key={intent} selected={draft.intent === intent} onClick={() => replace(selectRequirement(draft, { intent }))}>
                     {intent}
                   </Chip>
                 ))}
               </div>
               <div className="flex flex-wrap gap-2">
                 {BUYER_TYPES.map((type) => (
-                  <Chip key={type} selected={draft.propertyType === type} onClick={() => update({ propertyType: type })}>
+                  <Chip key={type} selected={draft.propertyType === type} onClick={() => replace(selectRequirement(draft, { propertyType: type }))}>
                     {type}
                   </Chip>
                 ))}
               </div>
-              {bhkApplies(draft.propertyType) && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-sm text-ink-muted">
-                    Minimum BHK
-                    <input className="mt-1 w-full rounded-xl border border-brand-200 px-3 py-3" inputMode="numeric" value={draft.bhkMin} onChange={(event) => update({ bhkMin: event.target.value })} />
-                  </label>
-                  <label className="text-sm text-ink-muted">
-                    Maximum BHK
-                    <input className="mt-1 w-full rounded-xl border border-brand-200 px-3 py-3" inputMode="numeric" value={draft.bhkMax} onChange={(event) => update({ bhkMax: event.target.value })} />
-                  </label>
-                </div>
-              )}
             </fieldset>
           )}
           {step === "need" && draft.path === "owner" && (
@@ -363,9 +367,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
                   ? draft.ownerIntent === "Rent"
                     ? "Expected monthly rent"
                     : "Expected price"
-                  : draft.intent === "Rent"
-                    ? "Monthly rent budget"
-                    : "Purchase budget"}
+                  : budgetQuestionLabel(draft) ?? (draft.intent === "Rent" ? "Monthly rent budget" : "Total purchase budget")}
               </legend>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-sm text-ink-muted">
@@ -394,38 +396,8 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
               )}
             </fieldset>
           )}
-          {step === "preferences" && (
-            <fieldset className="grid gap-4">
-              <legend className="text-sm font-semibold text-ink">Preferences</legend>
-              <div className="flex flex-wrap gap-2">
-                {FURNISHING_OPTIONS.map((furnishing) => (
-                  <Chip key={furnishing} selected={draft.furnishing === furnishing} onClick={() => update({ furnishing })}>
-                    {furnishing}
-                  </Chip>
-                ))}
-              </div>
-              {draft.intent === "Rent" && (
-                <div className="flex flex-wrap gap-2">
-                  {TENANT_OPTIONS.map((profile) => (
-                    <Chip key={profile} selected={draft.tenantProfile === profile} onClick={() => update({ tenantProfile: profile })}>
-                      {profile}
-                    </Chip>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Chip selected={draft.parking === "Yes"} onClick={() => update({ parking: "Yes" })}>
-                  Parking needed
-                </Chip>
-                <Chip selected={draft.parking === "No"} onClick={() => update({ parking: "No" })}>
-                  Parking not needed
-                </Chip>
-              </div>
-              <label className="text-sm text-ink-muted">
-                Minimum area (sq ft)
-                <input className="mt-1 w-full rounded-xl border border-brand-200 px-3 py-3" inputMode="numeric" value={draft.area} onChange={(event) => update({ area: event.target.value })} />
-              </label>
-            </fieldset>
+          {step === "preferences" && draft.intent && draft.propertyType && (
+            <PreferenceStep draft={draft} onChange={update} />
           )}
           {step === "contact" && (
             <form
@@ -506,6 +478,172 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
         )}
       </div>
     </div>
+  );
+}
+
+function PreferenceStep({ draft, onChange }: { draft: WizardDraft; onChange: (patch: Partial<WizardDraft>) => void }) {
+  if (draft.intent !== "Buy" && draft.intent !== "Rent") return null;
+  if (!draft.propertyType) return null;
+  const questions = preferenceQuestions(draft.intent, draft.propertyType);
+  return (
+    <fieldset className="grid gap-4">
+      <legend className="text-sm font-semibold text-ink">Preferences</legend>
+      <p className="text-sm text-ink-muted">Optional. Skip anything you are not sure about.</p>
+      {questions.map((question) => {
+        if (question.key === "intendedUse") {
+          return <ChoiceGroup key={question.key} label={question.label} options={INTENDED_USES} value={draft.intendedUse} onChange={(intendedUse) => onChange({ intendedUse })} />;
+        }
+        if (question.key === "plotArea") {
+          return <TextAnswer key={question.key} label={question.label} value={draft.plotArea} placeholder="30×40 or 1,200 sq ft" onChange={(plotArea) => onChange({ plotArea })} />;
+        }
+        if (question.key === "roadAccess") {
+          return <TextAnswer key={question.key} label={question.label} value={draft.roadAccess} placeholder="30 ft road, corner access" onChange={(roadAccess) => onChange({ roadAccess })} />;
+        }
+        if (question.key === "leaseDuration") {
+          return <ChoiceGroup key={question.key} label={question.label} options={LEASE_DURATIONS} value={draft.leaseDuration} onChange={(leaseDuration) => onChange({ leaseDuration })} />;
+        }
+        if (question.key === "approvalPreference") {
+          return <ChoiceGroup key={question.key} label={question.label} options={APPROVAL_PREFERENCES} value={draft.approvalPreference} onChange={(approvalPreference) => onChange({ approvalPreference })} />;
+        }
+        if (question.key === "bhk") {
+          return (
+            <div key={question.key} className="grid gap-2">
+              <p className="text-sm font-semibold text-ink">{question.label}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <TextAnswer label="Minimum" value={draft.bhkMin} numeric onChange={(bhkMin) => onChange({ bhkMin })} />
+                <TextAnswer label="Maximum" value={draft.bhkMax} numeric onChange={(bhkMax) => onChange({ bhkMax })} />
+              </div>
+            </div>
+          );
+        }
+        if (question.key === "furnishing") {
+          return (
+            <ChoiceGroup
+              key={question.key}
+              label={question.label}
+              options={FURNISHING_OPTIONS}
+              value={draft.furnishing}
+              onChange={(furnishing) => onChange({ furnishing: FURNISHING_OPTIONS.find((option) => option === furnishing) ?? "Any" })}
+            />
+          );
+        }
+        if (question.key === "tenantProfile") {
+          return (
+            <ChoiceGroup
+              key={question.key}
+              label={question.label}
+              options={TENANT_OPTIONS}
+              value={draft.tenantProfile}
+              onChange={(tenantProfile) => onChange({ tenantProfile: TENANT_OPTIONS.find((option) => option === tenantProfile) ?? "Any" })}
+            />
+          );
+        }
+        if (question.key === "parking") {
+          return (
+            <ChoiceGroup
+              key={question.key}
+              label={question.label}
+              options={["Parking needed", "Parking not needed"]}
+              value={draft.parking === "Yes" ? "Parking needed" : draft.parking === "No" ? "Parking not needed" : ""}
+              onChange={(choice) => onChange({ parking: choice === "Parking needed" ? "Yes" : choice === "Parking not needed" ? "No" : "" })}
+            />
+          );
+        }
+        if (question.key === "areaMin") {
+          return <TextAnswer key={question.key} label={`${question.label} (sq ft)`} value={draft.area} numeric onChange={(area) => onChange({ area })} />;
+        }
+        if (question.key === "commercialUse") {
+          return <TextAnswer key={question.key} label={question.label} value={draft.commercialUse} placeholder="Shop, clinic, office" onChange={(commercialUse) => onChange({ commercialUse })} />;
+        }
+        if (question.key === "floorPreference") {
+          return <ChoiceGroup key={question.key} label={question.label} options={FLOOR_PREFERENCES} value={draft.floorPreference} onChange={(floorPreference) => onChange({ floorPreference })} />;
+        }
+        if (question.key === "occupantType") {
+          return <ChoiceGroup key={question.key} label={question.label} options={OCCUPANT_TYPES} value={draft.occupantType} onChange={(occupantType) => onChange({ occupantType })} />;
+        }
+        if (question.key === "sharing") {
+          return <ChoiceGroup key={question.key} label={question.label} options={SHARING_PREFERENCES} value={draft.sharing} onChange={(sharing) => onChange({ sharing })} />;
+        }
+        if (question.key === "facilities") {
+          return (
+            <div key={question.key} className="grid gap-2">
+              <p className="text-sm font-semibold text-ink">{question.label}</p>
+              <div className="flex flex-wrap gap-2">
+                {FACILITY_OPTIONS.map((facility) => (
+                  <Chip
+                    key={facility}
+                    selected={draft.facilities.includes(facility)}
+                    onClick={() =>
+                      onChange({
+                        facilities: draft.facilities.includes(facility)
+                          ? draft.facilities.filter((item) => item !== facility)
+                          : [...draft.facilities, facility],
+                      })
+                    }
+                  >
+                    {facility}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        return <TextAnswer key={question.key} label={question.label} value={draft.notes} multiline onChange={(notes) => onChange({ notes })} />;
+      })}
+    </fieldset>
+  );
+}
+
+function ChoiceGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-semibold text-ink">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <Chip key={option} selected={value === option} onClick={() => onChange(value === option ? "" : option)}>
+            {option}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TextAnswer({
+  label,
+  value,
+  onChange,
+  placeholder,
+  numeric = false,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  numeric?: boolean;
+  multiline?: boolean;
+}) {
+  const className = "mt-1 w-full rounded-xl border border-brand-200 px-3 py-3";
+  return (
+    <label className="text-sm text-ink-muted">
+      {label}
+      {multiline ? (
+        <textarea className={className} rows={3} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input className={className} inputMode={numeric ? "numeric" : "text"} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </label>
   );
 }
 

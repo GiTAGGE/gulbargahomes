@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import { intentScore } from "../lib/crm/intent-score";
 import { createRequirement, getRequirement } from "../lib/crm/requirements";
+import { preferenceLines } from "../lib/enquiry/questions";
 import { normalizeContactPhone } from "../lib/crm/phone";
 import type { SourceInput } from "../lib/crm/sources";
 import { prepareDatabase } from "../lib/db/prepare";
@@ -194,6 +195,8 @@ describe("public website enquiries", () => {
     const loaded = await getRequirement(database, result.id);
     assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Urgency")?.points, 30);
     assert.equal(loaded?.intentScore.score, intentScore(loaded!).score);
+    assert.deepEqual(loaded?.preferenceDetails, {});
+    assert.deepEqual(preferenceLines(loaded!), []);
     assert.equal(requirement?.quality_review ?? "", "");
     assert.equal(requirement?.created_by, WEBSITE_ACTOR.id);
     assert.equal(attribution?.first_source, "Google Organic");
@@ -231,6 +234,181 @@ describe("public website enquiries", () => {
     assert.equal(row?.bhk_min, null);
     await assert.rejects(() => submitRequirementEnquiry(database, buyer({ privacyAccepted: false }), options("plot-key-02")), /Privacy Policy/);
     assert.equal(await count(database, "demand_requirements"), 1);
+  });
+
+  it("stores a rent-plot requirement without residential preferences and shows them in the CRM", async () => {
+    const database = await ready();
+    const result = await submitRequirementEnquiry(
+      database,
+      buyer({
+        intent: "Rent",
+        propertyType: "Plot",
+        localities: ["High Court"],
+        budgetMin: 5000,
+        budgetMax: 10000,
+        timeline: "Within 7 days",
+        furnishing: "Fully Furnished",
+        tenantProfile: "Family",
+        parkingRequired: true,
+        bhkMin: 2,
+        mobile: "9845012101",
+        email: "plot-renter@example.com",
+        preferences: {
+          intendedUse: "Residential",
+          plotArea: "30x40",
+          roadAccess: "40 ft road",
+          leaseDuration: "11 months",
+          notes: "Corner preferred",
+        },
+      }),
+      options("rent-plot-key"),
+    );
+    const loaded = await getRequirement(database, result.id);
+    assert.equal(loaded?.status, "New");
+    assert.equal(loaded?.intent, "Rent");
+    assert.equal(loaded?.budgetMin, 5000);
+    assert.equal(loaded?.budgetMax, 10000);
+    assert.equal(loaded?.timeline, "Within 7 days");
+    assert.deepEqual(loaded?.localities, ["High Court"]);
+    assert.equal(loaded?.bhkMin, null);
+    assert.equal(loaded?.furnishing, "Any");
+    assert.equal(loaded?.tenantProfile, "Any");
+    assert.equal(loaded?.parkingRequired, false);
+    assert.equal(loaded?.notes, "Corner preferred");
+    assert.equal(loaded?.preferenceDetails.profile, "Rent:Plot");
+    assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Urgency")?.points, 26);
+    const lines = preferenceLines(loaded!);
+    assert.deepEqual(
+      lines.map((line) => line.label),
+      ["Intended use", "Required plot area", "Preferred road width or road access", "Lease duration"],
+    );
+    assert.equal(lines.some((line) => /furnish|family|bachelor|tenant|parking/i.test(`${line.label} ${line.value}`)), false);
+    assert.equal(await count(database, "properties"), 0);
+    assert.equal(await count(database, "owner_leads"), 0);
+  });
+
+  it("stores purchase preferences for a plot and a house, and commercial rental answers", async () => {
+    const database = await ready();
+    const plot = await submitRequirementEnquiry(
+      database,
+      buyer({
+        intent: "Buy",
+        propertyType: "Plot",
+        budgetMin: 1500000,
+        budgetMax: 2500000,
+        mobile: "9845012102",
+        email: "plot-buyer@example.com",
+        preferences: {
+          intendedUse: "Residential",
+          plotArea: "1200",
+          roadAccess: "30 ft",
+          approvalPreference: "Clear title",
+        },
+      }),
+      options("buy-plot-key"),
+    );
+    const plotRow = await getRequirement(database, plot.id);
+    assert.equal(plotRow?.status, "New");
+    assert.equal(plotRow?.areaMin, 1200);
+    assert.equal(plotRow?.preferenceDetails.approvalPreference, "Clear title");
+    assert.equal(preferenceLines(plotRow!).some((line) => line.label === "Approval or title preference"), true);
+    assert.equal(preferenceLines(plotRow!).some((line) => line.label === "Furnishing preference"), false);
+
+    const house = await submitRequirementEnquiry(
+      database,
+      buyer({
+        intent: "Buy",
+        propertyType: "House",
+        mobile: "9845012103",
+        email: "house-buyer@example.com",
+        preferences: { bhkMin: 3, bhkMax: 3, areaMin: 1400, parking: "Yes", furnishing: "Semi Furnished" },
+      }),
+      options("buy-house-key"),
+    );
+    const houseRow = await getRequirement(database, house.id);
+    assert.equal(houseRow?.bhkMin, 3);
+    assert.equal(houseRow?.areaMin, 1400);
+    assert.equal(houseRow?.parkingRequired, true);
+    assert.equal(houseRow?.furnishing, "Semi Furnished");
+    assert.equal(houseRow?.tenantProfile, "Any");
+    assert.equal(preferenceLines(houseRow!).some((line) => line.value === "3 BHK"), true);
+    assert.equal(preferenceLines(houseRow!).some((line) => line.label === "Tenant preference"), false);
+
+    const commercial = await submitRequirementEnquiry(
+      database,
+      buyer({
+        intent: "Rent",
+        propertyType: "Commercial",
+        budgetMin: 20000,
+        budgetMax: 35000,
+        mobile: "9845012104",
+        email: "shop-renter@example.com",
+        preferences: {
+          commercialUse: "Clinic",
+          areaMin: 800,
+          floorPreference: "Ground floor",
+          roadAccess: "Main road frontage",
+          parking: "Yes",
+          leaseDuration: "3 years",
+        },
+      }),
+      options("rent-shop-key"),
+    );
+    const shop = await getRequirement(database, commercial.id);
+    assert.equal(shop?.furnishing, "Any");
+    assert.equal(shop?.tenantProfile, "Any");
+    assert.deepEqual(
+      preferenceLines(shop!).map((line) => line.value),
+      ["Clinic", "800 sq ft", "Ground floor", "Main road frontage", "Needed", "3 years"],
+    );
+  });
+
+  it("rejects preferences that do not apply or are not in the allowed lists", async () => {
+    const database = await ready();
+    await assert.rejects(
+      () =>
+        submitRequirementEnquiry(
+          database,
+          buyer({
+            intent: "Rent",
+            propertyType: "Plot",
+            mobile: "9845012105",
+            preferences: { furnishing: "Fully Furnished", tenantProfile: "Family" },
+          }),
+          options("bad-plot-furnish"),
+        ),
+      /does not apply/,
+    );
+    await assert.rejects(
+      () =>
+        submitRequirementEnquiry(
+          database,
+          buyer({
+            intent: "Rent",
+            propertyType: "Plot",
+            mobile: "9845012106",
+            preferences: { intendedUse: "Agricultural" },
+          }),
+          options("bad-plot-use"),
+        ),
+      /intended use/,
+    );
+    await assert.rejects(
+      () =>
+        submitRequirementEnquiry(
+          database,
+          buyer({
+            intent: "Buy",
+            propertyType: "House",
+            mobile: "9845012107",
+            preferences: { furnishing: "Gold plated" },
+          }),
+          options("bad-house-furnish"),
+        ),
+      /furnishing|does not apply/,
+    );
+    assert.equal(await count(database, "demand_requirements"), 0);
+    assert.equal(await count(database, "properties"), 0);
   });
 
   it("creates an owner lead with timeline priority and no property", async () => {

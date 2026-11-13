@@ -670,6 +670,14 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE acquisition_attributions ADD COLUMN first_touch_verified INTEGER NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    // Optional answers that depend on intent and property type. Existing rows stay {}.
+    version: 19,
+    name: "requirement_preference_details",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN preference_details_json TEXT NOT NULL DEFAULT '{}'`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

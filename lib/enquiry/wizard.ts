@@ -1,4 +1,6 @@
 import type { ContactSource } from "@/lib/analytics/types";
+import { FURNISHING_PREFERENCES, TENANT_PROFILES } from "@/lib/crm/options";
+import { questionKeys, preferencePayloadKeys, questionsFor, type QuestionKey } from "@/lib/enquiry/questions";
 import { whatsAppHref } from "@/lib/services";
 import { site } from "@/lib/site";
 import type { PropertyType } from "@/lib/types";
@@ -8,8 +10,8 @@ export const UNVERIFIED_ATTRIBUTION_NOTICE =
 
 export const BUYER_TYPES: PropertyType[] = ["House", "Flat", "Villa", "Plot", "Commercial", "PG"];
 export const TIMELINE_OPTIONS = ["Immediate", "Within 7 days", "Within 30 days", "Within 3 months", "Exploring"] as const;
-export const FURNISHING_OPTIONS = ["Any", "Fully Furnished", "Semi Furnished", "Unfurnished"] as const;
-export const TENANT_OPTIONS = ["Any", "Family", "Bachelors", "Students", "Working professionals", "Company lease"] as const;
+export const FURNISHING_OPTIONS = FURNISHING_PREFERENCES;
+export const TENANT_OPTIONS = TENANT_PROFILES;
 
 export type WizardPath = "buyer" | "owner";
 
@@ -43,6 +45,16 @@ export type WizardDraft = {
   tenantProfile: (typeof TENANT_OPTIONS)[number];
   parking: "" | "Yes" | "No";
   area: string;
+  intendedUse: string;
+  plotArea: string;
+  roadAccess: string;
+  leaseDuration: string;
+  approvalPreference: string;
+  commercialUse: string;
+  floorPreference: string;
+  occupantType: string;
+  sharing: string;
+  facilities: string[];
   locationText: string;
   notes: string;
   name: string;
@@ -72,6 +84,16 @@ export function emptyDraft(): WizardDraft {
     tenantProfile: "Any",
     parking: "",
     area: "",
+    intendedUse: "",
+    plotArea: "",
+    roadAccess: "",
+    leaseDuration: "",
+    approvalPreference: "",
+    commercialUse: "",
+    floorPreference: "",
+    occupantType: "",
+    sharing: "",
+    facilities: [],
     locationText: "",
     notes: "",
     name: "",
@@ -93,11 +115,81 @@ export function draftFromLaunch(launch: EnquiryLaunch): WizardDraft {
   draft.propertyType = launch.propertyType ?? "";
   if (launch.locality) draft.localities = [launch.locality];
   if (launch.bhk) draft.bhkMin = String(launch.bhk);
-  return draft;
+  return selectRequirement(draft, {});
 }
 
 export function bhkApplies(type: PropertyType | ""): boolean {
-  return type !== "" && type !== "Plot" && type !== "Commercial";
+  return type === "House" || type === "Flat" || type === "Villa";
+}
+
+const PREFERENCE_FIELDS: Partial<Record<QuestionKey, (draft: WizardDraft) => void>> = {
+  bhk: (draft) => {
+    draft.bhkMin = "";
+    draft.bhkMax = "";
+  },
+  furnishing: (draft) => {
+    draft.furnishing = "Any";
+  },
+  tenantProfile: (draft) => {
+    draft.tenantProfile = "Any";
+  },
+  parking: (draft) => {
+    draft.parking = "";
+  },
+  areaMin: (draft) => {
+    draft.area = "";
+  },
+  intendedUse: (draft) => {
+    draft.intendedUse = "";
+  },
+  plotArea: (draft) => {
+    draft.plotArea = "";
+  },
+  roadAccess: (draft) => {
+    draft.roadAccess = "";
+  },
+  leaseDuration: (draft) => {
+    draft.leaseDuration = "";
+  },
+  approvalPreference: (draft) => {
+    draft.approvalPreference = "";
+  },
+  commercialUse: (draft) => {
+    draft.commercialUse = "";
+  },
+  floorPreference: (draft) => {
+    draft.floorPreference = "";
+  },
+  occupantType: (draft) => {
+    draft.occupantType = "";
+  },
+  sharing: (draft) => {
+    draft.sharing = "";
+  },
+  facilities: (draft) => {
+    draft.facilities = [];
+  },
+  notes: (draft) => {
+    draft.notes = "";
+  },
+};
+
+/** Keeps answers that still apply and clears the ones the new selection does not ask. */
+export function selectRequirement(
+  draft: WizardDraft,
+  patch: Partial<Pick<WizardDraft, "intent" | "propertyType">>,
+): WizardDraft {
+  const next: WizardDraft = {
+    ...draft,
+    ...patch,
+    localities: [...draft.localities],
+    facilities: [...draft.facilities],
+  };
+  const allowed = questionKeys(next.intent, next.propertyType);
+  for (const [key, clear] of Object.entries(PREFERENCE_FIELDS) as [QuestionKey, (draft: WizardDraft) => void][]) {
+    if (!allowed.has(key)) clear(next);
+  }
+  return next;
 }
 
 export type WizardStep = "path" | "need" | "place" | "budget" | "preferences" | "contact" | "success";
@@ -161,10 +253,52 @@ function attribution(launch: EnquiryLaunch) {
   };
 }
 
+function preferenceValue(draft: WizardDraft, key: string): unknown {
+  if (key === "bhkMin") return money(draft.bhkMin);
+  if (key === "bhkMax") return money(draft.bhkMax);
+  if (key === "furnishing") return draft.furnishing === "Any" ? undefined : draft.furnishing;
+  if (key === "tenantProfile") return draft.tenantProfile === "Any" ? undefined : draft.tenantProfile;
+  if (key === "parking") return draft.parking || undefined;
+  if (key === "areaMin") return money(draft.area);
+  if (key === "intendedUse") return draft.intendedUse;
+  if (key === "plotArea") return draft.plotArea.trim();
+  if (key === "roadAccess") return draft.roadAccess.trim();
+  if (key === "leaseDuration") return draft.leaseDuration;
+  if (key === "approvalPreference") return draft.approvalPreference;
+  if (key === "commercialUse") return draft.commercialUse.trim();
+  if (key === "floorPreference") return draft.floorPreference;
+  if (key === "occupantType") return draft.occupantType;
+  if (key === "sharing") return draft.sharing;
+  if (key === "facilities") return draft.facilities.length ? draft.facilities : undefined;
+  if (key === "notes") return draft.notes.trim();
+  return undefined;
+}
+
+/** Only the answers that belong to the current intent and property type. */
+export function preferenceBody(draft: WizardDraft): Record<string, unknown> {
+  if (draft.intent !== "Buy" && draft.intent !== "Rent") return {};
+  if (!draft.propertyType) return {};
+  const allowed = preferencePayloadKeys(draft.intent, draft.propertyType);
+  const body: Record<string, unknown> = {};
+  for (const key of allowed) {
+    const value = preferenceValue(draft, key);
+    if (value === undefined || value === null || value === "") continue;
+    body[key] = value;
+  }
+  return body;
+}
+
+export function budgetQuestionLabel(draft: WizardDraft): string | null {
+  if ((draft.intent !== "Buy" && draft.intent !== "Rent") || !draft.propertyType) return null;
+  return questionsFor(draft.intent, draft.propertyType).find((question) => question.key === "budget")?.label ?? null;
+}
+
 export function requirementPayload(draft: WizardDraft, launch: EnquiryLaunch, idempotencyKey: string, turnstileToken: string) {
   const places = [...draft.localities, draft.otherLocality.trim()].filter(Boolean);
-  const bhkMin = bhkApplies(draft.propertyType) ? money(draft.bhkMin) : null;
-  const bhkMax = bhkApplies(draft.propertyType) ? money(draft.bhkMax) ?? bhkMin : null;
+  const preferences = preferenceBody(draft);
+  const asked = questionKeys(draft.intent, draft.propertyType);
+  const bhkMin = asked.has("bhk") ? money(draft.bhkMin) : null;
+  const bhkMax = asked.has("bhk") ? money(draft.bhkMax) ?? bhkMin : null;
   return {
     idempotencyKey,
     turnstileToken,
@@ -186,10 +320,11 @@ export function requirementPayload(draft: WizardDraft, launch: EnquiryLaunch, id
     budgetMin: money(draft.budgetMin),
     budgetMax: money(draft.budgetMax),
     timeline: draft.timeline,
-    furnishing: draft.furnishing,
-    tenantProfile: draft.intent === "Rent" ? draft.tenantProfile : "Any",
-    parkingRequired: draft.parking === "Yes",
-    areaMin: money(draft.area),
+    furnishing: asked.has("furnishing") ? draft.furnishing : "Any",
+    tenantProfile: asked.has("tenantProfile") ? draft.tenantProfile : "Any",
+    parkingRequired: asked.has("parking") && draft.parking === "Yes",
+    areaMin: asked.has("areaMin") ? money(draft.area) : null,
+    preferences,
     attribution: attribution(launch),
   };
 }
@@ -266,11 +401,21 @@ export function summaryLines(draft: WizardDraft): string[] {
     ];
   }
   const places = [...draft.localities, draft.otherLocality.trim()].filter(Boolean);
+  const preferences = preferenceBody(draft);
+  const extra = [
+    typeof preferences.intendedUse === "string" ? preferences.intendedUse : "",
+    typeof preferences.plotArea === "string" ? `Plot area ${preferences.plotArea}` : "",
+    typeof preferences.commercialUse === "string" ? preferences.commercialUse : "",
+    typeof preferences.bhkMin === "number" ? `${preferences.bhkMin}${typeof preferences.bhkMax === "number" && preferences.bhkMax !== preferences.bhkMin ? `–${preferences.bhkMax}` : ""} BHK` : "",
+    typeof preferences.furnishing === "string" ? preferences.furnishing : "",
+    typeof preferences.tenantProfile === "string" ? preferences.tenantProfile : "",
+  ].filter(Boolean);
   return [
     `I want to ${draft.intent.toLowerCase()}`,
     draft.propertyType,
     draft.flexibleLocality ? "Locality is flexible" : places.join(", "),
     draft.timeline,
+    ...extra.slice(0, 3),
   ];
 }
 

@@ -9,6 +9,7 @@ import { createRequirement, parseRequirementInput } from "../crm/requirements";
 import type { SourceInput } from "../crm/sources";
 import { PROPERTY_TYPES, TIMELINES, type Priority, type Timeline } from "../crm/options";
 import { classifyTouch, readTouch, type ClassifiedTouch, type TouchEvidence } from "./attribution";
+import { parseWebsitePreferences } from "./questions";
 import { rememberVisit } from "./capture";
 import { mergeSignedAttribution, openAttribution } from "./cookie";
 
@@ -488,23 +489,28 @@ export async function submitRequirementEnquiry(db: SqlDb, value: unknown, option
   const attribution = await attributionOf(body, options.now, options.attributionCookie ?? null, options.attributionSecret ?? null);
   const propertyType = PROPERTY_TYPES.find((type) => type === body.propertyType);
   if (!propertyType) throw new HttpError(400, "Choose a property type.");
+  const structured = Object.prototype.hasOwnProperty.call(body, "preferences");
+  const intent = body.intent === "Buy" || body.intent === "Rent" ? body.intent : null;
+  if (structured && !intent) throw new HttpError(400, "Choose whether they want to rent or buy.");
+  const preferences = structured && intent ? parseWebsitePreferences(intent, propertyType, body.preferences) : null;
   const bhkRelevant = propertyType !== "Plot" && propertyType !== "Commercial";
   const parsed = parseRequirementInput({
     intent: body.intent,
     propertyTypes: [propertyType],
-    bhkMin: bhkRelevant ? body.bhkMin : null,
-    bhkMax: bhkRelevant ? body.bhkMax : null,
+    bhkMin: preferences ? preferences.bhkMin : bhkRelevant ? body.bhkMin : null,
+    bhkMax: preferences ? preferences.bhkMax : bhkRelevant ? body.bhkMax : null,
     budgetMin: body.budgetMin,
     budgetMax: body.budgetMax,
     localities: body.localities,
     localityFlexible: body.localityFlexible === true,
-    areaMin: body.areaMin,
-    furnishing: body.furnishing,
-    tenantProfile: body.tenantProfile,
-    parkingRequired: body.parkingRequired === true,
+    areaMin: preferences ? preferences.areaMin : body.areaMin,
+    furnishing: preferences ? preferences.furnishing : body.furnishing,
+    tenantProfile: preferences ? preferences.tenantProfile : body.tenantProfile,
+    parkingRequired: preferences ? preferences.parkingRequired : body.parkingRequired === true,
     timeline: body.timeline,
-    notes: "",
+    notes: preferences ? preferences.notes : "",
   });
+  if (preferences) parsed.preferenceDetails = preferences.details;
   if (!parsed.localities.length) throw new HttpError(400, "Add at least one locality.");
   const contact = { name: nameOf(body.name), phone: phoneFromParts(body.countryCode, body.mobile), email: emailOf(body.email) };
   return guarded(
