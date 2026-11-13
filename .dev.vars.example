@@ -6,3 +6,7 @@ NEXTJS_ENV=development
 # META_APP_SECRET=
 # META_WEBHOOK_VERIFY_TOKEN=
 # META_TOKEN_KEY=
+
+# Public enquiries. The Turnstile site key is public and already in wrangler.jsonc.
+# ENQUIRY_ATTRIBUTION_SECRET=
+# TURNSTILE_SECRET_KEY=
