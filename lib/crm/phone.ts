@@ -1,3 +1,15 @@
+/**
+ * A mobile number safe to store. Indian numbers must be valid +91 mobiles.
+ * Any other number must already be E.164, with a country code other than 91.
+ */
+export function normalizeContactPhone(value: string): string | null {
+  const indian = normalizeIndianMobile(value);
+  if (indian) return indian;
+  const compact = value.trim().replace(/[\s()-]/g, "");
+  if (!/^\+[1-9]\d{7,14}$/.test(compact) || compact.startsWith("+91")) return null;
+  return compact;
+}
+
 /** Normalise an Indian mobile number to +91XXXXXXXXXX, or null when it is not one. */
 export function normalizeIndianMobile(value: string): string | null {
   const digits = value.replace(/\D/g, "");
@@ -28,7 +40,8 @@ export function maskPhone(e164: string): string {
   if (isErasedPhone(e164)) return "Erased";
   const digits = e164.replace(/\D/g, "");
   if (digits.length < 4) return "••••";
-  return `+91 ••••• •${digits.slice(-4)}`;
+  if (e164.startsWith("+91")) return `+91 ••••• •${digits.slice(-4)}`;
+  return `+•••• ${digits.slice(-4)}`;
 }
 
 export function maskEmail(email: string): string {

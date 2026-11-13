@@ -49,7 +49,7 @@ export async function listAdminUsers(db: SqlDb): Promise<AdminUser[]> {
 }
 
 /** Non-human actors that write CRM records. */
-const SYSTEM_ACTOR_NAMES: Record<string, string> = { meta_lead_ads: "Meta Lead Ads" };
+const SYSTEM_ACTOR_NAMES: Record<string, string> = { meta_lead_ads: "Meta Lead Ads", website_enquiry: "Website enquiry" };
 
 export async function adminNames(db: SqlDb): Promise<Record<string, string>> {
   const { results } = await db.prepare("SELECT id, name FROM admin_users").all<{ id: string; name: string }>();
