@@ -322,8 +322,8 @@ export function RequirementActions({
       <div className="space-y-2">
         <p className="text-sm font-semibold text-ink">Lead quality</p>
         <p className="text-xs text-ink-muted">
-          Now: {reviewLabel(kind, qualityReview)}. This does not change the stage or the Meta campaign. The previous decision
-          stays in the history.
+          Now: {reviewLabel(kind, qualityReview)}. A new website enquiry stays pending until staff verifies the contact and
+          the requirement. That check does not change the stage. Verified and later stages wait until this is confirmed.
         </p>
         {qualityReviewNote && <p className="text-xs text-ink-muted">Latest note: {qualityReviewNote}</p>}
         <label className={labelClass}>

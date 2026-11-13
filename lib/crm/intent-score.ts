@@ -9,6 +9,8 @@ export type IntentInput = {
   bhkMin: number | null;
   status: string;
   lastContactedAt: string | null;
+  /** Calls, WhatsApp messages, and other staff activity on this requirement. */
+  engagementCount?: number;
   createdAt: string;
   priorityOverride: string;
 };
@@ -62,7 +64,9 @@ export function intentScore(input: IntentInput, now: Date = new Date()): IntentS
   factors.push({ label: "Requirement completeness", points: completeness, max: 20 });
 
   let engagement = 0;
-  if (input.lastContactedAt) engagement += 10;
+  const touches = input.engagementCount ?? 0;
+  if (touches > 0 || input.lastContactedAt) engagement += 10;
+  if (touches >= 2) engagement += 5;
   if (ENGAGED_STATUSES.has(input.status)) engagement += 15;
   factors.push({ label: "Engagement", points: Math.min(engagement, 25), max: 25 });
 
