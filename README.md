@@ -107,7 +107,8 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 | `NEXT_PUBLIC_CLARITY_ID` | no | Optional Microsoft Clarity id |
 | `REVALIDATE_SECRET` | yes | Optional, for `POST /api/revalidate` |
 | `TURNSTILE_SECRET_KEY` | yes | Verifies public enquiry submissions. The enquiry routes reject every request when it is unset |
-| `ENQUIRY_ATTRIBUTION_SECRET` | yes | `openssl rand -hex 32`. Signs the 90-day `gh_attr` first-touch cookie. Without it, the cookie is not set and a submitted form cannot be checked against an earlier visit |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | no | Public Turnstile site key. The enquiry wizard keeps Save disabled until this is set at build time |
+| `ENQUIRY_ATTRIBUTION_SECRET` | yes | `openssl rand -hex 32`. Signs the 90-day `gh_attr` first-touch cookie. Without it, the cookie is not set and a first touch is stored as unverified |
 | `META_APP_SECRET` | yes | Meta app secret. Verifies Lead Ads webhooks and signs Graph calls |
 | `META_WEBHOOK_VERIFY_TOKEN` | yes | Random string, also entered in the Meta webhook settings |
 | `META_TOKEN_KEY` | yes | `openssl rand -hex 32`. Encrypts the stored Page token |
@@ -115,7 +116,7 @@ Set these in the Worker **Settings → Variables and Secrets**. Also add the `NE
 
 Deploy with `npm run deploy` (it passes `--keep-vars`) so a later deploy does not wipe those secrets.
 
-Public enquiries rate-limit with `CF-Connecting-IP`, the address Cloudflare's edge sets on the Worker. `X-Forwarded-For` is ignored. A request without a valid `CF-Connecting-IP` is rejected and is not grouped with other headerless requests. On HTTPS the attribution cookie is `HttpOnly`, `SameSite=Lax`, and `Secure`, and it lasts 90 days. Migration 17, which stores those enquiries, is applied by the app on the first request after it is deployed. Do not run it by hand before that deploy is approved.
+Public enquiries rate-limit with `CF-Connecting-IP`, the address Cloudflare's edge sets on the Worker. `X-Forwarded-For` is ignored. A request without a valid `CF-Connecting-IP` is rejected and is not grouped with other headerless requests. On HTTPS the attribution cookie is `HttpOnly`, `SameSite=Lax`, and `Secure`, and it lasts 90 days. The enquiry wizard asks `GET /api/enquiries/attribution` before saving so that cookie exists. If it still cannot be verified, the saved row sets `first_touch_verified` to 0. Leave the enquiry buttons in place, but do not treat the form as open until `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, and `ENQUIRY_ATTRIBUTION_SECRET` are all configured. Migrations 17 and 18 are applied by the app on the first request after that deploy. Do not run them by hand before the deploy is approved.
 
 ### Workers Builds
 

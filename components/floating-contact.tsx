@@ -1,33 +1,21 @@
 "use client";
 
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
 import { site } from "@/lib/site";
-import { trackPhoneClick, trackWhatsAppClick } from "@/lib/analytics/track";
+import { trackPhoneClick } from "@/lib/analytics/track";
 
-import { PhoneIcon, WhatsAppIcon } from "./icons";
+import { PhoneIcon } from "./icons";
 
 export function FloatingContact() {
-  const waText = encodeURIComponent(
-    "Hi GulbargaHomes, I'm interested in a property listed on your site.",
-  );
-
   return (
     <div className="fixed bottom-24 right-4 z-30 hidden flex-col gap-2 sm:bottom-5 sm:right-5 sm:flex md:bottom-5">
-      {site.contacts.map((contact) => (
-        <a
-          key={`wa-${contact.whatsapp}`}
-          href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Chat on WhatsApp ${contact.phoneDisplay}`}
-          className="grid h-12 w-12 place-items-center rounded-full bg-[#25D366] text-white shadow-lift transition-transform hover:scale-105"
-          title={`WhatsApp ${contact.phoneDisplay}`}
-          onClick={() =>
-            trackWhatsAppClick("floating", { contact_phone: contact.phoneDisplay })
-          }
-        >
-          <WhatsAppIcon className="h-6 w-6" />
-        </a>
-      ))}
+      <EnquiryLaunchButton
+        launch={{ cta: "floating" }}
+        className="grid h-12 w-12 place-items-center rounded-full bg-brand-700 text-xs font-bold text-white shadow-lift transition-transform hover:scale-105"
+        ariaLabel="Send an enquiry"
+      >
+        Ask
+      </EnquiryLaunchButton>
       {site.contacts.map((contact) => (
         <a
           key={contact.phone}

@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
-import {
-  TrackedPhoneLink,
-  TrackedWhatsAppLink,
-} from "@/components/analytics/tracked-contact";
+import { TrackedPhoneLink } from "@/components/analytics/tracked-contact";
 import { EnquiryPrivacyNote } from "@/components/enquiry-privacy-note";
-import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
+import { ArrowIcon } from "@/components/icons";
 import type { HomeService } from "@/lib/services";
-import { homeServices, serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
+import { homeServices } from "@/lib/services";
 import { site } from "@/lib/site";
 
 export function serviceMetadata(service: HomeService): Metadata {
@@ -21,8 +19,6 @@ export function serviceMetadata(service: HomeService): Metadata {
 }
 
 export function ServicePageLayout({ service }: { service: HomeService }) {
-  const wa = whatsAppHref(serviceWhatsAppMessage(service.title));
-
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14" data-pagefind-body>
       <Link
@@ -63,18 +59,9 @@ export function ServicePageLayout({ service }: { service: HomeService }) {
       </ul>
 
       <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-        <TrackedWhatsAppLink
-          href={wa}
-          source="service"
-          context={{
-            contact_phone: site.contacts[0].phoneDisplay,
-            content_name: service.title,
-            page_type: "service",
-          }}
-          className="btn-primary bg-[#25D366] hover:bg-[#1fb855]"
-        >
-          <WhatsAppIcon className="h-5 w-5" /> Discuss your project
-        </TrackedWhatsAppLink>
+        <EnquiryLaunchButton launch={{ cta: "service" }} className="btn-primary">
+          Send an enquiry
+        </EnquiryLaunchButton>
         <Link href="/properties" className="btn-ghost justify-center">
           Browse properties
         </Link>
@@ -99,7 +86,7 @@ export function ServicePageLayout({ service }: { service: HomeService }) {
             </TrackedPhoneLink>
           </span>
         ))}{" "}
-        or message on WhatsApp with your locality, plot size and rough budget — we will outline
+        or send an enquiry with your locality, plot size and rough budget — we will outline
         the next step for {service.title.toLowerCase()} in Gulbarga (Kalaburagi).
       </p>
       <EnquiryPrivacyNote className="mt-3" />

@@ -3,10 +3,7 @@ import Link from "next/link";
 
 import { getLocalities } from "@/lib/properties";
 import { heroBlurDataUrl } from "@/lib/hero-blur";
-import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
-import { site } from "@/lib/site";
-
-import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
 import { SearchBar } from "@/components/search-bar";
 import {
   ArrowIcon,
@@ -14,7 +11,6 @@ import {
   HandshakeIcon,
   HomeIcon,
   PlotIcon,
-  WhatsAppIcon,
 } from "@/components/icons";
 
 const quickLinks = [
@@ -27,8 +23,6 @@ const quickLinks = [
 export async function HomeHero() {
   const localities = await getLocalities();
   const popularLocalities = localities.slice(0, 3);
-  const buildWa = whatsAppHref(serviceWhatsAppMessage("home construction or renovation"));
-
   return (
     <section className="bg-[#0f2a24]">
       <div className="mx-auto grid max-w-7xl lg:grid-cols-12 lg:min-h-[min(720px,calc(100svh-4rem))]">
@@ -88,18 +82,12 @@ export async function HomeHero() {
             ))}
           </div>
 
-          <TrackedWhatsAppLink
-            href={buildWa}
-            source="home_hero"
-            context={{
-              contact_phone: site.contacts[0].phoneDisplay,
-              content_name: "home construction or renovation",
-              page_type: "home",
-            }}
-            className="mt-6 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-semibold text-white hover:bg-[#1fb855]"
+          <EnquiryLaunchButton
+            launch={{ cta: "home_hero" }}
+            className="mt-6 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-[#0f2a24]"
           >
-            <WhatsAppIcon className="h-4 w-4" /> Discuss your project
-          </TrackedWhatsAppLink>
+            Send an enquiry
+          </EnquiryLaunchButton>
         </div>
 
         {/* Photography column — no headline overlay */}

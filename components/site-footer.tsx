@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-import {
-  TrackedPhoneLink,
-  TrackedWhatsAppLink,
-} from "@/components/analytics/tracked-contact";
+import { TrackedPhoneLink } from "@/components/analytics/tracked-contact";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
 import { getLocationPages } from "@/lib/locations";
 import { site } from "@/lib/site";
 
@@ -71,18 +69,11 @@ export async function SiteFooter() {
                 </TrackedPhoneLink>
               </li>
             ))}
-            {site.contacts.map((contact) => (
-              <li key={`wa-${contact.whatsapp}`}>
-                <TrackedWhatsAppLink
-                  href={`https://wa.me/${contact.whatsapp}`}
-                  source="footer"
-                  context={{ contact_phone: contact.phoneDisplay, page_type: "footer" }}
-                  className="hover:text-brand-600"
-                >
-                  WhatsApp {contact.phoneDisplay}
-                </TrackedWhatsAppLink>
-              </li>
-            ))}
+            <li>
+              <EnquiryLaunchButton launch={{ cta: "footer" }} className="font-semibold text-brand-700 hover:text-brand-600">
+                Send an enquiry
+              </EnquiryLaunchButton>
+            </li>
             <li>
               <a href={`mailto:${site.email}`} className="hover:text-brand-600">{site.email}</a>
             </li>

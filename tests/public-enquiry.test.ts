@@ -204,6 +204,7 @@ describe("public website enquiries", () => {
     assert.equal(attribution?.cta_placement, "property_card");
     assert.equal(attribution?.property_slug, "house-for-sale-sedam-road");
     assert.equal(attribution?.marketing_consent, 0);
+    assert.equal(attribution?.first_touch_verified, 0);
     assert.equal(await count(database, "properties"), 0);
     assert.equal(await count(database, "owner_leads"), 0);
     assert.equal("gclid" in result, false);
@@ -520,10 +521,11 @@ describe("public website enquiries", () => {
       { ...options("cookie-key-1"), attributionCookie: second, attributionSecret: secret },
     );
     const attribution = await database
-      .prepare("SELECT first_source, last_source, first_campaign, gclid, conversion_channel FROM acquisition_attributions WHERE entity_id = ?1")
+      .prepare("SELECT first_source, last_source, first_campaign, gclid, conversion_channel, first_touch_verified FROM acquisition_attributions WHERE entity_id = ?1")
       .bind(result.id)
-      .first<{ first_source: string; last_source: string; first_campaign: string; gclid: string; conversion_channel: string }>();
+      .first<{ first_source: string; last_source: string; first_campaign: string; gclid: string; conversion_channel: string; first_touch_verified: number }>();
     assert.equal(attribution?.first_source, "Google Ads");
+    assert.equal(attribution?.first_touch_verified, 1);
     assert.equal(attribution?.first_campaign, "sedam");
     assert.equal(attribution?.gclid, "click-1");
     assert.equal(attribution?.last_source, "Direct");
