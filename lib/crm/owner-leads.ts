@@ -229,14 +229,15 @@ export async function createOwnerLead(
   input: OwnerLeadInput,
   source: SourceInput,
   now: string,
+  write?: { id?: string; code?: string; alongside?: SqlStatement[] },
 ): Promise<OwnerLead> {
   const duplicateSource = await sourceIdForMetaLead(db, source.metaLeadId);
   if (duplicateSource) throw new HttpError(409, "That Meta lead was already imported.");
 
   const resolved = await resolveContact(db, actor, contact, "owner", now);
   const insertSource = insertSourceStatement(db, actor, source, now);
-  const id = newId("own");
-  const code = formatCode("GH-O", await nextSequence(db, "seq_owner_lead"));
+  const id = write?.id || newId("own");
+  const code = write?.code || formatCode("GH-O", await nextSequence(db, "seq_owner_lead"));
 
   try {
     await db.batch([
@@ -272,6 +273,7 @@ export async function createOwnerLead(
         context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId },
         at: now,
       }),
+      ...(write?.alongside ?? []),
     ]);
   } catch (error) {
     if (isUniqueViolation(error)) {

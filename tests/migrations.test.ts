@@ -113,7 +113,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
@@ -198,7 +198,7 @@ describe("migrations", () => {
       .run();
     const propertiesBefore = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16, 17]);
 
     const land = await db
       .prepare("SELECT village, answers_json, notes, verified_village, additional_phone_e164 FROM land_jv_enquiries WHERE id = 'ljv_existing'")
@@ -217,6 +217,7 @@ describe("migrations", () => {
     assert.equal(spend?.currency, "INR");
     const propertiesAfter = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
     assert.equal(propertiesAfter, propertiesBefore);
+    assert.equal(Number((await db.prepare("SELECT COUNT(*) AS n FROM acquisition_attributions").first<{ n: number }>())?.n), 0);
   });
 
   it("keeps the audit log append-only", async () => {

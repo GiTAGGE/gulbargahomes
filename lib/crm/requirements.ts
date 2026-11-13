@@ -351,14 +351,15 @@ export async function createRequirement(
   input: RequirementInput,
   source: SourceInput,
   now: string,
+  write?: { id?: string; code?: string; alongside?: SqlStatement[] },
 ): Promise<Requirement> {
   if (await sourceIdForMetaLead(db, source.metaLeadId)) {
     throw new HttpError(409, "That Meta lead was already imported.");
   }
   const resolved = await resolveContact(db, actor, contact, "seeker", now);
   const insertSource = insertSourceStatement(db, actor, source, now);
-  const id = newId("req");
-  const code = formatCode("GH-D", await nextSequence(db, "seq_requirement"));
+  const id = write?.id || newId("req");
+  const code = write?.code || formatCode("GH-D", await nextSequence(db, "seq_requirement"));
   const columns = {
     id,
     code,
@@ -392,6 +393,7 @@ export async function createRequirement(
         context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId },
         at: now,
       }),
+      ...(write?.alongside ?? []),
     ]);
   } catch (error) {
     if (isUniqueViolation(error)) {

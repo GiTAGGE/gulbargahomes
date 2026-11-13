@@ -10,7 +10,7 @@ import {
   type SqlValue,
 } from "../db/sql";
 import { assertVersion, text } from "./input";
-import { maskEmail, maskPhone, normalizeIndianMobile } from "./phone";
+import { maskEmail, maskPhone, normalizeContactPhone, normalizeIndianMobile } from "./phone";
 
 export type Contact = {
   id: string;
@@ -92,7 +92,7 @@ export async function getContact(db: SqlDb, id: string): Promise<Contact | null>
 }
 
 export async function findContactByPhone(db: SqlDb, phone: string): Promise<Contact | null> {
-  const e164 = normalizeIndianMobile(phone);
+  const e164 = normalizeContactPhone(phone);
   if (!e164) return null;
   const row = await db.prepare("SELECT * FROM contacts WHERE phone_e164 = ?1").bind(e164).first<ContactRow>();
   return row ? toContact(row) : null;
@@ -144,8 +144,8 @@ export async function resolveContact(
   role: "owner" | "seeker" | "land",
   now: string,
 ): Promise<{ contactId: string; created: boolean; statements: SqlStatement[] }> {
-  const phone = normalizeIndianMobile(input.phone);
-  if (!phone) throw new HttpError(400, "Enter a valid 10-digit Indian mobile number.");
+  const phone = normalizeContactPhone(input.phone);
+  if (!phone) throw new HttpError(400, "Enter a valid mobile number.");
   const flag = role === "owner" ? "is_owner" : role === "land" ? "is_land_jv" : "is_seeker";
 
   const existing = await findContactByPhone(db, phone);
