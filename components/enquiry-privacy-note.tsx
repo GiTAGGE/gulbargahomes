@@ -3,8 +3,8 @@ import Link from "next/link";
 export function EnquiryPrivacyNote({ className = "" }: { className?: string }) {
   return (
     <p className={`text-xs leading-relaxed text-ink-faint ${className}`}>
-      A call or WhatsApp message is not stored as a website account. Your number and what you
-      write stay in that phone or WhatsApp chat so GulbargaHomes can reply.{" "}
+      The enquiry form saves your name, phone and answers so GulbargaHomes can reply. A phone
+      call by itself is not saved as an enquiry.{" "}
       <Link
         href="/privacy-policy"
         className="font-semibold text-brand-700 underline-offset-2 hover:underline"

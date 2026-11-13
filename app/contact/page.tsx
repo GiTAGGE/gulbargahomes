@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 
-import {
-  TrackedPhoneLink,
-  TrackedWhatsAppLink,
-} from "@/components/analytics/tracked-contact";
+import { TrackedPhoneLink } from "@/components/analytics/tracked-contact";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
 import { EnquiryPrivacyNote } from "@/components/enquiry-privacy-note";
 import { JsonLd } from "@/components/jsonld";
 import { breadcrumbSchema, metaDescription } from "@/lib/seo";
@@ -18,10 +16,6 @@ export const metadata: Metadata = {
 };
 
 export default function ContactPage() {
-  const waText = encodeURIComponent(
-    "Hi GulbargaHomes, I want help finding a property in Gulbarga / Kalaburagi.",
-  );
-
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16" data-pagefind-body>
       <JsonLd
@@ -54,17 +48,9 @@ export default function ContactPage() {
             Call {contact.phoneDisplay}
           </TrackedPhoneLink>
         ))}
-        {site.contacts.map((contact) => (
-          <TrackedWhatsAppLink
-            key={`wa-${contact.whatsapp}`}
-            href={`https://wa.me/${contact.whatsapp}?text=${waText}`}
-            source="contact_page"
-            context={{ contact_phone: contact.phoneDisplay, page_type: "contact" }}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-soft"
-          >
-            WhatsApp {contact.phoneDisplay}
-          </TrackedWhatsAppLink>
-        ))}
+        <EnquiryLaunchButton launch={{ cta: "contact_page" }} className="btn-ghost justify-center">
+          Send an enquiry
+        </EnquiryLaunchButton>
         <a href={`mailto:${site.email}`} className="btn-ghost justify-center">
           {site.email}
         </a>

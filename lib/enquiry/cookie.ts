@@ -93,6 +93,34 @@ export function touchFromUrl(url: URL, referrer: string | null): TouchEvidence {
   });
 }
 
+function pageForVisit(pageUrl: string, referrer: string | null): { page: URL; externalReferrer: string | null } {
+  const page = new URL(pageUrl);
+  if (!referrer) return { page, externalReferrer: null };
+  try {
+    const source = new URL(referrer);
+    if (source.host === page.host) return { page: source, externalReferrer: null };
+    return { page, externalReferrer: referrer };
+  } catch {
+    return { page, externalReferrer: null };
+  }
+}
+
+/** Confirms a signed first touch, or creates one from the current page when the secret is set. */
+export async function establishAttribution(
+  current: string | null,
+  secret: string,
+  pageUrl: string,
+  referrer: string | null,
+  now: string,
+): Promise<{ established: boolean; sealed: string | null }> {
+  const existing = await openAttribution(current, secret, now);
+  if (existing) return { established: true, sealed: null };
+  if (!secret) return { established: false, sealed: null };
+  const { page, externalReferrer } = pageForVisit(pageUrl, referrer);
+  const sealed = await nextAttributionCookie(null, page, externalReferrer, secret, now);
+  return { established: Boolean(sealed), sealed };
+}
+
 export async function nextAttributionCookie(current: string | null, url: URL, referrer: string | null, secret: string, now: string): Promise<string | null> {
   const existing = await openAttribution(current, secret, now);
   const memory = rememberVisit(existing, touchFromUrl(url, referrer), now);

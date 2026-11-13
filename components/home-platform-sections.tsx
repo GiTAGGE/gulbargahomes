@@ -1,22 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import {
-  homeServices,
-  processSteps,
-  serviceWhatsAppMessage,
-  whatsAppHref,
-} from "@/lib/services";
+import { homeServices, processSteps } from "@/lib/services";
 import { getAllProjects } from "@/lib/projects";
-import { site } from "@/lib/site";
 
-import { TrackedWhatsAppLink } from "./analytics/tracked-contact";
+import { EnquiryLaunchButton } from "./enquiry/enquiry-provider";
 import { ProjectPortfolioShowcase } from "./project-portfolio";
-import { ArrowIcon, WhatsAppIcon } from "./icons";
+import { ArrowIcon } from "./icons";
 
 export function HomeBuildRenovateSection() {
-  const wa = whatsAppHref(serviceWhatsAppMessage("a home project"));
-
   return (
     <section
       id="build-renovate"
@@ -50,18 +42,9 @@ export function HomeBuildRenovateSection() {
             >
               View projects <ArrowIcon className="h-4 w-4" />
             </Link>
-            <TrackedWhatsAppLink
-              href={wa}
-              source="home_build"
-              context={{
-                contact_phone: site.contacts[0].phoneDisplay,
-                content_name: "a home project",
-                page_type: "home",
-              }}
-              className="btn-primary shrink-0 bg-[#25D366] hover:bg-[#1fb855]"
-            >
-              <WhatsAppIcon className="h-5 w-5" /> Discuss your project
-            </TrackedWhatsAppLink>
+            <EnquiryLaunchButton launch={{ cta: "home_build" }} className="btn-primary shrink-0">
+              Send an enquiry
+            </EnquiryLaunchButton>
           </div>
         </div>
 
@@ -139,10 +122,6 @@ export function HomeProjectsShowcase() {
 }
 
 export function HomeTrustSection() {
-  const wa = whatsAppHref(
-    "Hi GulbargaHomes, I'd like help with a property or home project in Gulbarga / Kalaburagi.",
-  );
-
   return (
     <section className="border-t border-brand-100 bg-white">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
@@ -172,10 +151,10 @@ export function HomeTrustSection() {
           </div>
 
           <div className="rounded-3xl border border-brand-100 bg-gradient-to-br from-surface to-white p-6 shadow-soft sm:p-8">
-            <h3 className="text-lg font-bold text-ink">Real work & WhatsApp-first enquiries</h3>
+            <h3 className="text-lg font-bold text-ink">Real work and a saved enquiry</h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-              Open WhatsApp from any property or service page with details prefilled — share
-              locality, budget and site photos for a faster response in Kannada, Hindi or English.
+              Send an enquiry with the locality and budget first. You get a reference number, then
+              you can continue the same conversation on WhatsApp in Kannada, Hindi or English.
             </p>
             <ul className="mt-6 space-y-3 text-sm text-ink-muted">
               <li className="flex gap-2">
@@ -190,18 +169,9 @@ export function HomeTrustSection() {
                 <span className="text-brand-600">✓</span> Local team serving Gulbarga & Kalaburagi
               </li>
             </ul>
-            <TrackedWhatsAppLink
-              href={wa}
-              source="home_trust"
-              context={{
-                contact_phone: site.contacts[0].phoneDisplay,
-                content_name: "general enquiry",
-                page_type: "home",
-              }}
-              className="btn-primary mt-8 w-full bg-[#25D366] hover:bg-[#1fb855] sm:w-auto"
-            >
-              <WhatsAppIcon className="h-5 w-5" /> Chat on WhatsApp
-            </TrackedWhatsAppLink>
+            <EnquiryLaunchButton launch={{ cta: "home_trust" }} className="btn-primary mt-8 w-full sm:w-auto">
+              Send an enquiry
+            </EnquiryLaunchButton>
           </div>
         </div>
       </div>

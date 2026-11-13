@@ -142,6 +142,7 @@ async function attributionOf(body: Record<string, unknown>, now: string, cookie:
     propertyTitle: text(raw.propertyTitle, 120),
     listingIntent: raw.listingIntent === "Buy" || raw.listingIntent === "Rent" ? raw.listingIntent : "",
     listingLocality: text(raw.listingLocality, 80),
+    firstTouchVerified: Boolean(signed),
   };
 }
 
@@ -222,8 +223,8 @@ function attributionStatements(
            first_source, first_medium, first_campaign, first_campaign_id, first_term, first_content, first_landing_page, first_referrer, first_referrer_domain, first_seen_at,
            last_source, last_medium, last_campaign, last_campaign_id, last_term, last_content, last_landing_page, last_referrer, last_referrer_domain, last_seen_at,
            referrer_domain, enquiry_page, conversion_channel, cta_placement, property_slug, property_title, listing_intent, listing_locality,
-           gclid, gbraid, wbraid, fbclid, fbp, fbc, marketing_consent, created_at
-         ) VALUES (${Array.from({ length: 39 }, (_, index) => `?${index + 1}`).join(", ")})`,
+           gclid, gbraid, wbraid, fbclid, fbp, fbc, marketing_consent, first_touch_verified, created_at
+         ) VALUES (${Array.from({ length: 40 }, (_, index) => `?${index + 1}`).join(", ")})`,
       )
       .bind(
         newId("acq"),
@@ -264,6 +265,7 @@ function attributionStatements(
         last.fbp || first.fbp,
         last.fbc || first.fbc,
         marketingConsent ? 1 : 0,
+        attribution.firstTouchVerified ? 1 : 0,
         now,
       ),
     auditStatement(db, {
@@ -271,7 +273,7 @@ function attributionStatements(
       entityType: target.entityType,
       entityId,
       action: "attribute",
-      context: { first_source: first.source, last_source: last.source, conversion_channel: channel },
+      context: { first_source: first.source, last_source: last.source, conversion_channel: channel, first_touch_verified: attribution.firstTouchVerified },
       at: now,
     }),
     db

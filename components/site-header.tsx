@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
 import { site } from "@/lib/site";
 import { trackPhoneClick } from "@/lib/analytics/track";
 
@@ -121,6 +122,9 @@ export function SiteHeader() {
             <div className="hidden sm:block">
               <SiteSearch />
             </div>
+            <EnquiryLaunchButton launch={{ cta: "header" }} className="btn-ghost hidden px-3 py-2 text-xs lg:inline-flex">
+              Enquire
+            </EnquiryLaunchButton>
             <div className="hidden items-center gap-1.5 xl:flex">
               {site.contacts.map((contact) => (
                 <a
@@ -215,6 +219,13 @@ export function SiteHeader() {
               <div className="mt-2 border-t border-brand-100 pt-3 px-1">
                 <SiteSearch />
               </div>
+              <EnquiryLaunchButton
+                launch={{ cta: "mobile_menu" }}
+                className="btn-ghost mt-3 w-full justify-center"
+                ariaLabel="Send an enquiry"
+              >
+                Send an enquiry
+              </EnquiryLaunchButton>
               {site.contacts.map((contact) => (
                 <a
                   key={contact.phone}

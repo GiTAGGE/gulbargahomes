@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { GoogleAnalytics } from "@/components/analytics/google-analytics";
 import { MicrosoftClarity } from "@/components/analytics/microsoft-clarity";
 import { AnalyticsPageView } from "@/components/analytics/page-view";
+import { EnquiryProvider } from "@/components/enquiry/enquiry-provider";
 import { FloatingContact } from "@/components/floating-contact";
 import { JsonLd } from "@/components/jsonld";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
@@ -66,11 +67,13 @@ export default function RootLayout({
         </Suspense>
         <JsonLd data={localBusinessSchema()} />
         <JsonLd data={websiteSchema()} />
-        <SiteHeader />
-        <main className="min-h-screen overflow-x-clip pb-20 md:pb-0">{children}</main>
-        <SiteFooter />
-        <FloatingContact />
-        <MobileBottomNav />
+        <EnquiryProvider>
+          <SiteHeader />
+          <main className="min-h-screen overflow-x-clip pb-20 md:pb-0">{children}</main>
+          <SiteFooter />
+          <FloatingContact />
+          <MobileBottomNav />
+        </EnquiryProvider>
       </body>
     </html>
   );

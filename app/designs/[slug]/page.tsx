@@ -2,11 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
-import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
+import { ArrowIcon } from "@/components/icons";
 import { getAllDesigns, getDesign } from "@/lib/designs";
-import { serviceWhatsAppMessage, whatsAppHref } from "@/lib/services";
-import { site } from "@/lib/site";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -28,10 +26,6 @@ export default async function DesignDetailPage({ params }: Props) {
   const { slug } = await params;
   const design = getDesign(slug);
   if (!design) notFound();
-
-  const wa = whatsAppHref(
-    serviceWhatsAppMessage(`a similar ${design.roomType.toLowerCase()} design (${design.title})`),
-  );
 
   return (
     <article className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14" data-pagefind-body>
@@ -56,18 +50,9 @@ export default async function DesignDetailPage({ params }: Props) {
         <div className="prose-property mt-6 whitespace-pre-wrap">{design.body}</div>
       )}
 
-      <TrackedWhatsAppLink
-        href={wa}
-        source="design"
-        context={{
-          contact_phone: site.contacts[0].phoneDisplay,
-          content_name: design.title,
-          page_type: "design",
-        }}
-        className="btn-primary mt-10 bg-[#25D366] hover:bg-[#1fb855]"
-      >
-        <WhatsAppIcon className="h-5 w-5" /> Discuss this design
-      </TrackedWhatsAppLink>
+      <EnquiryLaunchButton launch={{ cta: "design" }} className="btn-primary mt-10">
+        Discuss this design
+      </EnquiryLaunchButton>
     </article>
   );
 }

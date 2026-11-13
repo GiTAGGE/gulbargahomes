@@ -2,11 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { TrackedWhatsAppLink } from "@/components/analytics/tracked-contact";
-import { ArrowIcon, WhatsAppIcon } from "@/components/icons";
+import { EnquiryLaunchButton } from "@/components/enquiry/enquiry-provider";
+import { ArrowIcon } from "@/components/icons";
 import { getAllProjects, getProject, projectMetaLine } from "@/lib/projects";
-import { projectWhatsAppMessage, whatsAppHref } from "@/lib/services";
-import { site } from "@/lib/site";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -29,7 +27,6 @@ export default async function ProjectDetailPage({ params }: Props) {
   const project = getProject(slug);
   if (!project) notFound();
 
-  const wa = whatsAppHref(projectWhatsAppMessage(project.name));
   const backHref =
     project.status === "ongoing"
       ? "/projects/ongoing"
@@ -112,18 +109,9 @@ export default async function ProjectDetailPage({ params }: Props) {
         </div>
       )}
 
-      <TrackedWhatsAppLink
-        href={wa}
-        source="project"
-        context={{
-          contact_phone: site.contacts[0].phoneDisplay,
-          content_name: project.name,
-          page_type: "project",
-        }}
-        className="btn-primary mt-10 bg-[#25D366] hover:bg-[#1fb855]"
-      >
-        <WhatsAppIcon className="h-5 w-5" /> Enquire about a similar project
-      </TrackedWhatsAppLink>
+      <EnquiryLaunchButton launch={{ cta: "project" }} className="btn-primary mt-10">
+        Enquire about a similar project
+      </EnquiryLaunchButton>
     </article>
   );
 }

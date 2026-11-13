@@ -662,6 +662,14 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_enquiry_attempts_ip ON public_enquiry_attempts (ip_hash, created_at)`,
     ],
   },
+  {
+    // A first touch is verified only when the signed attribution cookie was present.
+    version: 18,
+    name: "enquiry_first_touch_verified",
+    statements: [
+      `ALTER TABLE acquisition_attributions ADD COLUMN first_touch_verified INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
