@@ -6,7 +6,8 @@ import { createFollowup, listFollowups, logActivity, parseActivityInput, updateF
 import { findContactByPhone } from "../lib/crm/contacts";
 import { intentScore } from "../lib/crm/intent-score";
 import { convertOwnerLead, createOwnerLead, getOwnerLead, setOwnerLeadRoleReview, updateOwnerLead } from "../lib/crm/owner-leads";
-import { createRequirement, getRequirement, parseRequirementInput } from "../lib/crm/requirements";
+import { formatHistoryChanges } from "../lib/admin/history-format";
+import { createRequirement, getRequirement, parseRequirementInput, setRequirementQuality, updateRequirement } from "../lib/crm/requirements";
 import { parseSourceInput } from "../lib/crm/sources";
 import { endOfIstDay } from "../lib/crm/today";
 import { prepareDatabase } from "../lib/db/prepare";
@@ -255,6 +256,74 @@ describe("requirements", () => {
     };
     assert.equal(intentScore(vague).band, "Low");
     assert.equal(intentScore({ ...vague, priorityOverride: "High" }).band, "High");
+    assert.equal(intentScore(vague).factors.find((factor) => factor.label === "Engagement")?.points, 0);
+    assert.equal(intentScore({ ...vague, engagementCount: 1 }).factors.find((factor) => factor.label === "Engagement")?.points, 10);
+  });
+
+  it("keeps a new requirement pending and counts a WhatsApp or call as engagement", async () => {
+    const db = await setup();
+    const input = parseRequirementInput({
+      intent: "Rent",
+      propertyTypes: ["Plot"],
+      localities: ["Timmapuri"],
+      budgetMin: 5000,
+      budgetMax: 10000,
+      timeline: "Within 7 days",
+      notes: "Corner preferred",
+    });
+    input.preferenceDetails = { profile: "Rent:Plot", intendedUse: "Commercial", plotArea: "30 × 40", leaseDuration: "1 year" };
+    const requirement = await createRequirement(
+      db,
+      actor,
+      { name: "Veer", phone: "9900099000" },
+      input,
+      parseSourceInput({ channel: "website" }),
+      NOW,
+    );
+    assert.equal(requirement.status, "New");
+    assert.equal(requirement.qualityReview, "");
+    assert.equal(requirement.intentScore.factors.find((factor) => factor.label === "Engagement")?.points, 0);
+
+    await assert.rejects(
+      updateRequirement(db, actor, requirement, { status: "Qualified" }, { now: NOW, expectedVersion: requirement.rowVersion }),
+      /stays pending/,
+    );
+    assert.equal((await getRequirement(db, requirement.id))?.status, "New");
+
+    await logActivity(
+      db,
+      actor,
+      parseActivityInput({
+        entityType: "requirement",
+        entityId: requirement.id,
+        contactId: requirement.contactId,
+        kind: "whatsapp",
+        outcome: "sent",
+      }),
+      NOW,
+    );
+    const afterMessage = (await getRequirement(db, requirement.id, new Date(NOW)))!;
+    assert.equal(afterMessage.status, "New");
+    assert.equal(afterMessage.qualityReview, "");
+    assert.equal(afterMessage.engagementCount, 1);
+    assert.equal(afterMessage.intentScore.factors.find((factor) => factor.label === "Engagement")?.points, 10);
+
+    const audit = await listAudit(db, { entityType: "requirement", entityId: requirement.id });
+    const created = audit.find((entry) => entry.action === "create");
+    const lines = formatHistoryChanges(created?.changes ?? {});
+    assert.equal(lines.some((line) => line.text.includes("more fields")), false);
+    assert.equal(lines.find((line) => line.label === "Intended use")?.text, "Commercial");
+    assert.equal(lines.find((line) => line.label === "Required plot area")?.text, "30 × 40");
+    assert.equal(lines.find((line) => line.label === "Lease duration")?.text, "1 year");
+    assert.equal(lines.find((line) => line.label === "Additional requirements")?.text, "Corner preferred");
+
+    const verified = await setRequirementQuality(db, actor, afterMessage, "genuine", "Spoke to Veer and confirmed the plot.", {
+      now: NOW,
+      expectedVersion: afterMessage.rowVersion,
+    });
+    const qualified = await updateRequirement(db, actor, verified, { status: "Qualified" }, { now: NOW, expectedVersion: verified.rowVersion });
+    assert.equal(qualified.status, "Qualified");
+    assert.equal(qualified.qualityReview, "genuine");
   });
 });
 

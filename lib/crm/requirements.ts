@@ -93,6 +93,7 @@ export type Requirement = {
   originOwnerLeadId: string | null;
   qualityReview: StoredReview;
   qualityReviewNote: string;
+  engagementCount: number;
   intentScore: IntentScore;
 };
 
@@ -141,10 +142,12 @@ type RequirementRow = {
   origin_owner_lead_id: string | null;
   quality_review: string | null;
   quality_review_note: string | null;
+  engagement_count?: number | null;
 };
 
 const SELECT = `SELECT r.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
-  s.channel AS channel, s.meta_campaign_name AS campaign_name, s.meta_form_id AS form_id, s.meta_form_name AS form_name
+  s.channel AS channel, s.meta_campaign_name AS campaign_name, s.meta_form_id AS form_id, s.meta_form_name AS form_name,
+  (SELECT COUNT(*) FROM activities a WHERE a.entity_type = 'requirement' AND a.entity_id = r.id) AS engagement_count
   FROM demand_requirements r
   JOIN contacts c ON c.id = r.contact_id
   LEFT JOIN lead_sources s ON s.id = r.source_id`;
@@ -202,6 +205,7 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     originOwnerLeadId: row.origin_owner_lead_id,
     qualityReview: qualityReview === "misclassified" ? "" : qualityReview,
     qualityReviewNote: row.quality_review_note ?? "",
+    engagementCount: Number(row.engagement_count ?? 0),
     intentScore: intentScore(
       {
         timeline,
@@ -212,6 +216,7 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
         bhkMin: row.bhk_min,
         status,
         lastContactedAt: row.last_contacted_at,
+        engagementCount: Number(row.engagement_count ?? 0),
         createdAt: row.created_at,
         priorityOverride: row.priority_override,
       },
@@ -413,6 +418,18 @@ export async function createRequirement(
   return (await getRequirement(db, id))!;
 }
 
+/** Stages that mean the enquiry is verified. Pending reviews cannot skip ahead to these. */
+const ADVANCED_REQUIREMENT_STATUSES = new Set<RequirementStatus>([
+  "Verified",
+  "Qualified",
+  "Matched",
+  "Property shared",
+  "Visit scheduled",
+  "Visited",
+  "Negotiation",
+  "Converted",
+]);
+
 export async function updateRequirement(
   db: SqlDb,
   actor: AuditActor,
@@ -427,6 +444,12 @@ export async function updateRequirement(
   if (input.status !== undefined) {
     const status = strictOneOf(input.status, REQUIREMENT_STATUSES);
     if (!status) throw new HttpError(400, "Choose a valid status.");
+    if (ADVANCED_REQUIREMENT_STATUSES.has(status) && current.qualityReview !== "genuine") {
+      throw new HttpError(
+        400,
+        "This enquiry stays pending until a member of staff verifies the contact and the requirement.",
+      );
+    }
     next.status = status;
     next.status_reason = text(input.statusReason, 300);
     const closing = REQUIREMENT_CLOSED.includes(status);
