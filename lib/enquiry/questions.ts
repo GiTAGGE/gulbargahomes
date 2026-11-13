@@ -246,10 +246,18 @@ function facilitiesOf(value: unknown): (typeof FACILITY_OPTIONS)[number][] | und
   return chosen.length ? chosen : undefined;
 }
 
-function digitsOnly(value: string): number | null {
-  if (!/^\d{1,8}$/.test(value)) return null;
-  const amount = Number(value);
-  return amount > 0 ? amount : null;
+const SQUARE_FEET = /^(\d{1,3}(?:,\d{3})+|\d{1,8})\s*(?:sq\.?\s*ft\.?|sqft|square\s+feet)\.?$/i;
+
+/**
+ * Square feet only when the whole answer says so. `30x40` and `1200` stay text.
+ * A number alone is not treated as square feet.
+ */
+export function squareFeetIfSpecified(value: string): number | null {
+  const match = value.trim().match(SQUARE_FEET);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  if (!Number.isInteger(amount) || amount < 1 || amount > 10_000_000) return null;
+  return amount;
 }
 
 /**
@@ -296,16 +304,13 @@ export function parseWebsitePreferences(intent: "Buy" | "Rent", type: PropertyTy
   if (sharing) details.sharing = sharing;
   if (facilities) details.facilities = facilities;
   if (parking) details.parking = parking;
-  if (furnishing !== "Any") {
-    // Kept on the furnishing column. The profile says it was asked.
-  }
   return {
     bhkMin,
     bhkMax: bhkMax ?? bhkMin,
     furnishing,
     tenantProfile,
     parkingRequired: parking === "Yes",
-    areaMin: areaFromQuestion ?? (plotArea ? digitsOnly(plotArea) : null),
+    areaMin: areaFromQuestion ?? (plotArea ? squareFeetIfSpecified(plotArea) : null),
     notes,
     details,
   };
@@ -370,6 +375,7 @@ type PreferenceView = {
   tenantProfile: string;
   parkingRequired: boolean;
   areaMin: number | null;
+  notes: string;
 };
 
 function bhkLabel(min: number | null, max: number | null): string {
@@ -405,7 +411,54 @@ export function preferenceLines(requirement: PreferenceView): PreferenceLine[] {
       value = details.parking === "Yes" || requirement.parkingRequired ? "Needed" : details.parking === "No" ? "Not needed" : "";
     }
     if (question.key === "areaMin" && requirement.areaMin) value = `${requirement.areaMin} sq ft`;
+    if (question.key === "notes") value = requirement.notes.trim();
     if (value) lines.push({ label: question.label, value });
   }
   return lines;
+}
+
+function legacyBhk(min: number | null, max: number | null): string {
+  if (min === null && max === null) return "Any";
+  if (max === null) return `${min}+`;
+  if (min === null || min === max) return `${max}`;
+  return `${min}–${max}`;
+}
+
+export type RequirementDetail = PreferenceView & {
+  intent: "Buy" | "Rent";
+  propertyTypes: string[];
+  localities: string[];
+  localityFlexible: boolean;
+  vegetarian: string;
+  timeline: string;
+  budgetText: string;
+  neededByText: string;
+  lastContactedText: string;
+};
+
+/** Every field the requirement page shows. Legacy rows keep their original fields. */
+export function requirementDetailFields(requirement: RequirementDetail): PreferenceLine[] {
+  const places = requirement.localities.join(", ") || "Any";
+  const fields: PreferenceLine[] = [
+    { label: "Types", value: requirement.propertyTypes.join(", ") || "Any" },
+    { label: "Budget", value: requirement.budgetText },
+    { label: "Localities", value: requirement.localityFlexible ? `${places} (nearby OK)` : places },
+    { label: "How soon", value: requirement.timeline },
+    { label: "Needed by", value: requirement.neededByText },
+  ];
+  if (!requirement.preferenceDetails.profile) {
+    fields.push(
+      { label: "BHK", value: legacyBhk(requirement.bhkMin, requirement.bhkMax) },
+      { label: "Furnishing", value: requirement.furnishing },
+      ...(requirement.intent === "Rent" ? [{ label: "Tenant profile", value: requirement.tenantProfile }] : []),
+      { label: "Vegetarian", value: requirement.vegetarian },
+      { label: "Parking", value: requirement.parkingRequired ? "Required" : "Not needed" },
+      { label: "Min area", value: requirement.areaMin ? `${requirement.areaMin} sqft` : "Any" },
+    );
+  } else {
+    fields.push(...preferenceLines(requirement));
+    if (requirement.vegetarian !== "Any") fields.push({ label: "Vegetarian", value: requirement.vegetarian });
+  }
+  fields.push({ label: "Last contacted", value: requirement.lastContactedText });
+  return fields;
 }

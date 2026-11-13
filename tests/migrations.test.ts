@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import { applyMigrations, LATEST_SCHEMA_VERSION, MIGRATIONS } from "../lib/db/migrations";
 import { prepareDatabase } from "../lib/db/prepare";
+import { getRequirement } from "../lib/crm/requirements";
+import { requirementDetailFields } from "../lib/enquiry/questions";
 import { contentColumns, insertSql, rowToProperty, type PropertyRow } from "../lib/db/property-rows";
 import { loadSeedProperties } from "../lib/property-normalize";
 import { createTestDb } from "./helpers/sqlite";
@@ -219,6 +221,76 @@ describe("migrations", () => {
     const propertiesAfter = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
     assert.equal(propertiesAfter, propertiesBefore);
     assert.equal(Number((await db.prepare("SELECT COUNT(*) AS n FROM acquisition_attributions").first<{ n: number }>())?.n), 0);
+  });
+
+  it("migration 19 adds preference details without changing an existing requirement", async () => {
+    const db = createTestDb();
+    await db
+      .prepare("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+      .run();
+    for (const migration of MIGRATIONS.filter((item) => item.version < 19)) {
+      await db.batch([
+        ...migration.statements.map((sql) => db.prepare(sql)),
+        db
+          .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)")
+          .bind(migration.version, migration.name, "2026-11-13T00:00:00.000Z"),
+      ]);
+    }
+    await db
+      .prepare(
+        `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+         VALUES ('con_before', 'GH-C0099', 'Before Nineteen', '+919845012196', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO demand_requirements (
+           id, code, contact_id, intent, property_types_json, bhk_min, bhk_max, localities_json,
+           furnishing, tenant_profile, vegetarian, parking_required, area_min, timeline, notes,
+           created_at, created_by, updated_at, updated_by
+         ) VALUES (
+           'req_before', 'GH-D0099', 'con_before', 'Rent', '["Flat"]', 2, 3, '["High Court"]',
+           'Fully Furnished', 'Family', 'Yes', 1, 900, 'Within 7 days', 'Needs a puja room',
+           't', 'a', 't', 'a'
+         )`,
+      )
+      .run();
+
+    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [19]);
+    const row = await db
+      .prepare(
+        `SELECT vegetarian, furnishing, tenant_profile, notes, bhk_min, area_min, parking_required, preference_details_json
+         FROM demand_requirements WHERE id = 'req_before'`,
+      )
+      .first<{
+        vegetarian: string;
+        furnishing: string;
+        tenant_profile: string;
+        notes: string;
+        bhk_min: number;
+        area_min: number;
+        parking_required: number;
+        preference_details_json: string;
+      }>();
+    assert.equal(row?.vegetarian, "Yes");
+    assert.equal(row?.furnishing, "Fully Furnished");
+    assert.equal(row?.tenant_profile, "Family");
+    assert.equal(row?.notes, "Needs a puja room");
+    assert.equal(row?.bhk_min, 2);
+    assert.equal(row?.area_min, 900);
+    assert.equal(row?.parking_required, 1);
+    assert.equal(row?.preference_details_json, "{}");
+    assert.deepEqual(await applyMigrations(db), []);
+
+    const loaded = await getRequirement(db, "req_before");
+    const fields = requirementDetailFields({ ...loaded!, budgetText: "rent", neededByText: "—", lastContactedText: "—" });
+    assert.equal(fields.find((field) => field.label === "Vegetarian")?.value, "Yes");
+    assert.equal(fields.find((field) => field.label === "Furnishing")?.value, "Fully Furnished");
+    assert.equal(fields.find((field) => field.label === "Tenant profile")?.value, "Family");
+    assert.equal(fields.find((field) => field.label === "Parking")?.value, "Required");
+    assert.equal(fields.find((field) => field.label === "Min area")?.value, "900 sqft");
+    assert.equal(fields.find((field) => field.label === "BHK")?.value, "2–3");
+    assert.equal(loaded?.notes, "Needs a puja room");
   });
 
   it("keeps the audit log append-only", async () => {
