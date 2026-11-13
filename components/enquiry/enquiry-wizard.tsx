@@ -39,8 +39,6 @@ import {
 } from "@/lib/enquiry/wizard";
 import { site } from "@/lib/site";
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
-
 type TurnstileApi = {
   render: (
     element: HTMLElement,
@@ -85,6 +83,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [established, setEstablished] = useState<boolean | null>(null);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [result, setResult] = useState<{ code: string; summary: string } | null>(null);
   const gate = useRef<SaveGate>({ phase: "idle", key: newIdempotencyKey() });
@@ -100,7 +99,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
     document.body.style.overflow = "hidden";
     restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
-    void refreshAttribution(setEstablished);
+    void refreshAttribution(setEstablished, setSiteKey);
     function onKey(event: KeyboardEvent) {
       const dialog = dialogRef.current;
       if (!dialog) return;
@@ -134,13 +133,13 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
   }, [onClose]);
 
   useEffect(() => {
-    if (step !== "contact" || !TURNSTILE_SITE_KEY || !turnstileHost.current) return;
+    if (step !== "contact" || !siteKey || !turnstileHost.current) return;
     let widgetId = "";
     let cancelled = false;
     const render = () => {
       if (cancelled || !turnstileHost.current || !window.turnstile) return;
       widgetId = window.turnstile.render(turnstileHost.current, {
-        sitekey: TURNSTILE_SITE_KEY,
+        sitekey: siteKey,
         callback: setTurnstileToken,
         "expired-callback": () => setTurnstileToken(""),
       });
@@ -157,7 +156,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
       cancelled = true;
       if (widgetId && window.turnstile) window.turnstile.reset(widgetId);
     };
-  }, [step]);
+  }, [siteKey, step]);
 
   function update(patch: Partial<WizardDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -185,7 +184,8 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
       setError(problem);
       return;
     }
-    if (!TURNSTILE_SITE_KEY) {
+    const ready = await refreshAttribution(setEstablished, setSiteKey);
+    if (!ready.siteKey) {
       setError("Enquiry saving is not open until the site check is configured. Please call us instead.");
       return;
     }
@@ -200,7 +200,6 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
     setError(null);
     let saved = false;
     try {
-      const ready = await refreshAttribution(setEstablished);
       const context = { ...launch, page };
       const body =
         draft.path === "owner"
@@ -219,7 +218,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
       const handoff = enquiryHandoff(payload.code, draft);
       setResult({ code: handoff.code, summary: handoff.summary });
       saved = true;
-      if (!ready) setEstablished(false);
+      if (!ready.established) setEstablished(false);
     } catch {
       setError("The enquiry could not be saved. You can try again with the same details.");
     } finally {
@@ -438,7 +437,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
                 <input type="checkbox" className="mt-1" checked={draft.marketingConsent} onChange={(event) => update({ marketingConsent: event.target.checked })} />
                 <span>Send me occasional property updates. This is optional.</span>
               </label>
-              {!TURNSTILE_SITE_KEY && (
+              {siteKey === "" && (
                 <p className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-ink">
                   Enquiry saving is not open until the site check is configured. You can still call {site.phoneDisplay}.
                 </p>
@@ -682,15 +681,21 @@ function SuccessHandoff({
   );
 }
 
-async function refreshAttribution(setEstablished: (value: boolean) => void): Promise<boolean> {
+async function refreshAttribution(
+  setEstablished: (value: boolean) => void,
+  setSiteKey: (value: string) => void,
+): Promise<{ established: boolean; siteKey: string }> {
   try {
     const response = await fetch("/api/enquiries/attribution", { credentials: "same-origin", cache: "no-store" });
-    const payload = (await response.json()) as { established?: boolean };
+    const payload = (await response.json()) as { established?: boolean; siteKey?: string };
     const established = Boolean(payload.established);
+    const siteKey = typeof payload.siteKey === "string" ? payload.siteKey : "";
     setEstablished(established);
-    return established;
+    setSiteKey(siteKey);
+    return { established, siteKey };
   } catch {
     setEstablished(false);
-    return false;
+    setSiteKey("");
+    return { established: false, siteKey: "" };
   }
 }

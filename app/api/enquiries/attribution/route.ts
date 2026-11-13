@@ -1,4 +1,5 @@
 import { ATTRIBUTION_COOKIE, attributionCookieHeader, establishAttribution } from "@/lib/enquiry/cookie";
+import { turnstileSiteKey } from "@/lib/enquiry/site-key";
 
 function readCookie(header: string | null, name: string): string | null {
   if (!header) return null;
@@ -24,5 +25,5 @@ export async function GET(request: Request) {
   if (result.sealed) {
     headers.append("set-cookie", attributionCookieHeader(result.sealed, new URL(request.url).protocol === "https:"));
   }
-  return new Response(JSON.stringify({ established: result.established }), { status: 200, headers });
+  return new Response(JSON.stringify({ established: result.established, siteKey: turnstileSiteKey() }), { status: 200, headers });
 }
