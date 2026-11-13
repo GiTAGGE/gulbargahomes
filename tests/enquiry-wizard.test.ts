@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { GET as attributionRoute } from "../app/api/enquiries/attribution/route";
 import { classifyTouch } from "../lib/enquiry/attribution";
+import { turnstileSiteKey } from "../lib/enquiry/site-key";
 import { establishAttribution, nextAttributionCookie, openAttribution } from "../lib/enquiry/cookie";
 import { preferenceQuestions, questionsFor } from "../lib/enquiry/questions";
 import {
@@ -147,6 +149,24 @@ describe("enquiry wizard", () => {
     const saved = finishSave(second!, true);
     assert.equal(saved.phase, "saved");
     assert.equal(startSave(saved), null);
+  });
+
+  it("gives the enquiry wizard the Turnstile site key from the Worker binding", async () => {
+    const binding = "NEXT_PUBLIC_" + "TURNSTILE_SITE_KEY";
+    const previous = process.env[binding];
+    process.env[binding] = "site-key-from-worker";
+    try {
+      assert.equal(turnstileSiteKey(), "site-key-from-worker");
+      const response = await attributionRoute(new Request("https://gulbargahomes.com/api/enquiries/attribution"));
+      const body = (await response.json()) as { established?: boolean; siteKey?: string };
+      assert.equal(response.status, 200);
+      assert.equal(body.siteKey, "site-key-from-worker");
+      assert.equal(body.established, false);
+    } finally {
+      if (previous === undefined) delete process.env[binding];
+      else process.env[binding] = previous;
+    }
+    assert.equal(turnstileSiteKey(), (previous ?? "").trim());
   });
 
   it("establishes a signed first touch before a visitor can replace it", async () => {
