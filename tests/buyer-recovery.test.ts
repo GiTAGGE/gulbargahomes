@@ -162,6 +162,22 @@ async function count(db: Awaited<ReturnType<typeof connect>>["db"], sql: string)
   return Number(row?.n ?? 0);
 }
 
+function limitBoundParameters(db: Awaited<ReturnType<typeof connect>>["db"], max: number) {
+  const used: number[] = [];
+  const limited = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop !== "prepare") return Reflect.get(target, prop, receiver);
+      return (sql: string) => {
+        const binds = (sql.match(/\?/g) ?? []).length;
+        if (binds > max) throw new Error(`D1_ERROR: too many SQL variables (${binds})`);
+        used.push(binds);
+        return target.prepare(sql);
+      };
+    },
+  });
+  return { db: limited, used };
+}
+
 async function seedRun(db: Awaited<ReturnType<typeof connect>>["db"], clock: Clock, runId: string) {
   await db
     .prepare(
@@ -396,6 +412,59 @@ describe("historical buyer and renter recovery", () => {
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM properties"), 0);
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM land_jv_enquiries"), 0);
     assert.equal(await count(db, "SELECT COUNT(*) AS n FROM ad_spend_daily"), 0);
+  });
+
+  it("previews 143 leads and more than 100 phones without exceeding 100 D1 parameters", async () => {
+    const leads = allLeads();
+    const { db, clock, runtime } = await connect(leads);
+    const limited = limitBoundParameters(db, 100);
+    runtime.db = limited.db;
+    await classify(db, clock.iso());
+    const earlyId = String(860000000000000 + 10);
+    const laterId = String(860000000000000 + 120);
+    await db
+      .prepare(
+        `INSERT INTO meta_lead_ingestions (id, leadgen_id, origin, status, next_attempt_at, received_at, updated_at)
+         VALUES ('mli_chunkearly00000001', ?1, 'webhook', 'done', ?2, ?2, ?2)`,
+      )
+      .bind(earlyId, clock.iso())
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO lead_sources (id, channel, meta_lead_id, submitted_at, created_at, created_by)
+         VALUES ('src_chunklater0000001', 'meta_lead_form', ?1, ?2, ?2, ?3)`,
+      )
+      .bind(laterId, clock.iso(), admin.id)
+      .run();
+    await createOwnerLead(
+      db,
+      admin,
+      { name: "Early contact", phone: "9000000001" },
+      { intent: "Rent", propertyType: "House", locality: "Sedam Road", locationText: "", expectedPrice: 14000, notes: "early", priority: "Warm" },
+      parseSourceInput({ channel: "meta_lead_form", metaLeadId: "chunk-early", metaCampaignId: "other-campaign", metaFormId: "2023485355008623" }),
+      clock.iso(),
+    );
+    await createOwnerLead(
+      db,
+      admin,
+      { name: "Later contact", phone: "9000000120" },
+      { intent: "Rent", propertyType: "House", locality: "Sedam Road", locationText: "", expectedPrice: 14000, notes: "later", priority: "Warm" },
+      parseSourceInput({ channel: "meta_lead_form", metaLeadId: "chunk-later", metaCampaignId: "other-campaign", metaFormId: "2023485355008623" }),
+      clock.iso(),
+    );
+    const preview = await previewBuyerRecovery(runtime, admin, [...BUYER_RECOVERY_FORM_IDS], clock.iso());
+    assert.equal(preview.status, "previewed");
+    assert.equal(preview.preview?.total, 143);
+    assert.equal(preview.preview?.buy, 104);
+    assert.equal(preview.preview?.rent, 39);
+    assert.equal(preview.preview?.alreadyQueued, 2);
+    assert.equal(preview.preview?.existingContacts, 2);
+    assert.ok(limited.used.length > 0);
+    assert.ok(limited.used.every((count) => count <= 100));
+    assert.ok(limited.used.includes(80));
+    assert.ok(limited.used.includes(63));
+    assert.ok(limited.used.includes(61));
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM demand_requirements"), 0);
   });
 
   it("blocks confirmation when two leads swap Buy and Rent without changing the totals", async () => {

@@ -230,20 +230,43 @@ function formReady(form: StoredForm | null, formId: string): { ready: boolean; r
   return { ready: true, name: form.name, reason: "" };
 }
 
+/** D1 allows 100 bound parameters. These lookups use 80 so a later placeholder cannot cross the limit. */
+const D1_BIND_LIMIT = 80;
+
+async function rowsByIds<T>(db: SqlDb, values: string[], statement: (marks: string) => string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; offset < values.length; offset += D1_BIND_LIMIT) {
+    const chunk = values.slice(offset, offset + D1_BIND_LIMIT);
+    const { results } = await db.prepare(statement(chunk.map(() => "?").join(", "))).bind(...chunk).all<T>();
+    rows.push(...results);
+  }
+  return rows;
+}
+
 async function existingLeadIds(db: SqlDb, ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
-  const marks = ids.map(() => "?").join(", ");
-  const queued = await db.prepare(`SELECT leadgen_id FROM meta_lead_ingestions WHERE leadgen_id IN (${marks})`).bind(...ids).all<{ leadgen_id: string }>();
-  const sourced = await db.prepare(`SELECT meta_lead_id FROM lead_sources WHERE meta_lead_id IN (${marks})`).bind(...ids).all<{ meta_lead_id: string }>();
-  return new Set([...queued.results.map((row) => row.leadgen_id), ...sourced.results.map((row) => row.meta_lead_id)]);
+  const queued = await rowsByIds<{ leadgen_id: string }>(
+    db,
+    ids,
+    (marks) => `SELECT leadgen_id FROM meta_lead_ingestions WHERE leadgen_id IN (${marks})`,
+  );
+  const sourced = await rowsByIds<{ meta_lead_id: string }>(
+    db,
+    ids,
+    (marks) => `SELECT meta_lead_id FROM lead_sources WHERE meta_lead_id IN (${marks})`,
+  );
+  return new Set([...queued.map((row) => row.leadgen_id), ...sourced.map((row) => row.meta_lead_id)]);
 }
 
 async function existingPhones(db: SqlDb, phones: string[]): Promise<Set<string>> {
   const unique = [...new Set(phones.filter(Boolean))];
   if (!unique.length) return new Set();
-  const marks = unique.map(() => "?").join(", ");
-  const { results } = await db.prepare(`SELECT phone_e164 FROM contacts WHERE phone_e164 IN (${marks})`).bind(...unique).all<{ phone_e164: string }>();
-  return new Set(results.map((row) => row.phone_e164));
+  const rows = await rowsByIds<{ phone_e164: string }>(
+    db,
+    unique,
+    (marks) => `SELECT phone_e164 FROM contacts WHERE phone_e164 IN (${marks})`,
+  );
+  return new Set(rows.map((row) => row.phone_e164));
 }
 
 function summarize(
