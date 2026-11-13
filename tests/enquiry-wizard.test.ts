@@ -4,15 +4,20 @@ import { describe, it } from "node:test";
 import { classifyTouch } from "../lib/enquiry/attribution";
 import { establishAttribution, nextAttributionCookie, openAttribution } from "../lib/enquiry/cookie";
 import {
+  UNVERIFIED_ATTRIBUTION_NOTICE,
   draftFromLaunch,
   emptyDraft,
+  enquiryHandoff,
+  finishSave,
   newIdempotencyKey,
   ownerPayload,
   requirementPayload,
+  startSave,
   stepError,
   stepsFor,
   summaryLines,
   whatsAppSummary,
+  type SaveGate,
 } from "../lib/enquiry/wizard";
 
 const NOW = "2026-11-13T05:00:00.000Z";
@@ -98,6 +103,46 @@ describe("enquiry wizard", () => {
     assert.match(summary, /GH-O0001/);
     assert.match(summary, /sending this message myself/);
     assert.doesNotMatch(summary, /already sent/i);
+  });
+
+  it("shows the CRM reference in a WhatsApp link the visitor still has to open", () => {
+    const draft = emptyDraft();
+    draft.path = "buyer";
+    draft.intent = "Buy";
+    draft.propertyType = "House";
+    draft.localities = ["Sedam Road"];
+    draft.timeline = "Exploring";
+    const handoff = enquiryHandoff("GH-D0007", draft);
+    assert.equal(handoff.opensAutomatically, false);
+    assert.equal(handoff.code, "GH-D0007");
+    assert.match(handoff.summary, /GH-D0007/);
+    assert.match(handoff.summary, /Sedam Road/);
+    assert.match(handoff.summary, /Exploring/);
+    assert.ok(handoff.links.length >= 1);
+    for (const link of handoff.links) {
+      const url = new URL(link.href);
+      assert.equal(url.protocol, "https:");
+      assert.equal(url.hostname, "wa.me");
+      assert.match(decodeURIComponent(url.searchParams.get("text") ?? ""), /GH-D0007/);
+      assert.match(decodeURIComponent(url.searchParams.get("text") ?? ""), /Sedam Road/);
+      assert.equal(link.href.startsWith("javascript:"), false);
+    }
+    assert.match(UNVERIFIED_ATTRIBUTION_NOTICE, /unverified/);
+  });
+
+  it("keeps the same submission key when a save is repeated", () => {
+    const gate: SaveGate = { phase: "idle", key: "repeat-key-01" };
+    const first = startSave(gate);
+    assert.ok(first);
+    assert.equal(startSave(first), null);
+    const retry = finishSave(first, false);
+    assert.equal(retry.phase, "idle");
+    assert.equal(retry.key, "repeat-key-01");
+    const second = startSave(retry);
+    assert.equal(second?.key, "repeat-key-01");
+    const saved = finishSave(second!, true);
+    assert.equal(saved.phase, "saved");
+    assert.equal(startSave(saved), null);
   });
 
   it("establishes a signed first touch before a visitor can replace it", async () => {

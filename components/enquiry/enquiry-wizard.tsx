@@ -12,18 +12,20 @@ import {
   TENANT_OPTIONS,
   TIMELINE_OPTIONS,
   bhkApplies,
+  UNVERIFIED_ATTRIBUTION_NOTICE,
   draftFromLaunch,
+  enquiryHandoff,
+  finishSave,
   newIdempotencyKey,
   ownerPayload,
   requirementPayload,
+  startSave,
   stepError,
   stepsFor,
-  summaryLines,
-  whatsAppSummary,
   type EnquiryLaunch,
+  type SaveGate,
   type WizardDraft,
 } from "@/lib/enquiry/wizard";
-import { whatsAppHref } from "@/lib/services";
 import { site } from "@/lib/site";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
@@ -74,8 +76,10 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
   const [established, setEstablished] = useState<boolean | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [result, setResult] = useState<{ code: string; summary: string } | null>(null);
-  const idempotencyKey = useRef(newIdempotencyKey());
+  const gate = useRef<SaveGate>({ phase: "idle", key: newIdempotencyKey() });
   const turnstileHost = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef<HTMLElement | null>(null);
   const page = launch.page || pathname || "/";
   const steps = stepsFor(draft);
   const step = result ? "success" : steps[Math.min(index, steps.length - 1)];
@@ -83,11 +87,40 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
     void refreshAttribution(setEstablished);
+    function onKey(event: KeyboardEvent) {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])")].filter(
+        (element) => element.tabIndex !== -1 && !element.closest("[aria-hidden='true']"),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+      restoreFocus.current?.focus();
     };
-  }, []);
+  }, [onClose]);
 
   useEffect(() => {
     if (step !== "contact" || !TURNSTILE_SITE_KEY || !turnstileHost.current) return;
@@ -144,15 +177,19 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
       setError("Complete the site check before sending.");
       return;
     }
+    const started = startSave(gate.current);
+    if (!started) return;
+    gate.current = started;
     setSubmitting(true);
     setError(null);
+    let saved = false;
     try {
       const ready = await refreshAttribution(setEstablished);
       const context = { ...launch, page };
       const body =
         draft.path === "owner"
-          ? ownerPayload(draft, context, idempotencyKey.current, turnstileToken)
-          : requirementPayload(draft, context, idempotencyKey.current, turnstileToken);
+          ? ownerPayload(draft, context, gate.current.key, turnstileToken)
+          : requirementPayload(draft, context, gate.current.key, turnstileToken);
       const response = await fetch(draft.path === "owner" ? "/api/enquiries/owner" : "/api/enquiries/requirement", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -163,12 +200,14 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
         setError(payload.error || "The enquiry could not be saved. You can try again with the same details.");
         return;
       }
-      const summary = whatsAppSummary(payload.code, summaryLines(draft));
-      setResult({ code: payload.code, summary });
+      const handoff = enquiryHandoff(payload.code, draft);
+      setResult({ code: handoff.code, summary: handoff.summary });
+      saved = true;
       if (!ready) setEstablished(false);
     } catch {
       setError("The enquiry could not be saved. You can try again with the same details.");
     } finally {
+      gate.current = finishSave(gate.current, saved);
       setSubmitting(false);
     }
   }
@@ -179,10 +218,12 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/40 sm:items-center" role="presentation">
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="mb-16 flex max-h-[78svh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-lift sm:mb-0 sm:max-h-[92svh] sm:rounded-3xl"
+        className="mb-16 flex max-h-[78svh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-lift outline-none sm:mb-0 sm:max-h-[92svh] sm:rounded-3xl"
       >
         <div className="flex items-center justify-between border-b border-brand-100 px-5 py-4">
           <div>
@@ -201,6 +242,11 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
               <span key={item} className={`h-1 flex-1 rounded-full ${itemIndex <= progressIndex ? "bg-brand-600" : "bg-brand-100"}`} />
             ))}
           </div>
+        )}
+        {established === false && (
+          <p role="status" className="mx-5 mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950">
+            {UNVERIFIED_ATTRIBUTION_NOTICE}
+          </p>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {step === "path" && (
@@ -420,11 +466,6 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
                 <input type="checkbox" className="mt-1" checked={draft.marketingConsent} onChange={(event) => update({ marketingConsent: event.target.checked })} />
                 <span>Send me occasional property updates. This is optional.</span>
               </label>
-              {established === false && (
-                <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  We could not confirm your first visit. This enquiry will be saved with first-touch attribution marked unverified.
-                </p>
-              )}
               {!TURNSTILE_SITE_KEY && (
                 <p className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-ink">
                   Enquiry saving is not open until the site check is configured. You can still call {site.phoneDisplay}.
@@ -443,27 +484,7 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
             </form>
           )}
           {step === "success" && result && (
-            <div className="grid gap-4">
-              <p className="text-sm leading-relaxed text-ink">
-                Your enquiry is saved. The reference is <span className="font-bold">{result.code}</span>. WhatsApp does not send this for you. Open a chat, check the summary, then press send there.
-              </p>
-              <pre className="whitespace-pre-wrap rounded-2xl bg-brand-50 p-3 text-sm text-ink">{result.summary}</pre>
-              <div className="grid gap-2">
-                {site.contacts.map((contact, contactIndex) => (
-                  <a
-                    key={contact.whatsapp}
-                    href={whatsAppHref(result.summary, contactIndex)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-semibold text-white"
-                    onClick={() => trackWhatsAppClick(launch.cta, { property_slug: launch.propertySlug, contact_phone: contact.phoneDisplay })}
-                  >
-                    <WhatsAppIcon className="h-4 w-4" /> Continue to WhatsApp {contact.phoneDisplay}
-                  </a>
-                ))}
-              </div>
-              <p className="text-xs text-ink-muted">If WhatsApp does not open, use the same button again or copy the summary above.</p>
-            </div>
+            <SuccessHandoff code={result.code} draft={draft} onWhatsApp={(phoneDisplay) => trackWhatsAppClick(launch.cta, { property_slug: launch.propertySlug, contact_phone: phoneDisplay })} />
           )}
           {error && <p className="mt-3 text-sm font-medium text-red-700">{error}</p>}
         </div>
@@ -484,6 +505,41 @@ export function EnquiryWizard({ launch, onClose }: { launch: EnquiryLaunch; onCl
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SuccessHandoff({
+  code,
+  draft,
+  onWhatsApp,
+}: {
+  code: string;
+  draft: WizardDraft;
+  onWhatsApp: (phoneDisplay: string) => void;
+}) {
+  const handoff = enquiryHandoff(code, draft);
+  return (
+    <div className="grid gap-4">
+      <p role="status" className="text-sm leading-relaxed text-ink">
+        Your enquiry is saved. The reference is <span className="font-bold">{handoff.code}</span>. WhatsApp does not send this for you. Open a chat, check the summary, then press send there.
+      </p>
+      <pre className="whitespace-pre-wrap rounded-2xl bg-brand-50 p-3 text-sm text-ink">{handoff.summary}</pre>
+      <div className="grid gap-2">
+        {handoff.links.map((link) => (
+          <a
+            key={link.phoneDisplay}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-semibold text-white"
+            onClick={() => onWhatsApp(link.phoneDisplay)}
+          >
+            <WhatsAppIcon className="h-4 w-4" /> Continue to WhatsApp {link.phoneDisplay}
+          </a>
+        ))}
+      </div>
+      <p className="text-xs text-ink-muted">If WhatsApp does not open, use the same link again or copy the summary above.</p>
     </div>
   );
 }

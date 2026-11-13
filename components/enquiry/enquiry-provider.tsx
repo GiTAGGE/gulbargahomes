@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 import { EnquiryWizard } from "@/components/enquiry/enquiry-wizard";
 import type { EnquiryLaunch } from "@/lib/enquiry/wizard";
@@ -15,10 +15,11 @@ export function useEnquiry() {
 
 export function EnquiryProvider({ children }: { children: ReactNode }) {
   const [launch, setLaunch] = useState<EnquiryLaunch | null>(null);
+  const close = useCallback(() => setLaunch(null), []);
   return (
     <EnquiryContext.Provider value={setLaunch}>
       {children}
-      {launch && <EnquiryWizard launch={launch} onClose={() => setLaunch(null)} />}
+      {launch && <EnquiryWizard launch={launch} onClose={close} />}
     </EnquiryContext.Provider>
   );
 }

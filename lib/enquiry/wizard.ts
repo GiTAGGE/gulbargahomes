@@ -1,5 +1,10 @@
 import type { ContactSource } from "@/lib/analytics/types";
+import { whatsAppHref } from "@/lib/services";
+import { site } from "@/lib/site";
 import type { PropertyType } from "@/lib/types";
+
+export const UNVERIFIED_ATTRIBUTION_NOTICE =
+  "First visit not confirmed. This enquiry keeps going, and its first-touch attribution stays unverified.";
 
 export const BUYER_TYPES: PropertyType[] = ["House", "Flat", "Villa", "Plot", "Commercial", "PG"];
 export const TIMELINE_OPTIONS = ["Immediate", "Within 7 days", "Within 30 days", "Within 3 months", "Exploring"] as const;
@@ -215,6 +220,40 @@ export function ownerPayload(draft: WizardDraft, launch: EnquiryLaunch, idempote
 
 export function whatsAppSummary(code: string, lines: string[]): string {
   return [`GulbargaHomes enquiry ${code}`, ...lines.filter(Boolean), "I am sending this message myself from the website."].join("\n");
+}
+
+export type EnquiryHandoff = {
+  code: string;
+  summary: string;
+  opensAutomatically: false;
+  links: { phoneDisplay: string; href: string }[];
+};
+
+/** The reference and the chat links. Nothing here opens WhatsApp by itself. */
+export function enquiryHandoff(code: string, draft: WizardDraft): EnquiryHandoff {
+  const summary = whatsAppSummary(code, summaryLines(draft));
+  return {
+    code,
+    summary,
+    opensAutomatically: false,
+    links: site.contacts.map((contact, index) => ({
+      phoneDisplay: contact.phoneDisplay,
+      href: whatsAppHref(summary, index),
+    })),
+  };
+}
+
+export type SaveGate = { phase: "idle" | "saving" | "saved"; key: string };
+
+/** A second click while saving, or after the reference exists, must not start another record. */
+export function startSave(gate: SaveGate): SaveGate | null {
+  if (gate.phase !== "idle") return null;
+  return { phase: "saving", key: gate.key };
+}
+
+export function finishSave(gate: SaveGate, saved: boolean): SaveGate {
+  if (gate.phase !== "saving") return gate;
+  return { phase: saved ? "saved" : "idle", key: gate.key };
 }
 
 export function summaryLines(draft: WizardDraft): string[] {
