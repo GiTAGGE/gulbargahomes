@@ -3,18 +3,12 @@ import type { SqlDb } from "../db/sql";
 import { isAvailabilityStale } from "../inventory/lifecycle";
 import { listInventory, type InventoryAccess } from "../inventory/repository";
 import { listFollowups, type Followup } from "./activity";
+import { endOfIstDay } from "./ist";
 import { listOwnerLeads, type OwnerLead } from "./owner-leads";
 import { URGENT_TIMELINES } from "./options";
 import { listRequirements, type Requirement } from "./requirements";
 
-const IST_OFFSET_MS = 330 * 60_000;
-
-/** Last millisecond of the current day in India Standard Time, as UTC ISO. */
-export function endOfIstDay(now: Date = new Date()): string {
-  const ist = new Date(now.getTime() + IST_OFFSET_MS);
-  const end = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), 23, 59, 59, 999);
-  return new Date(end - IST_OFFSET_MS).toISOString();
-}
+export { endOfIstDay };
 
 export type TodayQueue = {
   followups: Followup[];

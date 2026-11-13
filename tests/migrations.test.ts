@@ -115,7 +115,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
@@ -201,7 +201,7 @@ describe("migrations", () => {
       .run();
     const propertiesBefore = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16, 17, 18, 19]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16, 17, 18, 19, 20]);
 
     const land = await db
       .prepare("SELECT village, answers_json, notes, verified_village, additional_phone_e164 FROM land_jv_enquiries WHERE id = 'ljv_existing'")
@@ -256,7 +256,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [19]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [19, 20]);
     const row = await db
       .prepare(
         `SELECT vegetarian, furnishing, tenant_profile, notes, bhk_min, area_min, parking_required, preference_details_json
@@ -291,6 +291,66 @@ describe("migrations", () => {
     assert.equal(fields.find((field) => field.label === "Min area")?.value, "900 sqft");
     assert.equal(fields.find((field) => field.label === "BHK")?.value, "2–3");
     assert.equal(loaded?.notes, "Needs a puja room");
+  });
+
+  it("migration 20 adds timeline tables without writing cycles for an existing requirement", async () => {
+    const db = createTestDb();
+    await db
+      .prepare("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+      .run();
+    for (const migration of MIGRATIONS.filter((item) => item.version < 20)) {
+      await db.batch([
+        ...migration.statements.map((sql) => db.prepare(sql)),
+        db
+          .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)")
+          .bind(migration.version, migration.name, "2026-11-13T00:00:00.000Z"),
+      ]);
+    }
+    await db
+      .prepare(
+        `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+         VALUES ('con_cycle', 'GH-C0097', 'Before Cycles', '+919845012197', '2026-10-01T00:00:00.000Z', 'a', '2026-10-01T00:00:00.000Z', 'a')`,
+      )
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO demand_requirements (
+           id, code, contact_id, intent, timeline, needed_by, notes, created_at, created_by, updated_at, updated_by
+         ) VALUES (
+           'req_cycle', 'GH-D0097', 'con_cycle', 'Rent', 'Within 30 days', '2026-10-20T18:29:59.999Z', 'Keep me',
+           '2026-10-01T00:00:00.000Z', 'a', '2026-10-01T00:00:00.000Z', 'a'
+         )`,
+      )
+      .run();
+
+    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [20]);
+    const row = await db
+      .prepare(
+        `SELECT timeline, needed_by, notes, created_at, confirmed_timeline, confirmed_needed_by
+         FROM demand_requirements WHERE id = 'req_cycle'`,
+      )
+      .first<{
+        timeline: string;
+        needed_by: string;
+        notes: string;
+        created_at: string;
+        confirmed_timeline: string;
+        confirmed_needed_by: string | null;
+      }>();
+    assert.equal(row?.timeline, "Within 30 days");
+    assert.equal(row?.needed_by, "2026-10-20T18:29:59.999Z");
+    assert.equal(row?.notes, "Keep me");
+    assert.equal(row?.created_at, "2026-10-01T00:00:00.000Z");
+    assert.equal(row?.confirmed_timeline, "");
+    assert.equal(row?.confirmed_needed_by, null);
+    assert.equal(Number((await db.prepare("SELECT COUNT(*) AS n FROM requirement_urgency_cycles").first<{ n: number }>())?.n), 0);
+    assert.equal(Number((await db.prepare("SELECT COUNT(*) AS n FROM requirement_timeline_revisions").first<{ n: number }>())?.n), 0);
+    assert.deepEqual(await applyMigrations(db), []);
+
+    const loaded = await getRequirement(db, "req_cycle", new Date("2026-11-13T01:00:00.000Z"));
+    assert.equal(loaded?.timeline, "Within 30 days");
+    assert.equal(loaded?.neededBy, "2026-10-20T18:29:59.999Z");
+    assert.equal(loaded?.createdAt, "2026-10-01T00:00:00.000Z");
   });
 
   it("keeps the audit log append-only", async () => {

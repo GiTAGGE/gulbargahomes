@@ -260,7 +260,7 @@ describe("requirements", () => {
     assert.equal(intentScore({ ...vague, engagementCount: 1 }).factors.find((factor) => factor.label === "Engagement")?.points, 10);
   });
 
-  it("keeps a new requirement pending and counts a WhatsApp or call as engagement", async () => {
+  it("keeps a new requirement pending and ignores an unanswered message as engagement", async () => {
     const db = await setup();
     const input = parseRequirementInput({
       intent: "Rent",
@@ -305,8 +305,28 @@ describe("requirements", () => {
     const afterMessage = (await getRequirement(db, requirement.id, new Date(NOW)))!;
     assert.equal(afterMessage.status, "New");
     assert.equal(afterMessage.qualityReview, "");
-    assert.equal(afterMessage.engagementCount, 1);
-    assert.equal(afterMessage.intentScore.factors.find((factor) => factor.label === "Engagement")?.points, 10);
+    assert.equal(afterMessage.attemptCount, 1);
+    assert.equal(afterMessage.engagementCount, 0);
+    assert.equal(afterMessage.lastMeaningfulAt, null);
+    assert.equal(afterMessage.intentScore.factors.find((factor) => factor.label === "Engagement")?.points, 0);
+
+    await logActivity(
+      db,
+      actor,
+      parseActivityInput({
+        entityType: "requirement",
+        entityId: requirement.id,
+        contactId: requirement.contactId,
+        kind: "call",
+        outcome: "connected",
+      }),
+      NOW,
+    );
+    const afterCall = (await getRequirement(db, requirement.id, new Date(NOW)))!;
+    assert.equal(afterCall.status, "Contacted");
+    assert.equal(afterCall.qualityReview, "");
+    assert.equal(afterCall.engagementCount, 1);
+    assert.equal(afterCall.intentScore.factors.find((factor) => factor.label === "Engagement")?.points, 10);
 
     const audit = await listAudit(db, { entityType: "requirement", entityId: requirement.id });
     const created = audit.find((entry) => entry.action === "create");
@@ -317,9 +337,9 @@ describe("requirements", () => {
     assert.equal(lines.find((line) => line.label === "Lease duration")?.text, "1 year");
     assert.equal(lines.find((line) => line.label === "Additional requirements")?.text, "Corner preferred");
 
-    const verified = await setRequirementQuality(db, actor, afterMessage, "genuine", "Spoke to Veer and confirmed the plot.", {
+    const verified = await setRequirementQuality(db, actor, afterCall, "genuine", "Spoke to Veer and confirmed the plot.", {
       now: NOW,
-      expectedVersion: afterMessage.rowVersion,
+      expectedVersion: afterCall.rowVersion,
     });
     const qualified = await updateRequirement(db, actor, verified, { status: "Qualified" }, { now: NOW, expectedVersion: verified.rowVersion });
     assert.equal(qualified.status, "Qualified");

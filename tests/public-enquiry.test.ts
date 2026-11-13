@@ -193,7 +193,7 @@ describe("public website enquiries", () => {
     assert.equal(requirement?.intent, "Buy");
     assert.equal(requirement?.timeline, "Immediate");
     const loaded = await getRequirement(database, result.id);
-    assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Urgency")?.points, 30);
+    assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Stated timeline")?.points, 30);
     assert.equal(loaded?.intentScore.score, intentScore(loaded!).score);
     assert.equal(requirement?.bhk_min, 2);
     assert.deepEqual(loaded?.preferenceDetails, {});
@@ -216,6 +216,7 @@ describe("public website enquiries", () => {
     assert.equal(attribution?.first_touch_verified, 0);
     assert.equal(await count(database, "properties"), 0);
     assert.equal(await count(database, "owner_leads"), 0);
+    assert.equal(await count(database, "requirement_urgency_cycles"), 1);
     assert.equal("gclid" in result, false);
   });
 
@@ -284,7 +285,7 @@ describe("public website enquiries", () => {
     assert.equal(loaded?.areaMin, null);
     assert.equal(loaded?.preferenceDetails.plotArea, "30x40");
     assert.equal(loaded?.preferenceDetails.profile, "Rent:Plot");
-    assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Urgency")?.points, 26);
+    assert.equal(loaded?.intentScore.factors.find((factor) => factor.label === "Stated timeline")?.points, 26);
     const screen = requirementDetailFields({ ...loaded!, budgetText: "rent", neededByText: "—", lastContactedText: "—" });
     assert.equal(screen.find((field) => field.label === "Required plot area")?.value, "30x40");
     assert.equal(screen.find((field) => field.label === "Additional requirements")?.value, "Corner preferred");
