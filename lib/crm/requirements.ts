@@ -29,6 +29,7 @@ import {
   type RequirementReviewDecision,
   type StoredReview,
 } from "./review";
+import { readPreferenceDetails, type PreferenceDetails } from "../enquiry/questions";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
 
 /**
@@ -75,6 +76,7 @@ export type Requirement = {
   timeline: Timeline;
   neededBy: string | null;
   notes: string;
+  preferenceDetails: PreferenceDetails;
   status: RequirementStatus;
   statusReason: string;
   priorityOverride: string;
@@ -122,6 +124,7 @@ type RequirementRow = {
   timeline: string;
   needed_by: string | null;
   notes: string;
+  preference_details_json: string | null;
   status: string;
   status_reason: string;
   priority_override: string;
@@ -182,6 +185,7 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     timeline,
     neededBy: row.needed_by,
     notes: row.notes,
+    preferenceDetails: readPreferenceDetails(row.preference_details_json),
     status,
     statusReason: row.status_reason,
     priorityOverride: row.priority_override,
@@ -289,6 +293,7 @@ export type RequirementInput = {
   timeline: Timeline;
   neededBy: string | null;
   notes: string;
+  preferenceDetails?: PreferenceDetails;
 };
 
 export function parseRequirementInput(value: unknown): RequirementInput {
@@ -324,7 +329,7 @@ export function parseRequirementInput(value: unknown): RequirementInput {
 }
 
 export function requirementColumns(input: RequirementInput): Record<string, SqlValue> {
-  return {
+  const columns: Record<string, SqlValue> = {
     intent: input.intent,
     property_types_json: JSON.stringify(input.propertyTypes),
     bhk_min: input.bhkMin,
@@ -342,6 +347,10 @@ export function requirementColumns(input: RequirementInput): Record<string, SqlV
     needed_by: input.neededBy,
     notes: input.notes,
   };
+  if (input.preferenceDetails !== undefined) {
+    columns.preference_details_json = JSON.stringify(input.preferenceDetails);
+  }
+  return columns;
 }
 
 export async function createRequirement(

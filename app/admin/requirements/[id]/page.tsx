@@ -13,6 +13,7 @@ import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
 import { getContact, redactContact } from "@/lib/crm/contacts";
+import { requirementDetailFields } from "@/lib/enquiry/questions";
 import { getRequirement } from "@/lib/crm/requirements";
 import { reviewLabel } from "@/lib/crm/review";
 import { getSource } from "@/lib/crm/sources";
@@ -35,6 +36,13 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
     adminNames(db),
   ]);
   const score = requirement.intentScore;
+  const fields = requirementDetailFields({
+    ...requirement,
+    budgetText: budgetLabel(requirement.budgetMin, requirement.budgetMax, requirement.intent),
+    neededByText: formatDate(requirement.neededBy),
+    lastContactedText: formatDateTime(requirement.lastContactedAt),
+  });
+  const notesLabeled = fields.some((field) => field.label === "Additional requirements");
 
   return (
     <AdminShell
@@ -60,31 +68,13 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
             }
           >
             <dl className="grid gap-3 sm:grid-cols-3">
-              <Field label="Types">{requirement.propertyTypes.join(", ") || "Any"}</Field>
-              <Field label="BHK">
-                {requirement.bhkMin === null && requirement.bhkMax === null
-                  ? "Any"
-                  : requirement.bhkMax === null
-                    ? `${requirement.bhkMin}+`
-                    : requirement.bhkMin === null || requirement.bhkMin === requirement.bhkMax
-                      ? `${requirement.bhkMax}`
-                      : `${requirement.bhkMin}–${requirement.bhkMax}`}
-              </Field>
-              <Field label="Budget">{budgetLabel(requirement.budgetMin, requirement.budgetMax, requirement.intent)}</Field>
-              <Field label="Localities">
-                {requirement.localities.join(", ") || "Any"}
-                {requirement.localityFlexible ? " (nearby OK)" : ""}
-              </Field>
-              <Field label="How soon">{requirement.timeline}</Field>
-              <Field label="Needed by">{formatDate(requirement.neededBy)}</Field>
-              <Field label="Furnishing">{requirement.furnishing}</Field>
-              {requirement.intent === "Rent" && <Field label="Tenant profile">{requirement.tenantProfile}</Field>}
-              <Field label="Vegetarian">{requirement.vegetarian}</Field>
-              <Field label="Parking">{requirement.parkingRequired ? "Required" : "Not needed"}</Field>
-              <Field label="Min area">{requirement.areaMin ? `${requirement.areaMin} sqft` : "Any"}</Field>
-              <Field label="Last contacted">{formatDateTime(requirement.lastContactedAt)}</Field>
+              {fields.map((field) => (
+                <Field key={field.label} label={field.label}>
+                  <span className="whitespace-pre-line">{field.value}</span>
+                </Field>
+              ))}
             </dl>
-            {requirement.notes && (
+            {requirement.notes && !notesLabeled && (
               <p className="mt-3 whitespace-pre-line rounded-xl bg-surface-muted/60 p-3 text-sm text-ink">{requirement.notes}</p>
             )}
             {requirement.outcome && <p className="mt-2 text-sm text-ink">Outcome: {requirement.outcome}</p>}
