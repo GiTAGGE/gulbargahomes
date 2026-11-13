@@ -230,8 +230,8 @@ function formReady(form: StoredForm | null, formId: string): { ready: boolean; r
   return { ready: true, name: form.name, reason: "" };
 }
 
-/** D1 rejects a statement with more than 100 bound parameters. These lookups have no other placeholders. */
-const D1_BIND_LIMIT = 100;
+/** D1 allows 100 bound parameters. These lookups use 80 so a later placeholder cannot cross the limit. */
+const D1_BIND_LIMIT = 80;
 
 async function rowsByIds<T>(db: SqlDb, values: string[], statement: (marks: string) => string): Promise<T[]> {
   const rows: T[] = [];
