@@ -1,6 +1,6 @@
 import { auditStatement, diffFields, type AuditActor } from "../admin/audit";
 import { HttpError, isUniqueViolation } from "../admin/errors";
-import { formatCode, newId, nextSequence, type SqlDb } from "../db/sql";
+import { formatCode, newId, nextSequence, type SqlDb, type SqlStatement } from "../db/sql";
 import { resolveContact, type ContactInput } from "./contacts";
 import { assertVersion } from "./input";
 import { normalizeIndianMobile } from "./phone";
@@ -140,14 +140,15 @@ export async function createLandJvEnquiry(
   input: LandJvInput,
   source: SourceInput,
   now: string,
+  write?: { id?: string; code?: string; alongside?: SqlStatement[] },
 ): Promise<LandJvEnquiry> {
   const duplicateSource = await sourceIdForMetaLead(db, source.metaLeadId);
   if (duplicateSource) throw new HttpError(409, "That Meta lead was already imported.");
 
   const resolved = await resolveContact(db, actor, contact, "land", now);
   const insertSource = insertSourceStatement(db, actor, source, now);
-  const id = newId("ljv");
-  const code = formatCode("GH-L", await nextSequence(db, "seq_land_jv"));
+  const id = write?.id || newId("ljv");
+  const code = write?.code || formatCode("GH-L", await nextSequence(db, "seq_land_jv"));
   const answers = input.answers.slice(0, 40).map((answer) => ({
     key: answer.key.slice(0, 80),
     label: answer.label.slice(0, 160),
@@ -195,6 +196,7 @@ export async function createLandJvEnquiry(
         context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId, meta_lead_id: source.metaLeadId },
         at: now,
       }),
+      ...(write?.alongside ?? []),
     ]);
   } catch (error) {
     if (isUniqueViolation(error)) {

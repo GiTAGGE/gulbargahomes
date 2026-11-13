@@ -9,7 +9,10 @@ import type { SourceInput } from "../lib/crm/sources";
 import { prepareDatabase } from "../lib/db/prepare";
 import { classifyTouch } from "../lib/enquiry/attribution";
 import { rememberVisit } from "../lib/enquiry/capture";
+import { hashClientIp, trustedClientIp } from "../lib/enquiry/client-ip";
+import { nextAttributionCookie, openAttribution, sealAttribution } from "../lib/enquiry/cookie";
 import { submitLandJvEnquiry, submitOwnerEnquiry, submitRequirementEnquiry, WEBSITE_ACTOR } from "../lib/enquiry/submit";
+import type { SqlDb, SqlStatement } from "../lib/db/sql";
 import { verifyTurnstile } from "../lib/enquiry/turnstile";
 import { createTestDb } from "./helpers/sqlite";
 
@@ -84,6 +87,35 @@ function buyer(extra: Record<string, unknown> = {}) {
   };
 }
 
+function failAttribution(database: SqlDb, mode: "rollback" | "partial"): SqlDb {
+  const wrap = (sql: string, statement: SqlStatement): SqlStatement & { sql: string } => ({
+    sql,
+    bind(...values) {
+      return wrap(sql, statement.bind(...values));
+    },
+    all: () => statement.all(),
+    first: () => statement.first(),
+    run: () => statement.run(),
+  });
+  return {
+    prepare(sql: string) {
+      return wrap(sql, database.prepare(sql));
+    },
+    async batch(statements) {
+      const marked = statements as Array<SqlStatement & { sql?: string }>;
+      if (mode === "partial") {
+        for (const statement of marked) {
+          if (statement.sql?.includes("acquisition_attributions")) throw new Error("attribution failed");
+          await statement.run();
+        }
+        return [];
+      }
+      if (marked.some((statement) => statement.sql?.includes("acquisition_attributions"))) throw new Error("attribution failed");
+      return database.batch(statements);
+    },
+  };
+}
+
 async function count(database: Awaited<ReturnType<typeof ready>>, table: string) {
   const row = await database.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
   return Number(row?.n ?? 0);
@@ -123,6 +155,19 @@ describe("website enquiry attribution", () => {
     assert.equal(classifyTouch({ landingPage: "/" }, NOW).source, "Direct");
     assert.equal(classifyTouch({}, NOW).source, "Unknown");
     assert.equal(classifyTouch({ utmSource: "not-a-network" }, NOW).source, "Referral");
+  });
+
+  it("does not call every Google tag organic search", () => {
+    assert.equal(classifyTouch({ utmSource: "google", utmMedium: "organic", utmCampaign: "gulbarga" }, NOW).source, "Google Organic");
+    assert.equal(classifyTouch({ utmSource: "google", utmMedium: "cpc", utmCampaign: "sedam" }, NOW).source, "Google Ads");
+    assert.equal(classifyTouch({ utmSource: "google", utmMedium: "email", utmCampaign: "newsletter" }, NOW).source, "Referral");
+    assert.equal(classifyTouch({ utmSource: "google", utmMedium: "email", utmCampaign: "newsletter" }, NOW).campaign, "newsletter");
+    assert.equal(classifyTouch({ utmSource: "google", utmMedium: "display" }, NOW).source, "Referral");
+    assert.equal(classifyTouch({ utmSource: "google" }, NOW).source, "Referral");
+    assert.equal(classifyTouch({ referrer: "https://mail.google.com/mail/u/0/" }, NOW).source, "Referral");
+    assert.equal(classifyTouch({ referrer: "https://www.google.co.in/search?q=house" }, NOW).source, "Google Organic");
+    assert.equal(classifyTouch({ utmSource: "facebook", utmMedium: "social", utmCampaign: "page" }, NOW).source, "Referral");
+    assert.equal(classifyTouch({ utmSource: "facebook", utmMedium: "organic" }, NOW).source, "Facebook Organic");
   });
 
   it("does not treat a claimed ChatGPT label as evidence", () => {
@@ -369,6 +414,120 @@ describe("public website enquiries", () => {
       await verifyTurnstile("token", "secret", "", async () => new Response(JSON.stringify({ success: false }), { status: 200 })),
       false,
     );
+  });
+
+  it("returns the original requirement when attribution fails and the same key is retried", async () => {
+    const database = await ready();
+    const key = "atomic-key-01";
+    await assert.rejects(() => submitRequirementEnquiry(failAttribution(database, "rollback"), buyer(), options(key)), /attribution failed/);
+    const reserved = await database
+      .prepare("SELECT planned_entity_id, entity_id FROM public_enquiry_keys WHERE idempotency_key = ?1")
+      .bind(key)
+      .first<{ planned_entity_id: string; entity_id: string }>();
+    assert.ok(reserved?.planned_entity_id);
+    assert.equal(reserved?.entity_id, "");
+    assert.equal(await count(database, "demand_requirements"), 0);
+    assert.equal(await count(database, "public_enquiry_keys"), 1);
+
+    const retry = await submitRequirementEnquiry(database, buyer({ name: "Another Name" }), options(key));
+    assert.equal(retry.id, reserved?.planned_entity_id);
+    assert.equal(retry.replayed, false);
+    assert.equal(await count(database, "demand_requirements"), 1);
+    const again = await submitRequirementEnquiry(database, buyer(), options(key));
+    assert.equal(again.id, retry.id);
+    assert.equal(again.replayed, true);
+    assert.equal(await count(database, "demand_requirements"), 1);
+    assert.equal(await count(database, "acquisition_attributions"), 1);
+  });
+
+  it("keeps the created requirement when attribution is committed separately and the retry finishes it", async () => {
+    const database = await ready();
+    const key = "partial-key-1";
+    await assert.rejects(() => submitRequirementEnquiry(failAttribution(database, "partial"), buyer(), options(key)), /attribution failed/);
+    assert.equal(await count(database, "demand_requirements"), 1);
+    assert.equal(await count(database, "public_enquiry_keys"), 1);
+    const reserved = await database
+      .prepare("SELECT planned_entity_id, entity_id FROM public_enquiry_keys WHERE idempotency_key = ?1")
+      .bind(key)
+      .first<{ planned_entity_id: string; entity_id: string }>();
+    const retry = await submitRequirementEnquiry(database, buyer(), options(key));
+    assert.equal(retry.replayed, true);
+    assert.equal(retry.id, reserved?.planned_entity_id);
+    assert.equal(await count(database, "demand_requirements"), 1);
+    assert.equal(await count(database, "acquisition_attributions"), 1);
+    const saved = await database.prepare("SELECT entity_id FROM public_enquiry_keys WHERE idempotency_key = ?1").bind(key).first<{ entity_id: string }>();
+    assert.equal(saved?.entity_id, retry.id);
+  });
+
+  it("allows only one requirement when two submissions share an idempotency key", async () => {
+    const database = await ready();
+    const results = await Promise.allSettled([
+      submitRequirementEnquiry(database, buyer(), options("race-key-001")),
+      submitRequirementEnquiry(database, buyer({ name: "Second Click" }), options("race-key-001")),
+    ]);
+    assert.equal(await count(database, "demand_requirements"), 1);
+    const ids = results.flatMap((result) => (result.status === "fulfilled" ? [result.value.id] : []));
+    assert.ok(ids.length >= 1);
+    assert.ok(ids.every((id) => id === ids[0]));
+    const rejected = results.filter((result) => result.status === "rejected");
+    assert.ok(rejected.every((result) => result.reason instanceof Error && /already being submitted|already used/.test(result.reason.message)));
+  });
+
+  it("trusts only a Cloudflare client IP", async () => {
+    const normal = new Headers({ "cf-connecting-ip": "203.0.113.8", "x-forwarded-for": "198.51.100.9" });
+    assert.equal(trustedClientIp(normal), "203.0.113.8");
+    assert.equal(trustedClientIp(new Headers({ "x-forwarded-for": "203.0.113.8" })), null);
+    assert.equal(trustedClientIp(new Headers()), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "unknown" })), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "203.0.113.8, 198.51.100.9" })), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "999.1.1.1" })), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "203.0.113" })), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "::" })), null);
+    assert.equal(trustedClientIp(new Headers({ "cf-connecting-ip": "2001:db8::1" })), "2001:db8::1");
+    assert.notEqual(await hashClientIp("203.0.113.8"), await hashClientIp("198.51.100.9"));
+  });
+
+  it("keeps a signed first touch when a later visit and a submitted form disagree", async () => {
+    const secret = "attribution-test-secret";
+    const first = await nextAttributionCookie(
+      null,
+      new URL("https://gulbargahomes.com/?utm_source=google&utm_medium=cpc&utm_campaign=sedam&gclid=click-1"),
+      "https://www.google.com/search?q=house",
+      secret,
+      NOW,
+    );
+    const second = await nextAttributionCookie(first, new URL("https://gulbargahomes.com/contact"), null, secret, NOW);
+    const opened = await openAttribution(second, secret, NOW);
+    assert.equal(classifyTouch(opened?.first, NOW).source, "Google Ads");
+    assert.equal(classifyTouch(opened?.first, NOW).campaign, "sedam");
+    assert.equal(opened?.first.gclid, "click-1");
+    assert.equal(classifyTouch(opened?.last, NOW).source, "Direct");
+    assert.equal(await openAttribution(second, secret, "2027-03-01T00:00:00.000Z"), null);
+    assert.equal(await openAttribution(`${second?.slice(0, -1)}${second?.endsWith("a") ? "b" : "a"}`, secret, NOW), null);
+    assert.equal(await openAttribution("v1.not-json.sig", secret, NOW), null);
+
+    const database = await ready();
+    const result = await submitRequirementEnquiry(
+      database,
+      buyer({
+        attribution: {
+          first: { referrer: "https://chatgpt.com/c/1", landingPage: "/" },
+          last: { landingPage: "/contact" },
+          enquiryPage: "/contact",
+          cta: "footer",
+        },
+      }),
+      { ...options("cookie-key-1"), attributionCookie: second, attributionSecret: secret },
+    );
+    const attribution = await database
+      .prepare("SELECT first_source, last_source, first_campaign, gclid, conversion_channel FROM acquisition_attributions WHERE entity_id = ?1")
+      .bind(result.id)
+      .first<{ first_source: string; last_source: string; first_campaign: string; gclid: string; conversion_channel: string }>();
+    assert.equal(attribution?.first_source, "Google Ads");
+    assert.equal(attribution?.first_campaign, "sedam");
+    assert.equal(attribution?.gclid, "click-1");
+    assert.equal(attribution?.last_source, "Direct");
+    assert.equal(attribution?.conversion_channel, "website");
   });
 
   it("keeps admin creation routes behind a sign-in", () => {

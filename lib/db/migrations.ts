@@ -648,6 +648,10 @@ export const MIGRATIONS: Migration[] = [
          entity_type TEXT NOT NULL DEFAULT '',
          entity_id TEXT NOT NULL DEFAULT '',
          entity_code TEXT NOT NULL DEFAULT '',
+         planned_entity_id TEXT NOT NULL DEFAULT '',
+         planned_entity_code TEXT NOT NULL DEFAULT '',
+         claim_token TEXT NOT NULL DEFAULT '',
+         claim_expires TEXT NOT NULL DEFAULT '',
          created_at TEXT NOT NULL
        )`,
       `CREATE TABLE IF NOT EXISTS public_enquiry_attempts (

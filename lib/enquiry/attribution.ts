@@ -53,7 +53,8 @@ export type ClassifiedTouch = {
   fbc: string;
 };
 
-const PAID_MEDIUM = /^(cpc|ppc|paid|paidsocial|paid_social|ads|ad)$/i;
+const PAID_MEDIUM = /^(cpc|ppc|paid|paidsocial|paid_social|ads|ad|cpm|cpv)$/i;
+const ORGANIC_MEDIUM = /^(organic|seo)$/i;
 const CHATGPT_HOSTS = new Set(["chatgpt.com", "chat.openai.com"]);
 const OTHER_AI_HOSTS = new Set([
   "perplexity.ai",
@@ -103,9 +104,9 @@ function hostMatches(host: string, domains: Set<string>): boolean {
   return [...domains].some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 
-function isGoogleHost(host: string): boolean {
-  if (!host || hostMatches(host, new Set(["gemini.google.com", "bard.google.com"]))) return false;
-  return host === "google.com" || host.endsWith(".google.com") || /^(google|[a-z]{2,3}\.google)\.[a-z.]+$/.test(host);
+/** google.com or google.co.in. Mail, accounts, docs, and news hosts are not search. */
+function isGoogleSearchHost(host: string): boolean {
+  return /^google\.[a-z.]+$/.test(host);
 }
 
 function isFacebookHost(host: string): boolean {
@@ -116,13 +117,22 @@ function isInstagramHost(host: string): boolean {
   return host === "instagram.com" || host.endsWith(".instagram.com");
 }
 
-function sourceFromUtm(source: string, medium: string): AcquisitionSource | null {
+function networkSource(medium: string, organicHost: boolean, paid: AcquisitionSource, organic: AcquisitionSource): AcquisitionSource {
+  if (PAID_MEDIUM.test(medium)) return paid;
+  if (ORGANIC_MEDIUM.test(medium) || (!medium && organicHost)) return organic;
+  return "Referral";
+}
+
+function sourceFromUtm(source: string, medium: string, host: string): AcquisitionSource | null {
   const name = source.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!name) return null;
-  const paid = PAID_MEDIUM.test(medium);
-  if (["google", "googleads", "adwords"].includes(name)) return paid ? "Google Ads" : "Google Organic";
-  if (["facebook", "fb", "meta"].includes(name)) return paid ? "Facebook Ads" : "Facebook Organic";
-  if (["instagram", "ig"].includes(name)) return paid ? "Instagram Ads" : "Instagram Organic";
+  if (["google", "googleads", "adwords"].includes(name)) {
+    if (PAID_MEDIUM.test(medium)) return "Google Ads";
+    if (ORGANIC_MEDIUM.test(medium) || (!medium && isGoogleSearchHost(host))) return "Google Organic";
+    return "Referral";
+  }
+  if (["facebook", "fb", "meta"].includes(name)) return networkSource(medium, isFacebookHost(host), "Facebook Ads", "Facebook Organic");
+  if (["instagram", "ig"].includes(name)) return networkSource(medium, isInstagramHost(host), "Instagram Ads", "Instagram Organic");
   if (["chatgpt", "openai"].includes(name)) return "ChatGPT";
   if (["perplexity", "claude", "copilot", "gemini", "bard"].includes(name)) return "Other AI";
   return "Referral";
@@ -132,7 +142,8 @@ function sourceFromReferrer(host: string): AcquisitionSource | null {
   if (!host) return null;
   if (hostMatches(host, CHATGPT_HOSTS)) return "ChatGPT";
   if (hostMatches(host, OTHER_AI_HOSTS)) return "Other AI";
-  if (isGoogleHost(host)) return "Google Organic";
+  if (isGoogleSearchHost(host)) return "Google Organic";
+  if (host.endsWith(".google.com") || host === "google.com") return "Referral";
   if (isInstagramHost(host)) return "Instagram Organic";
   if (isFacebookHost(host)) return "Facebook Organic";
   return "Referral";
@@ -159,9 +170,13 @@ export function classifyTouch(evidence: TouchEvidence | null | undefined, now: s
   const gbraid = token(evidence?.gbraid, 200);
   const wbraid = token(evidence?.wbraid, 200);
   const fbclid = token(evidence?.fbclid, 200);
-  const fromUtm = sourceFromUtm(utmSource, utmMedium);
+  const googleUtm = ["google", "googleads", "adwords"].includes(utmSource.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const metaUtm = ["facebook", "fb", "meta", "instagram", "ig"].includes(utmSource.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const fromUtm = sourceFromUtm(utmSource, utmMedium, domain);
   let source: AcquisitionSource = "Unknown";
-  if (fromUtm) source = fromUtm;
+  if ((gclid || gbraid || wbraid) && (googleUtm || !utmSource)) source = "Google Ads";
+  else if (fbclid && (metaUtm || !utmSource)) source = isInstagramHost(domain) || utmSource.toLowerCase().includes("instagram") ? "Instagram Ads" : "Facebook Ads";
+  else if (fromUtm) source = fromUtm;
   else if (gclid || gbraid || wbraid) source = "Google Ads";
   else if (fbclid) source = isInstagramHost(domain) ? "Instagram Ads" : "Facebook Ads";
   else {
