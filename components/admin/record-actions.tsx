@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { OWNER_LEAD_STATUSES, PRIORITIES, REQUIREMENT_STATUSES } from "@/lib/crm/options";
 import { reviewLabel, type RequirementReviewDecision, type ReviewDecision, type StoredReview } from "@/lib/crm/review";
@@ -276,6 +276,9 @@ export function RequirementActions({
   const [nextStatus, setNextStatus] = useState(status);
   const [reason, setReason] = useState("");
   const [outcome, setOutcome] = useState("");
+  useEffect(() => {
+    setNextStatus(status);
+  }, [status]);
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [classificationNote, setClassificationNote] = useState("");
