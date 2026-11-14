@@ -678,6 +678,51 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE demand_requirements ADD COLUMN preference_details_json TEXT NOT NULL DEFAULT '{}'`,
     ],
   },
+  {
+    // Urgency cycles and client timeline revisions. Existing requirements are not backfilled.
+    version: 20,
+    name: "requirement_timeline_urgency",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN confirmed_timeline TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE demand_requirements ADD COLUMN confirmed_needed_by TEXT`,
+      `CREATE TABLE IF NOT EXISTS requirement_timeline_revisions (
+         id TEXT PRIMARY KEY,
+         requirement_id TEXT NOT NULL,
+         kind TEXT NOT NULL,
+         previous_timeline TEXT NOT NULL,
+         new_timeline TEXT NOT NULL,
+         previous_needed_by TEXT,
+         new_needed_by TEXT,
+         reason TEXT NOT NULL,
+         notes TEXT NOT NULL DEFAULT '',
+         confirmation_method TEXT NOT NULL,
+         actor_id TEXT NOT NULL,
+         created_at TEXT NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_timeline_revisions_requirement ON requirement_timeline_revisions (requirement_id, created_at)`,
+      `CREATE TRIGGER IF NOT EXISTS requirement_timeline_revisions_no_update BEFORE UPDATE ON requirement_timeline_revisions
+       BEGIN SELECT RAISE(ABORT, 'requirement_timeline_revisions is append-only'); END`,
+      `CREATE TRIGGER IF NOT EXISTS requirement_timeline_revisions_no_delete BEFORE DELETE ON requirement_timeline_revisions
+       BEGIN SELECT RAISE(ABORT, 'requirement_timeline_revisions is append-only'); END`,
+      `CREATE TABLE IF NOT EXISTS requirement_urgency_cycles (
+         id TEXT PRIMARY KEY,
+         requirement_id TEXT NOT NULL,
+         revision_id TEXT,
+         cycle_start TEXT NOT NULL,
+         timeline TEXT NOT NULL,
+         target_date TEXT,
+         closed_at TEXT,
+         closure_reason TEXT NOT NULL DEFAULT '',
+         urgency_band TEXT NOT NULL DEFAULT '',
+         overdue INTEGER NOT NULL DEFAULT 0,
+         created_at TEXT NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_urgency_cycles_requirement ON requirement_urgency_cycles (requirement_id, cycle_start)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_urgency_cycles_open ON requirement_urgency_cycles (requirement_id) WHERE closed_at IS NULL`,
+      `CREATE TRIGGER IF NOT EXISTS requirement_urgency_cycles_no_delete BEFORE DELETE ON requirement_urgency_cycles
+       BEGIN SELECT RAISE(ABORT, 'requirement_urgency_cycles cannot be deleted'); END`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

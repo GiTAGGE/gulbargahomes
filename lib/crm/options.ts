@@ -76,6 +76,42 @@ export const TIMELINES = [
 export type Timeline = (typeof TIMELINES)[number];
 export const URGENT_TIMELINES: readonly Timeline[] = ["Immediate", "Within 7 days"];
 
+/**
+ * Timelines staff can confirm with the client. Original enquiry values
+ * (`Within 30 days`, `Exploring`) stay valid and are not rewritten.
+ */
+export const CONFIRMED_TIMELINES = [
+  "Immediate",
+  "Within 7 days",
+  "Within 1 month",
+  "Within 3 months",
+  "Within 6 months",
+  "Flexible",
+] as const;
+export type ConfirmedTimeline = (typeof CONFIRMED_TIMELINES)[number];
+
+export const EXTENSION_REASONS = [
+  "Financial arrangements pending",
+  "Family decision pending",
+  "Client needs more time",
+  "Property not yet available",
+  "Other",
+] as const;
+export type ExtensionReason = (typeof EXTENSION_REASONS)[number];
+
+export const CONFIRMATION_METHODS = ["phone", "whatsapp", "in_person"] as const;
+export type ConfirmationMethod = (typeof CONFIRMATION_METHODS)[number];
+
+export const CONFIRMATION_METHOD_LABEL: Record<ConfirmationMethod, string> = {
+  phone: "Phone call",
+  whatsapp: "WhatsApp",
+  in_person: "In person",
+};
+
+/** Statuses that must not keep escalating. Converted is never reopened. */
+export const PAUSED_REQUIREMENT_STATUSES = ["Converted", "Lost", "Duplicate", "Invalid", "Postponed"] as const;
+export const REOPENABLE_REQUIREMENT_STATUSES = ["Lost", "Postponed"] as const;
+
 export const TENANT_PROFILES = ["Any", "Family", "Bachelors", "Students", "Working professionals", "Company lease"] as const;
 export const FURNISHING_PREFERENCES = ["Any", "Fully Furnished", "Semi Furnished", "Unfurnished"] as const;
 export const VEGETARIAN_PREFERENCES = ["Any", "Yes", "Preferred"] as const;

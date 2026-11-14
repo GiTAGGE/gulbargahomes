@@ -30,7 +30,9 @@ import {
   type StoredReview,
 } from "./review";
 import { readPreferenceDetails, type PreferenceDetails } from "../enquiry/questions";
+import { ATTEMPT_ACTIVITY_SQL, MEANINGFUL_ACTIVITY_SQL } from "./engagement";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
+import { initialCycleStatement, isPausedStatus, pauseUrgencyCycle } from "./timeline";
 
 /**
  * The one budget range on a requirement. Purchase price and monthly rent are
@@ -93,7 +95,12 @@ export type Requirement = {
   originOwnerLeadId: string | null;
   qualityReview: StoredReview;
   qualityReviewNote: string;
+  confirmedTimeline: string;
+  confirmedNeededBy: string | null;
+  /** Meaningful conversations only. An unanswered call is an attempt, not engagement. */
   engagementCount: number;
+  attemptCount: number;
+  lastMeaningfulAt: string | null;
   intentScore: IntentScore;
 };
 
@@ -142,12 +149,18 @@ type RequirementRow = {
   origin_owner_lead_id: string | null;
   quality_review: string | null;
   quality_review_note: string | null;
+  confirmed_timeline?: string | null;
+  confirmed_needed_by?: string | null;
   engagement_count?: number | null;
+  attempt_count?: number | null;
+  last_meaningful_at?: string | null;
 };
 
 const SELECT = `SELECT r.*, c.name AS contact_name, c.phone_e164 AS contact_phone, c.code AS contact_code,
   s.channel AS channel, s.meta_campaign_name AS campaign_name, s.meta_form_id AS form_id, s.meta_form_name AS form_name,
-  (SELECT COUNT(*) FROM activities a WHERE a.entity_type = 'requirement' AND a.entity_id = r.id) AS engagement_count
+  (SELECT COUNT(*) FROM activities a WHERE a.entity_type = 'requirement' AND a.entity_id = r.id AND ${MEANINGFUL_ACTIVITY_SQL}) AS engagement_count,
+  (SELECT COUNT(*) FROM activities a WHERE a.entity_type = 'requirement' AND a.entity_id = r.id AND ${ATTEMPT_ACTIVITY_SQL}) AS attempt_count,
+  (SELECT MAX(a.occurred_at) FROM activities a WHERE a.entity_type = 'requirement' AND a.entity_id = r.id AND ${MEANINGFUL_ACTIVITY_SQL}) AS last_meaningful_at
   FROM demand_requirements r
   JOIN contacts c ON c.id = r.contact_id
   LEFT JOIN lead_sources s ON s.id = r.source_id`;
@@ -205,7 +218,11 @@ function toRequirement(row: RequirementRow, now: Date): Requirement {
     originOwnerLeadId: row.origin_owner_lead_id,
     qualityReview: qualityReview === "misclassified" ? "" : qualityReview,
     qualityReviewNote: row.quality_review_note ?? "",
+    confirmedTimeline: row.confirmed_timeline ?? "",
+    confirmedNeededBy: row.confirmed_needed_by ?? null,
     engagementCount: Number(row.engagement_count ?? 0),
+    attemptCount: Number(row.attempt_count ?? 0),
+    lastMeaningfulAt: row.last_meaningful_at ?? null,
     intentScore: intentScore(
       {
         timeline,
@@ -374,6 +391,7 @@ export async function createRequirement(
   const insertSource = insertSourceStatement(db, actor, source, now);
   const id = write?.id || newId("req");
   const code = write?.code || formatCode("GH-D", await nextSequence(db, "seq_requirement"));
+  const cycleId = newId("cyc");
   const columns = {
     id,
     code,
@@ -404,8 +422,15 @@ export async function createRequirement(
         entityLabel: `${code} ${contact.name}`,
         action: "create",
         changes: diffFields({}, requirementColumns(input)),
-        context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId },
+        context: { channel: source.channel, contact_created: resolved.created, contact_id: resolved.contactId, cycle_id: cycleId },
         at: now,
+      }),
+      initialCycleStatement(db, {
+        id: cycleId,
+        requirementId: id,
+        timeline: input.timeline,
+        neededBy: input.neededBy,
+        startedAt: now,
       }),
       ...(write?.alongside ?? []),
     ]);
@@ -440,10 +465,26 @@ export async function updateRequirement(
   assertVersion(options.expectedVersion, current.rowVersion);
   const next: Record<string, SqlValue> = {};
 
-  if (input.details !== undefined) Object.assign(next, requirementColumns(parseRequirementInput(input.details)));
+  if (input.details !== undefined) {
+    const columns = requirementColumns(parseRequirementInput(input.details));
+    delete columns.timeline;
+    delete columns.needed_by;
+    Object.assign(next, columns);
+  }
   if (input.status !== undefined) {
     const status = strictOneOf(input.status, REQUIREMENT_STATUSES);
     if (!status) throw new HttpError(400, "Choose a valid status.");
+    if (status !== current.status && current.status === "Converted") {
+      throw new HttpError(400, "A converted requirement stays closed. Add a new requirement on this contact if they are looking again.");
+    }
+    if (status !== current.status && isPausedStatus(current.status) && !isPausedStatus(status)) {
+      throw new HttpError(
+        400,
+        current.status === "Lost" || current.status === "Postponed"
+          ? "Reopen this requirement and confirm the client's revised timeline."
+          : "This requirement stays closed.",
+      );
+    }
     if (ADVANCED_REQUIREMENT_STATUSES.has(status) && current.qualityReview !== "genuine") {
       throw new HttpError(
         400,
@@ -466,7 +507,7 @@ export async function updateRequirement(
     next.priority_override = oneOf(input.priorityOverride, ["", "High", "Medium", "Low"] as const, "");
   }
 
-  await updateVersionedRecord(db, actor, {
+  const changed = await updateVersionedRecord(db, actor, {
     table: "demand_requirements",
     entityType: "requirement",
     id: current.id,
@@ -483,6 +524,9 @@ export async function updateRequirement(
     next,
     now: options.now,
   });
+  if (changed && typeof next.status === "string" && next.status !== current.status && isPausedStatus(String(next.status))) {
+    await pauseUrgencyCycle(db, actor, current, String(next.status), options.now);
+  }
   return (await getRequirement(db, current.id))!;
 }
 

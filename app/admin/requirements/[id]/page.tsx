@@ -6,9 +6,10 @@ import { ContactCard, SourceCard } from "@/components/admin/crm-cards";
 import { FollowupsPanel, TimelinePanel } from "@/components/admin/crm-panels";
 import { HistoryList } from "@/components/admin/history-list";
 import { RequirementActions } from "@/components/admin/record-actions";
+import { RequirementTimelineActions } from "@/components/admin/requirement-timeline";
 import { Card, Field, Pill } from "@/components/admin/ui";
 import { listAudit } from "@/lib/admin/audit";
-import { bandTone, budgetLabel, formatDate, formatDateTime } from "@/lib/admin/format";
+import { bandTone, budgetLabel, formatDate, formatDateTime, urgencyTone } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
@@ -17,6 +18,8 @@ import { requirementDetailFields } from "@/lib/enquiry/questions";
 import { getRequirement } from "@/lib/crm/requirements";
 import { reviewLabel } from "@/lib/crm/review";
 import { getSource } from "@/lib/crm/sources";
+import { CONFIRMATION_METHOD_LABEL } from "@/lib/crm/options";
+import { isPausedStatus, loadRequirementTimeline } from "@/lib/crm/timeline";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,14 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
     adminNames(db),
   ]);
   const score = requirement.intentScore;
+  const timeline = await loadRequirementTimeline(db, requirement);
+  const age =
+    timeline.enquiryAgeDays === 0 ? "Today" : timeline.enquiryAgeDays === 1 ? "1 day" : `${timeline.enquiryAgeDays} days`;
+  const deadline = (value: string | null) => (value ? formatDateTime(value) : "No fixed date");
+  const closed = isPausedStatus(requirement.status);
+  const canAttempt = caps.logActivity && !closed;
+  const canExtendTimeline = caps.editCrm && !closed;
+  const canReopenRequirement = caps.editCrm && (requirement.status === "Lost" || requirement.status === "Postponed");
   const fields = requirementDetailFields({
     ...requirement,
     budgetText: budgetLabel(requirement.budgetMin, requirement.budgetMax, requirement.intent),
@@ -81,6 +92,82 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
             {requirement.qualityReviewNote && (
               <p className="mt-2 text-xs text-ink-muted">Classification note: {requirement.qualityReviewNote}</p>
             )}
+          </Card>
+
+          <Card
+            title="Client timeline"
+            hint="Original enquiry age never changes. Each extension keeps the previous deadline and starts a new urgency cycle."
+          >
+            <dl className="grid gap-3 sm:grid-cols-3">
+              <Field label="Enquiry age">
+                {age}
+                <span className="mt-0.5 block text-xs text-ink-muted">{formatDate(requirement.createdAt)}</span>
+              </Field>
+              <Field label="Original requested timeline">{timeline.originalTimeline}</Field>
+              <Field label="Original requested deadline">{deadline(timeline.originalDeadline)}</Field>
+              <Field label="Current confirmed timeline">{timeline.currentTimeline}</Field>
+              <Field label="Current confirmed deadline">{deadline(timeline.currentDeadline)}</Field>
+              <Field label="Extensions">{timeline.extensionCount}</Field>
+            </dl>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Pill tone={urgencyTone(timeline.current.band)}>{timeline.current.band}</Pill>
+              {timeline.current.overdue && <Pill tone="red">Overdue</Pill>}
+              <span className="text-xs text-ink-muted">
+                Urgency cycle {timeline.current.number}
+                {timeline.current.source === "original enquiry" ? " · calculated from the original enquiry" : ""}
+                {timeline.current.closedAt ? " · closed" : " · open"}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-ink-muted">
+              Last meaningful contact: {formatDateTime(timeline.lastMeaningfulAt)}. Contact attempts: {timeline.attemptCount}.
+              An attempt is not a client reply.
+            </p>
+            {timeline.current.source === "original enquiry" && (
+              <p className="mt-2 text-xs text-ink-muted">
+                This requirement was saved before urgency cycles. Nothing is backfilled. The original period is stored
+                when the client next extends, or when the requirement is closed.
+              </p>
+            )}
+
+            <h3 className="mt-4 text-xs font-bold uppercase tracking-wide text-ink-faint">Revised deadlines</h3>
+            {timeline.revisions.length === 0 ? (
+              <p className="mt-1 text-sm text-ink-muted">No extensions yet. The original timeline is still confirmed.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {timeline.revisions.map((revision) => (
+                  <li key={revision.id} className="rounded-xl bg-surface-muted/60 px-3 py-2 text-sm text-ink">
+                    <span className="font-semibold">
+                      {revision.kind === "reopen" ? "Reopened" : "Extension"} · {revision.previousTimeline} → {revision.newTimeline}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-ink-muted">
+                      {deadline(revision.previousNeededBy)} → {deadline(revision.newNeededBy)} · {revision.reason} · Staff
+                      recorded · {CONFIRMATION_METHOD_LABEL[revision.confirmationMethod]} · {formatDateTime(revision.createdAt)} ·{" "}
+                      {names[revision.actorId] ?? "Staff"}
+                    </span>
+                    {revision.notes && <span className="mt-0.5 block text-xs text-ink">{revision.notes}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <h3 className="mt-4 text-xs font-bold uppercase tracking-wide text-ink-faint">Urgency cycles</h3>
+            <ul className="mt-2 space-y-2">
+              {timeline.cycles.map((cycle) => (
+                <li key={cycle.id ?? "derived"} className="rounded-xl bg-surface-muted/60 px-3 py-2 text-sm text-ink">
+                  <span className="flex flex-wrap items-center gap-2 font-semibold">
+                    Cycle {cycle.number}
+                    <Pill tone={urgencyTone(cycle.band)}>{cycle.band}</Pill>
+                    {cycle.overdue && <Pill tone="red">Overdue</Pill>}
+                    {cycle.current && !cycle.closedAt && <Pill tone="green">Current</Pill>}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-ink-muted">
+                    {cycle.timeline} · started {formatDateTime(cycle.cycleStart)} · deadline {deadline(cycle.targetDate)}
+                    {cycle.closureReason ? ` · ${cycle.closureReason}` : ""}
+                    {cycle.source === "original enquiry" ? " · not stored yet" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </Card>
 
           <Card title="Matching properties" hint="Coming in the next phase.">
@@ -129,6 +216,18 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
               ))}
             </ul>
           </Card>
+          {(canExtendTimeline || canReopenRequirement || canAttempt) && (
+            <Card title="Timeline actions">
+              <RequirementTimelineActions
+                id={requirement.id}
+                rowVersion={requirement.rowVersion}
+                canEdit={caps.editCrm}
+                canLog={canAttempt}
+                canExtend={canExtendTimeline}
+                canReopen={canReopenRequirement}
+              />
+            </Card>
+          )}
           {caps.editCrm && (
             <Card title="Actions">
               <RequirementActions

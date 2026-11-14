@@ -41,14 +41,14 @@ const ENGAGED_STATUSES = new Set([
 ]);
 
 /**
- * How likely this person is to transact, independent of our inventory.
- * Inventory fit is a separate match score (Phase 2), so a serious buyer with no
- * current match still ranks high.
+ * How complete and serious the original enquiry is.
+ * This is not how soon staff must act (urgency) and not how well a property fits (match score).
+ * `timeline` is the timeline the client stated at enquiry, including after they later extend.
  */
 export function intentScore(input: IntentInput, now: Date = new Date()): IntentScore {
   const factors: IntentScore["factors"] = [];
 
-  factors.push({ label: "Urgency", points: URGENCY[input.timeline] ?? 0, max: 30 });
+  factors.push({ label: "Stated timeline", points: URGENCY[input.timeline] ?? 0, max: 30 });
 
   let budget = 0;
   if (input.budgetMax) budget += 14;

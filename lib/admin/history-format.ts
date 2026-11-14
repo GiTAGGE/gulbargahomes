@@ -31,6 +31,8 @@ const FIELD_LABEL: Record<string, string> = {
   parking_required: "Parking",
   timeline: "How soon",
   needed_by: "Needed by",
+  confirmed_timeline: "Confirmed timeline",
+  confirmed_needed_by: "Confirmed deadline",
   notes: "Additional requirements",
   preference_details_json: "Preferences",
 };

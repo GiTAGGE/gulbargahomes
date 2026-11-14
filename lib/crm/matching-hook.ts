@@ -11,9 +11,23 @@ export interface MatchingTrigger {
 }
 
 /**
- * Until Phase 2 there is nothing to match. Owner leads never enter matching;
- * only verified, available properties do, after staff create them.
+ * Until the matching engine lands, nothing is matched. Owner leads never enter
+ * matching; only verified, available properties do, after staff create them.
  */
 export const noMatching: MatchingTrigger = {
   async onCaptured() {},
 };
+
+export type TimelineChange = {
+  requirementId: string;
+  reason: "extension" | "reopen";
+};
+
+/**
+ * Called after a timeline extension or a reopen has been stored.
+ * Matching will re-rank from here. A failure must not undo the timeline change.
+ */
+export async function onRequirementTimelineChanged(
+  _db: SqlDb,
+  _change: TimelineChange,
+): Promise<void> {}

@@ -77,7 +77,7 @@ export function Field({ label, children }: { label: string; children: React.Reac
   return (
     <div>
       <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className="mt-0.5 text-sm text-ink">{children || "—"}</dd>
+      <dd className="mt-0.5 text-sm text-ink">{children === 0 || children ? children : "—"}</dd>
     </div>
   );
 }

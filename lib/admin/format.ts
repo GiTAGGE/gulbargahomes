@@ -84,6 +84,14 @@ export function bandTone(band: string): Tone {
   return band === "High" || band === "Hot" ? "red" : band === "Medium" || band === "Warm" ? "amber" : "stone";
 }
 
+export function urgencyTone(band: string): Tone {
+  if (band === "Critical" || band === "High") return "red";
+  if (band === "Normal") return "amber";
+  if (band === "Low") return "green";
+  if (band === "Paused") return "violet";
+  return "stone";
+}
+
 export function formatInr(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(2).replace(/\.?0+$/, "")} Cr`;
