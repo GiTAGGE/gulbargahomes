@@ -68,6 +68,8 @@ export function adminCapabilities(admin: AdminIdentity) {
     publish: check("property.publish"),
     archive: check("property.archive"),
     editCrm: check("crm.edit"),
+    viewMatches: check("match.view"),
+    manageMatches: check("match.manage"),
     logActivity: check("activity.log"),
     manageFollowups: check("followup.manage"),
     viewAudit: check("audit.view"),

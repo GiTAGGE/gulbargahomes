@@ -32,6 +32,7 @@ import {
 import { readPreferenceDetails, type PreferenceDetails } from "../enquiry/questions";
 import { ATTEMPT_ACTIVITY_SQL, MEANINGFUL_ACTIVITY_SQL } from "./engagement";
 import { insertSourceStatement, sourceIdForMetaLead, type SourceInput } from "./sources";
+import { noMatching, onRequirementDetailsChanged } from "./matching-hook";
 import { initialCycleStatement, isPausedStatus, pauseUrgencyCycle } from "./timeline";
 
 /**
@@ -440,7 +441,9 @@ export async function createRequirement(
     }
     throw error;
   }
-  return (await getRequirement(db, id))!;
+  const created = (await getRequirement(db, id))!;
+  await noMatching.onCaptured(db, { kind: "requirement", id, contactId: resolved.contactId, origin: source.channel });
+  return created;
 }
 
 /** Stages that mean the enquiry is verified. Pending reviews cannot skip ahead to these. */
@@ -526,6 +529,27 @@ export async function updateRequirement(
   });
   if (changed && typeof next.status === "string" && next.status !== current.status && isPausedStatus(String(next.status))) {
     await pauseUrgencyCycle(db, actor, current, String(next.status), options.now);
+  }
+  const matchFields = [
+    "intent",
+    "property_types_json",
+    "localities_json",
+    "locality_flexible",
+    "area_min",
+    "budget_min",
+    "budget_max",
+    "bhk_min",
+    "bhk_max",
+    "furnishing",
+    "vegetarian",
+    "parking_required",
+    "preference_details_json",
+  ];
+  const before = requirementColumns(current);
+  const affectsMatch = matchFields.some((field) => field in next && next[field] !== before[field]);
+  const resultingStatus = typeof next.status === "string" ? next.status : current.status;
+  if (changed && affectsMatch && !isPausedStatus(resultingStatus)) {
+    await onRequirementDetailsChanged(db, current.id);
   }
   return (await getRequirement(db, current.id))!;
 }

@@ -11,8 +11,8 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const ROLE_DESCRIPTION: Record<Role, string> = {
   super_admin: "Everything, including team accounts and integrations.",
   inventory_manager: "Creates, verifies, prices and publishes properties. Works leads. Sees integration status.",
-  lead_executive: "Works owner leads and requirements, logs calls and confirms availability.",
-  viewer: "Read-only. Phone numbers are masked.",
+  lead_executive: "Works owner leads and requirements, logs calls, confirms availability and decides matches.",
+  viewer: "Read-only. Phone numbers are masked. Discreet stock stays hidden.",
 };
 
 export const PERMISSIONS = [
@@ -29,6 +29,8 @@ export const PERMISSIONS = [
   "property.archive",
   "crm.view",
   "crm.edit",
+  "match.view",
+  "match.manage",
   "contact.view_phone",
   "activity.log",
   "followup.manage",
@@ -53,12 +55,14 @@ const LEAD_EXECUTIVE: Permission[] = [
   "property.confirm_availability",
   "crm.view",
   "crm.edit",
+  "match.view",
+  "match.manage",
   "contact.view_phone",
   "activity.log",
   "followup.manage",
 ];
 
-const VIEWER: Permission[] = ["property.view", "crm.view", "analytics.view"];
+const VIEWER: Permission[] = ["property.view", "crm.view", "match.view", "analytics.view"];
 
 export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   super_admin: new Set(PERMISSIONS),

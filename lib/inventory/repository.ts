@@ -10,6 +10,7 @@ import {
   type PropertyRow,
 } from "../db/property-rows";
 import { changedRows, formatCode, newId, nextSequence, type SqlDb, type SqlValue } from "../db/sql";
+import { onPropertyMatchingChanged } from "../crm/matching-hook";
 import type { Property } from "../types";
 import {
   applyLifecycleAction,
@@ -220,7 +221,7 @@ export async function updatePropertyContent(
   }
   if (Object.keys(changes).length === 0) return current;
 
-  return commitUpdate(
+  const updated = await commitUpdate(
     db,
     actor,
     current,
@@ -232,6 +233,10 @@ export async function updatePropertyContent(
     },
     options.now,
   );
+  if (["price", "property_type", "locality", "area", "plot_dimensions"].some((field) => field in changes)) {
+    await onPropertyMatchingChanged(db, "property_content_changed");
+  }
+  return updated;
 }
 
 export async function applyPropertyLifecycle(
@@ -266,7 +271,7 @@ export async function applyPropertyLifecycle(
     changes.availability_verified_at = [current.availabilityVerifiedAt, options.now];
   }
 
-  return commitUpdate(
+  const updated = await commitUpdate(
     db,
     actor,
     current,
@@ -281,6 +286,15 @@ export async function applyPropertyLifecycle(
     },
     options.now,
   );
+  await onPropertyMatchingChanged(db, propertyMatchTrigger(action.type));
+  return updated;
+}
+
+function propertyMatchTrigger(action: LifecycleAction["type"]): "property_verified" | "property_availability_changed" | "property_discreet_changed" | "property_eligibility_changed" {
+  if (action === "verify") return "property_verified";
+  if (action === "confirm_availability" || action === "set_availability") return "property_availability_changed";
+  if (action === "set_discreet") return "property_discreet_changed";
+  return "property_eligibility_changed";
 }
 
 export async function linkPropertyOwner(
@@ -299,6 +313,28 @@ export async function linkPropertyOwner(
     { action: "link_owner", changes: { owner_contact_id: [current.ownerContactId, ownerContactId] } },
     now,
   );
+}
+
+/** Stores a plot size such as `30x40` without turning it into square feet. */
+export async function savePlotDimensions(
+  db: SqlDb,
+  actor: AuditActor,
+  current: InventoryProperty,
+  dimensions: string,
+  now: string,
+): Promise<InventoryProperty> {
+  const next = dimensions.trim().slice(0, 40);
+  if (next === (current.plotDimensions ?? "")) return current;
+  const updated = await commitUpdate(
+    db,
+    actor,
+    current,
+    { plot_dimensions: next },
+    { action: "update", changes: { plot_dimensions: [current.plotDimensions ?? "", next] } },
+    now,
+  );
+  await onPropertyMatchingChanged(db, "property_content_changed");
+  return updated;
 }
 
 export function availabilityFromInput(value: unknown): AvailabilityStatus {

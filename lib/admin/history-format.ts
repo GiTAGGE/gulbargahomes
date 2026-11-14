@@ -25,6 +25,7 @@ const FIELD_LABEL: Record<string, string> = {
   localities_json: "Locality",
   locality_flexible: "Nearby localities",
   area_min: "Minimum area",
+  plot_dimensions: "Plot dimensions",
   furnishing: "Furnishing",
   tenant_profile: "Tenant profile",
   vegetarian: "Vegetarian",
