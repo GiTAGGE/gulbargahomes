@@ -315,6 +315,17 @@ export async function linkPropertyOwner(
   );
 }
 
+/** Accepts plot dimensions as typed text. Absent means leave the stored value alone. */
+export function readPlotDimensions(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new HttpError(400, "Plot dimensions are stored as text, for example 30x40.");
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > 40) throw new HttpError(400, "Plot dimensions must be 40 characters or fewer.");
+  return trimmed;
+}
+
 /** Stores a plot size such as `30x40` without turning it into square feet. */
 export async function savePlotDimensions(
   db: SqlDb,

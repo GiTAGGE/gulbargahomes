@@ -6,6 +6,8 @@ import { nowIso } from "@/lib/db/sql";
 import {
   applyPropertyLifecycle,
   getInventoryBySlug,
+  readPlotDimensions,
+  savePlotDimensions,
   updatePropertyContent,
 } from "@/lib/inventory/repository";
 import { parsePropertyDraft } from "@/lib/property-input";
@@ -29,12 +31,17 @@ export async function PATCH(request: Request, context: Context) {
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const expectedVersion = Number.isInteger(body.rowVersion) ? Number(body.rowVersion) : undefined;
-    const property = await updatePropertyContent(db, admin, current, parsed.property, {
-      now: nowIso(),
+    const now = nowIso();
+    let property = await updatePropertyContent(db, admin, current, parsed.property, {
+      now,
       expectedVersion,
       allowPriceChange: can(admin.role, "property.edit_price"),
       internalNotes: typeof body.internalNotes === "string" ? body.internalNotes.slice(0, 4000) : undefined,
     });
+    const plotDimensions = readPlotDimensions(body.plotDimensions);
+    if (plotDimensions !== undefined) {
+      property = await savePlotDimensions(db, admin, property, plotDimensions, now);
+    }
     revalidateListings();
     return NextResponse.json({ ok: true, property });
   } catch (error) {

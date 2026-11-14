@@ -256,6 +256,9 @@ function versionGate(requirementId: string, nextVersion: number): string {
   return `EXISTS (SELECT 1 FROM demand_requirements WHERE id = '${requirementId.replace(/'/g, "")}' AND row_version = ${Number(nextVersion)})`;
 }
 
+/** Opening of the note written when staff record a confirmation. It is not a customer reply. */
+export const STAFF_CONFIRMATION_LEAD = "Staff recorded a client confirmation";
+
 function confirmationActivity(method: ConfirmationMethod, notes: string, kind: "extension" | "reopen"): {
   kind: "call" | "whatsapp" | "note";
   direction: "outbound";
@@ -264,7 +267,7 @@ function confirmationActivity(method: ConfirmationMethod, notes: string, kind: "
 } {
   const action = kind === "reopen" ? "that the client is still looking" : "a revised timeline";
   const channel = method === "phone" ? "phone" : method === "whatsapp" ? "WhatsApp" : "an in-person conversation";
-  const lead = `Staff recorded a client confirmation by ${channel} ${action}. This was entered by staff and is not an inbound WhatsApp message.`;
+  const lead = `${STAFF_CONFIRMATION_LEAD} by ${channel} ${action}. This was entered by staff and is not an inbound WhatsApp message.`;
   const body = notes ? `${lead} ${notes}` : lead;
   if (method === "phone") return { kind: "call", direction: "outbound", outcome: "connected", body };
   if (method === "whatsapp") return { kind: "whatsapp", direction: "outbound", outcome: "connected", body };
@@ -816,6 +819,52 @@ export async function loadRequirementTimeline(
     listUrgencyCycles(db, requirement.id),
   ]);
   return describeTimeline(requirement, revisions, cycles, now);
+}
+
+/** Same view as `loadRequirementTimeline`, loaded in batches for the operations desk. */
+export async function loadTimelineViews(
+  db: SqlDb,
+  requirements: Array<TimelineSubject & { attemptCount: number }>,
+  now: Date,
+): Promise<Map<string, RequirementTimelineView>> {
+  const views = new Map<string, RequirementTimelineView>();
+  const revisions = new Map<string, TimelineRevision[]>();
+  const cycles = new Map<string, UrgencyCycle[]>();
+  for (let index = 0; index < requirements.length; index += 40) {
+    const ids = requirements.slice(index, index + 40).map((item) => item.id);
+    const marks = ids.map((_, place) => `?${place + 1}`).join(", ");
+    const [revisionRows, cycleRows] = await Promise.all([
+      db
+        .prepare(
+          `SELECT * FROM requirement_timeline_revisions WHERE requirement_id IN (${marks}) ORDER BY created_at, id`,
+        )
+        .bind(...ids)
+        .all<RevisionRow>(),
+      db
+        .prepare(`SELECT * FROM requirement_urgency_cycles WHERE requirement_id IN (${marks}) ORDER BY cycle_start, id`)
+        .bind(...ids)
+        .all<CycleRow>(),
+    ]);
+    for (const row of revisionRows.results) {
+      const revision = toRevision(row);
+      const list = revisions.get(revision.requirementId) ?? [];
+      list.push(revision);
+      revisions.set(revision.requirementId, list);
+    }
+    for (const row of cycleRows.results) {
+      const cycle = toCycle(row);
+      const list = cycles.get(cycle.requirementId) ?? [];
+      list.push(cycle);
+      cycles.set(cycle.requirementId, list);
+    }
+  }
+  for (const requirement of requirements) {
+    views.set(
+      requirement.id,
+      describeTimeline(requirement, revisions.get(requirement.id) ?? [], cycles.get(requirement.id) ?? [], now),
+    );
+  }
+  return views;
 }
 
 export async function countExtensions(db: SqlDb, requirementId: string): Promise<number> {

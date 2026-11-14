@@ -20,6 +20,7 @@ export default async function NewPropertyPage() {
         initial={emptyProperty()}
         mode="create"
         localities={localities}
+        plotDimensions=""
         permissions={{ editPrice: true, archive: false, changeAvailability: caps.changeAvailability }}
       />
     </AdminShell>

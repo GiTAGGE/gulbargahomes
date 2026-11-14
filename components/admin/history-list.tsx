@@ -34,6 +34,7 @@ const ACTION_LABEL: Record<string, string> = {
   followup_done: "Follow-up done",
   followup_cancelled: "Follow-up cancelled",
   followup_open: "Follow-up reopened",
+  match_decision: "Match decision",
   login: "Signed in",
   backfill: "Brought into the new inventory",
   sync_campaign_names: "Synced campaign names",

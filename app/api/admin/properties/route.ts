@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { can } from "@/lib/admin/permissions";
 import { authorize, errorResponse, readJson } from "@/lib/admin/route";
 import { nowIso } from "@/lib/db/sql";
-import { availabilityFromInput, createDraftProperty } from "@/lib/inventory/repository";
+import { availabilityFromInput, createDraftProperty, readPlotDimensions, savePlotDimensions } from "@/lib/inventory/repository";
 import { parsePropertyDraft } from "@/lib/property-input";
 
 /** Creates an unpublished draft. Publishing is a separate, permissioned action. */
@@ -20,11 +20,14 @@ export async function POST(request: Request) {
     const status = can(admin.role, "property.change_availability")
       ? availabilityFromInput((body.property as Record<string, unknown>)?.status)
       : "Available";
-    const property = await createDraftProperty(db, admin, parsed.property, {
-      now: nowIso(),
+    const now = nowIso();
+    let property = await createDraftProperty(db, admin, parsed.property, {
+      now,
       status,
       internalNotes: typeof body.internalNotes === "string" ? body.internalNotes.slice(0, 4000) : "",
     });
+    const plotDimensions = readPlotDimensions(body.plotDimensions);
+    if (plotDimensions) property = await savePlotDimensions(db, admin, property, plotDimensions, now);
     return NextResponse.json({ ok: true, property });
   } catch (error) {
     return errorResponse(error);

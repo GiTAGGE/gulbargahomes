@@ -17,12 +17,22 @@ export const MATCH_STATUSES = [
   "Rejected",
   "Shared",
   "Visit scheduled",
+  "Visited",
+  "Negotiation",
   "Converted",
   "Expired",
 ] as const;
 export type MatchStatus = (typeof MATCH_STATUSES)[number];
 
-export const MATCH_DECISIONS = ["Shortlisted", "Rejected", "Shared", "Visit scheduled", "Converted"] as const;
+export const MATCH_DECISIONS = [
+  "Shortlisted",
+  "Rejected",
+  "Shared",
+  "Visit scheduled",
+  "Visited",
+  "Negotiation",
+  "Converted",
+] as const;
 export type MatchDecision = (typeof MATCH_DECISIONS)[number];
 
 const STAFF_DECISIONS = new Set<string>(MATCH_DECISIONS);
@@ -254,7 +264,9 @@ export async function recordMatchDecision(
   }
   if (!STAFF_DECISIONS.has(decision)) throw new HttpError(400, "Choose a match decision.");
   const reason = typeof reasonInput === "string" ? reasonInput.trim().slice(0, 500) : "";
-  if (reason.length < 2) throw new HttpError(400, "Say why this match decision was made.");
+  if (decision === "Rejected" && reason.length < 2) {
+    throw new HttpError(400, "Say why this property was rejected.");
+  }
   const current = await db
     .prepare(
       `SELECT matches.*, properties.code, properties.title, properties.locality, properties.listing,
@@ -298,6 +310,44 @@ export async function recordMatchDecision(
     .bind(matchId)
     .first<MatchRow>();
   return toMatch(saved!, Number(saved!.rank));
+}
+
+const BLOCKED_MATCH_CONVERSION = new Set(["Lost", "Duplicate", "Invalid", "Postponed"]);
+
+/**
+ * Staff decision for one match on one requirement.
+ * Does not change the requirement status, qualify it, or contact the client.
+ * Converted is refused while the requirement is lost, postponed, duplicate, or invalid.
+ */
+export async function decideRequirementMatch(
+  db: SqlDb,
+  actor: AuditActor,
+  requirementId: string,
+  matchId: string,
+  decision: MatchDecision,
+  reasonInput: unknown,
+  now: string,
+): Promise<StoredMatch> {
+  if (!isRole(actor.role) || !can(actor.role, "match.manage")) {
+    throw new HttpError(403, "Your role cannot decide a match.");
+  }
+  if (!(MATCH_DECISIONS as readonly string[]).includes(decision)) {
+    throw new HttpError(400, "Choose a match decision.");
+  }
+  const requirement = await db
+    .prepare("SELECT id, status FROM demand_requirements WHERE id = ?1")
+    .bind(requirementId)
+    .first<{ id: string; status: string }>();
+  if (!requirement) throw new HttpError(404, "Requirement not found.");
+  const owned = await db
+    .prepare("SELECT requirement_id FROM matches WHERE id = ?1")
+    .bind(matchId)
+    .first<{ requirement_id: string }>();
+  if (!owned || owned.requirement_id !== requirementId) throw new HttpError(404, "That match was not found.");
+  if (decision === "Converted" && BLOCKED_MATCH_CONVERSION.has(requirement.status)) {
+    throw new HttpError(400, "Reopen this requirement before marking a match converted.");
+  }
+  return recordMatchDecision(db, actor, matchId, decision, reasonInput, now);
 }
 
 async function runSafely(db: SqlDb, requirementId: string, trigger: MatchRunTrigger): Promise<void> {

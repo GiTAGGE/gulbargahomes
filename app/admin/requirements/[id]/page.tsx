@@ -5,16 +5,18 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { ContactCard, SourceCard } from "@/components/admin/crm-cards";
 import { FollowupsPanel, TimelinePanel } from "@/components/admin/crm-panels";
 import { HistoryList } from "@/components/admin/history-list";
+import { MatchBoard } from "@/components/admin/match-board";
 import { RequirementActions } from "@/components/admin/record-actions";
 import { RequirementTimelineActions } from "@/components/admin/requirement-timeline";
 import { Card, Field, Pill } from "@/components/admin/ui";
-import { listAudit } from "@/lib/admin/audit";
+import { listAudit, listMatchDecisions } from "@/lib/admin/audit";
 import { bandTone, budgetLabel, formatDate, formatDateTime, urgencyTone } from "@/lib/admin/format";
 import { requirePageAdmin } from "@/lib/admin/page";
 import { adminNames } from "@/lib/admin/users";
 import { listActivities, listFollowups } from "@/lib/crm/activity";
 import { getContact, redactContact } from "@/lib/crm/contacts";
 import { requirementDetailFields } from "@/lib/enquiry/questions";
+import { listRequirementMatches } from "@/lib/crm/matching";
 import { getRequirement } from "@/lib/crm/requirements";
 import { reviewLabel } from "@/lib/crm/review";
 import { getSource } from "@/lib/crm/sources";
@@ -30,13 +32,17 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
   if (!requirement) notFound();
 
   const entity = { entityType: "requirement" as const, entityId: requirement.id, contactId: requirement.contactId };
-  const [contact, source, activities, followups, history, names] = await Promise.all([
+  const [contact, source, activities, followups, history, names, matches, matchHistory] = await Promise.all([
     getContact(db, requirement.contactId),
     getSource(db, requirement.sourceId),
     listActivities(db, { entityType: "requirement", entityId: requirement.id }),
     listFollowups(db, { entityType: "requirement", entityId: requirement.id }),
     caps.viewAudit ? listAudit(db, { entityType: "requirement", entityId: requirement.id }) : [],
     adminNames(db),
+    caps.viewMatches
+      ? listRequirementMatches(db, requirement.id, { viewDiscreet: caps.viewDiscreet })
+      : Promise.resolve(null),
+    caps.viewAudit ? listMatchDecisions(db, requirement.id) : [],
   ]);
   const score = requirement.intentScore;
   const timeline = await loadRequirementTimeline(db, requirement);
@@ -170,12 +176,26 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
             </ul>
           </Card>
 
-          <Card title="Matching properties" hint="Coming in the next phase.">
-            <p className="text-sm text-ink-muted">
-              Suggestions will only include verified, available properties with a current owner confirmation: published ones,
-              plus discreet ones for authorised staff.
-            </p>
-          </Card>
+          {matches && (
+            <Card
+              title="Matching properties"
+              hint="Ranked by the matching engine. Internal properties stay hidden without discreet access."
+            >
+              <MatchBoard
+                requirementId={requirement.id}
+                requirementStatus={requirement.status}
+                matches={matches}
+                budgetMax={requirement.budgetMax}
+                canManage={caps.manageMatches}
+              />
+              {caps.viewAudit && (
+                <div className="mt-4 border-t border-brand-50 pt-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-ink-faint">Match decisions</h3>
+                  <HistoryList entries={matchHistory} names={names} />
+                </div>
+              )}
+            </Card>
+          )}
 
           <Card title="Timeline">
             <TimelinePanel
