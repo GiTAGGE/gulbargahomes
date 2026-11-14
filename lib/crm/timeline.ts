@@ -258,15 +258,17 @@ function versionGate(requirementId: string, nextVersion: number): string {
 
 function confirmationActivity(method: ConfirmationMethod, notes: string, kind: "extension" | "reopen"): {
   kind: "call" | "whatsapp" | "note";
-  direction: "outbound" | "inbound";
-  outcome: string;
+  direction: "outbound";
+  outcome: "connected";
   body: string;
 } {
-  const lead = kind === "reopen" ? "Client confirmed they are still looking." : "Client confirmed a revised timeline.";
+  const action = kind === "reopen" ? "that the client is still looking" : "a revised timeline";
+  const channel = method === "phone" ? "phone" : method === "whatsapp" ? "WhatsApp" : "an in-person conversation";
+  const lead = `Staff recorded a client confirmation by ${channel} ${action}. This was entered by staff and is not an inbound WhatsApp message.`;
   const body = notes ? `${lead} ${notes}` : lead;
   if (method === "phone") return { kind: "call", direction: "outbound", outcome: "connected", body };
-  if (method === "whatsapp") return { kind: "whatsapp", direction: "inbound", outcome: "replied", body };
-  return { kind: "note", direction: "outbound", outcome: "", body: `${lead} Confirmed in person. ${notes}`.trim() };
+  if (method === "whatsapp") return { kind: "whatsapp", direction: "outbound", outcome: "connected", body };
+  return { kind: "note", direction: "outbound", outcome: "connected", body };
 }
 
 async function applyTimelineChange(
@@ -549,10 +551,13 @@ export async function reopenRequirement(
 export async function recordContactAttempt(
   db: SqlDb,
   actor: AuditActor,
-  requirement: Pick<TimelineSubject, "id" | "contactId">,
+  requirement: Pick<TimelineSubject, "id" | "contactId" | "status">,
   value: unknown,
   now: string,
 ) {
+  if (isPausedStatus(requirement.status)) {
+    throw new HttpError(400, `This requirement is closed (${requirement.status}). A contact attempt can be recorded only while it is open.`);
+  }
   const data = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const kind = data.kind === "whatsapp" ? "whatsapp" : data.kind === "call" ? "call" : null;
   if (!kind) throw new HttpError(400, "Record a phone call or a WhatsApp message.");

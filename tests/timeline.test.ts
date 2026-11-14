@@ -322,6 +322,13 @@ describe("requirement timeline lifecycle", () => {
     const twice = (await getRequirement(db, created.id, new Date(secondAt)))!;
     await recordContactAttempt(db, actor, twice, { kind: "whatsapp", outcome: "sent", notes: "Reminder only" }, secondAt);
     const afterAttempt = (await getRequirement(db, created.id, new Date(secondAt)))!;
+    const recorded = (await listActivities(db, { entityType: "requirement", entityId: created.id })).find(
+      (item) => item.kind === "whatsapp" && item.outcome === "connected",
+    );
+    assert.ok(recorded);
+    assert.equal(recorded.direction, "outbound");
+    assert.match(recorded.body, /Staff recorded a client confirmation by WhatsApp/);
+    assert.match(recorded.body, /not an inbound WhatsApp message/);
     assert.equal(afterAttempt.confirmedTimeline, "Within 6 months");
     assert.equal((await listTimelineRevisions(db, created.id)).length, 2);
     assert.equal(afterAttempt.lastMeaningfulAt, secondAt);
@@ -357,6 +364,60 @@ describe("requirement timeline lifecycle", () => {
     assert.equal(audits.filter((entry) => entry.action === "timeline_extend").length, 3);
     await assert.rejects(db.prepare("UPDATE requirement_timeline_revisions SET notes = 'changed'").run(), /append-only/);
     await assert.rejects(db.prepare("DELETE FROM requirement_urgency_cycles").run(), /cannot be deleted/);
+  });
+
+  it("rejects a contact attempt on every closed requirement and keeps attempts on an open one", async () => {
+    const db = await setup();
+    const open = await create(db, "Within 7 days");
+    const unanswered = await recordContactAttempt(db, actor, open, { kind: "call", outcome: "no_answer", notes: "No pickup" }, NOW);
+    const sent = await recordContactAttempt(db, actor, open, { kind: "whatsapp", outcome: "sent", notes: "Sent the locality list" }, NOW);
+    assert.equal(unanswered.outcome, "no_answer");
+    assert.equal(unanswered.direction, "outbound");
+    assert.equal(sent.kind, "whatsapp");
+    assert.equal(sent.outcome, "sent");
+    const stillOpen = (await getRequirement(db, open.id, new Date(NOW)))!;
+    assert.equal(stillOpen.status, "New");
+    assert.equal(stillOpen.attemptCount, 2);
+    assert.equal(stillOpen.engagementCount, 0);
+
+    const closedStatuses = ["Lost", "Postponed", "Duplicate", "Invalid", "Converted"] as const;
+    for (const [index, status] of closedStatuses.entries()) {
+      const created = await createRequirement(
+        db,
+        actor,
+        { name: `Closed ${status}`, phone: `99000991${index}0` },
+        requirementInput("Within 7 days"),
+        parseSourceInput({ channel: "phone" }),
+        NOW,
+      );
+      let current = created;
+      if (status === "Converted") {
+        current = await setRequirementQuality(db, actor, current, "genuine", "Confirmed before the deal.", {
+          now: NOW,
+          expectedVersion: current.rowVersion,
+        });
+      }
+      const needsOutcome = status === "Lost" || status === "Converted";
+      current = await updateRequirement(
+        db,
+        actor,
+        current,
+        needsOutcome ? { status, outcome: "Closed in the test" } : { status },
+        { now: NOW, expectedVersion: current.rowVersion },
+      );
+      assert.equal(current.status, status);
+      const before = (await listActivities(db, { entityType: "requirement", entityId: current.id })).length;
+      await assert.rejects(
+        recordContactAttempt(db, actor, current, { kind: "call", outcome: "no_answer" }, NOW),
+        new RegExp(`closed \\(${status}\\)`),
+      );
+      await assert.rejects(
+        recordContactAttempt(db, actor, current, { kind: "whatsapp", outcome: "sent" }, NOW),
+        new RegExp(`closed \\(${status}\\)`),
+      );
+      assert.equal((await listActivities(db, { entityType: "requirement", entityId: current.id })).length, before);
+      assert.equal((await getRequirement(db, current.id))?.status, status);
+    }
   });
 
   it("does not treat a contact attempt as an extension or as meaningful engagement", async () => {

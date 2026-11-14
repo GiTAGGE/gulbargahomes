@@ -43,6 +43,10 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
   const age =
     timeline.enquiryAgeDays === 0 ? "Today" : timeline.enquiryAgeDays === 1 ? "1 day" : `${timeline.enquiryAgeDays} days`;
   const deadline = (value: string | null) => (value ? formatDateTime(value) : "No fixed date");
+  const closed = isPausedStatus(requirement.status);
+  const canAttempt = caps.logActivity && !closed;
+  const canExtendTimeline = caps.editCrm && !closed;
+  const canReopenRequirement = caps.editCrm && (requirement.status === "Lost" || requirement.status === "Postponed");
   const fields = requirementDetailFields({
     ...requirement,
     budgetText: budgetLabel(requirement.budgetMin, requirement.budgetMax, requirement.intent),
@@ -136,8 +140,8 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
                       {revision.kind === "reopen" ? "Reopened" : "Extension"} · {revision.previousTimeline} → {revision.newTimeline}
                     </span>
                     <span className="mt-0.5 block text-xs text-ink-muted">
-                      {deadline(revision.previousNeededBy)} → {deadline(revision.newNeededBy)} · {revision.reason} ·{" "}
-                      {CONFIRMATION_METHOD_LABEL[revision.confirmationMethod]} · {formatDateTime(revision.createdAt)} ·{" "}
+                      {deadline(revision.previousNeededBy)} → {deadline(revision.newNeededBy)} · {revision.reason} · Staff
+                      recorded · {CONFIRMATION_METHOD_LABEL[revision.confirmationMethod]} · {formatDateTime(revision.createdAt)} ·{" "}
                       {names[revision.actorId] ?? "Staff"}
                     </span>
                     {revision.notes && <span className="mt-0.5 block text-xs text-ink">{revision.notes}</span>}
@@ -212,15 +216,15 @@ export default async function RequirementPage({ params }: { params: Promise<{ id
               ))}
             </ul>
           </Card>
-          {(caps.editCrm || caps.logActivity) && (
+          {(canExtendTimeline || canReopenRequirement || canAttempt) && (
             <Card title="Timeline actions">
               <RequirementTimelineActions
                 id={requirement.id}
                 rowVersion={requirement.rowVersion}
                 canEdit={caps.editCrm}
-                canLog={caps.logActivity}
-                canExtend={!isPausedStatus(requirement.status)}
-                canReopen={requirement.status === "Lost" || requirement.status === "Postponed"}
+                canLog={canAttempt}
+                canExtend={canExtendTimeline}
+                canReopen={canReopenRequirement}
               />
             </Card>
           )}
