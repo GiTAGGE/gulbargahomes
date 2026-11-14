@@ -4,6 +4,7 @@ import { preferenceLines, readPreferenceDetails } from "../enquiry/questions";
 
 const FIELD_LABEL: Record<string, string> = {
   status: "Status",
+  decision_reason: "Decision note",
   role_review: "Classification",
   role_review_note: "Classification note",
   quality_review: "Verification",

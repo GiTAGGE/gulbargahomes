@@ -72,6 +72,9 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ s
         canChangeAvailability={caps.changeAvailability && property.publicationStatus !== "Archived"}
         canSeeDiscreet={caps.viewDiscreet}
       />
+      <Card title="Plot dimensions" hint="Stored as text. Not converted from square feet.">
+        <p className="break-words text-sm text-ink">{property.plotDimensions || "Not recorded."}</p>
+      </Card>
       <Card title="Owner">
         {owner ? (
           <div className="space-y-1 text-sm">
@@ -122,6 +125,7 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ s
               localities={allLocalities}
               rowVersion={property.rowVersion}
               internalNotes={property.internalNotes}
+              plotDimensions={property.plotDimensions}
               isPublic={isPublic}
               permissions={{
                 editPrice: caps.editPrice,

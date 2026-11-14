@@ -129,6 +129,22 @@ function toEntry(row: AuditRow): AuditEntry {
   };
 }
 
+/** Match decisions for one requirement. Each decision is its own audit row. */
+export async function listMatchDecisions(db: SqlDb, requirementId: string, limit = 50): Promise<AuditEntry[]> {
+  const capped = Math.min(Math.max(limit, 1), 200);
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM audit_log
+       WHERE entity_type = 'match' AND action = 'match_decision'
+         AND json_extract(context_json, '$.requirement_id') = ?1
+       ORDER BY occurred_at DESC, id DESC
+       LIMIT ?2`,
+    )
+    .bind(requirementId, capped)
+    .all<AuditRow>();
+  return results.map(toEntry);
+}
+
 export async function listAudit(
   db: SqlDb,
   filter: { entityType?: string; entityId?: string; limit?: number },

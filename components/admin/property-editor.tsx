@@ -37,6 +37,7 @@ export function PropertyEditor({
   localities,
   rowVersion: initialRowVersion,
   internalNotes: initialNotes = "",
+  plotDimensions: initialPlotDimensions = "",
   isPublic = false,
   availabilityLabel,
   permissions = { editPrice: true, archive: true, changeAvailability: true },
@@ -47,6 +48,7 @@ export function PropertyEditor({
   localities: string[];
   rowVersion?: number;
   internalNotes?: string;
+  plotDimensions?: string;
   isPublic?: boolean;
   permissions?: EditorPermissions;
 }) {
@@ -60,6 +62,7 @@ export function PropertyEditor({
     );
   }, [initialRowVersion]);
   const [internalNotes, setInternalNotes] = useState(initialNotes);
+  const [plotDimensions, setPlotDimensions] = useState(initialPlotDimensions);
   const priceLocked = mode === "edit" && !permissions.editPrice;
   const [slugTouched, setSlugTouched] = useState(mode === "edit");
   const [mapTouched, setMapTouched] = useState(mode === "edit" && Boolean(initial.mapQuery));
@@ -143,11 +146,11 @@ export function PropertyEditor({
     const response = await fetch(endpoint, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ property, rowVersion, internalNotes }),
+      body: JSON.stringify({ property, rowVersion, internalNotes, plotDimensions }),
     });
     const data = (await response.json().catch(() => ({}))) as {
       error?: string;
-      property?: Property & { rowVersion?: number };
+      property?: Property & { rowVersion?: number; plotDimensions?: string };
     };
     setPending(false);
     if (!response.ok || !data.property) {
@@ -155,6 +158,7 @@ export function PropertyEditor({
       return;
     }
     setRowVersion(data.property.rowVersion);
+    if (typeof data.property.plotDimensions === "string") setPlotDimensions(data.property.plotDimensions);
     setNotice(
       mode === "create"
         ? "Saved as a draft. It stays off the website until it is verified and published."
@@ -361,6 +365,19 @@ export function PropertyEditor({
                 onChange={(event) => update({ area: Number(event.target.value) })}
                 className={fieldClass}
               />
+            </label>
+            <label className="block text-sm font-semibold text-ink sm:col-span-3">
+              Plot dimensions
+              <input
+                value={plotDimensions}
+                maxLength={40}
+                onChange={(event) => setPlotDimensions(event.target.value)}
+                placeholder="30x40"
+                className={fieldClass}
+              />
+              <span className="mt-1 block text-xs font-normal text-ink-muted">
+                Optional text such as 30x40. It is stored as typed and is not converted into square feet.
+              </span>
             </label>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">

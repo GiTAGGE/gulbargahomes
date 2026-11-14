@@ -347,3 +347,11 @@ function formatSqft(value: number): string {
 export function formatRupees(value: number): string {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
+
+/** Rupee gap between a property price and the requirement's maximum. Not a score. */
+export function budgetDifferenceLabel(price: number, budgetMax: number | null): string {
+  if (budgetMax === null || budgetMax <= 0) return "No maximum budget on the requirement.";
+  if (price <= 0) return "This property has no price to compare.";
+  if (price <= budgetMax) return `${formatRupees(budgetMax - price)} under the maximum.`;
+  return `${formatRupees(price - budgetMax)} over the maximum.`;
+}
