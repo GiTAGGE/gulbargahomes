@@ -16,6 +16,7 @@ import { createRequirement, getRequirement, parseRequirementInput, updateRequire
 import { parseSourceInput } from "../lib/crm/sources";
 import { extendRequirementTimeline, reopenRequirement } from "../lib/crm/timeline";
 import { prepareDatabase } from "../lib/db/prepare";
+import type { SqlStatement } from "../lib/db/sql";
 import type { InventoryProperty } from "../lib/db/property-rows";
 import {
   applyPropertyLifecycle,
@@ -508,5 +509,67 @@ describe("matching runs", () => {
       { now: NOW, expectedVersion: updated.rowVersion },
     );
     assert.equal((await getRequirement(db, updated.id))?.confirmedTimeline, "Within 6 months");
+  });
+
+  it("runs one follow-up so a trigger during a match sees the latest saved requirement", async () => {
+    const db = await setup();
+    const property = await live(db, "coalesce-house");
+    const requirement = await create(db, requirementInput());
+    const original = (await listRequirementMatches(db, requirement.id, { viewDiscreet: true }))[0];
+    await recordMatchDecision(db, executive, original.id, "Shortlisted", "Keep this one", NOW);
+
+    let held = 0;
+    let releaseHold = () => {};
+    const hold = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const prepare = db.prepare.bind(db);
+    db.prepare = (sql: string): SqlStatement => {
+      const statement = prepare(sql);
+      if (sql !== "SELECT * FROM matches WHERE requirement_id = ?1") return statement;
+      const paused: SqlStatement = {
+        bind(...values) {
+          const bound = statement.bind(...values);
+          const heldRead: SqlStatement = {
+            bind: (...next) => bound.bind(...next),
+            all: async () => {
+              held += 1;
+              if (held === 1) await hold;
+              return bound.all();
+            },
+            first: () => bound.first(),
+            run: () => bound.run(),
+          };
+          return heldRead;
+        },
+        all: () => statement.all(),
+        first: () => statement.first(),
+        run: () => statement.run(),
+      };
+      return paused;
+    };
+
+    const first = safeRequirementMatch(db, requirement.id, "property_content_changed");
+    for (let attempt = 0; attempt < 20 && held === 0; attempt += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(held, 1);
+
+    await db.prepare("UPDATE demand_requirements SET budget_max = ?1 WHERE id = ?2").bind(50000, requirement.id).run();
+    const updated = safeRequirementMatch(db, requirement.id, "requirement_updated");
+    const extended = safeRequirementMatch(db, requirement.id, "timeline_extended");
+    releaseHold();
+    await Promise.all([first, updated, extended]);
+
+    const match = byProperty(await listRequirementMatches(db, requirement.id, { viewDiscreet: true }), property);
+    assert.equal(match.id, original.id);
+    assert.equal(match.status, "Shortlisted");
+    assert.equal(match.decisionReason, "Keep this one");
+    assert.equal(match.eligible, true);
+    assert.equal(match.budgetScore, MATCH_WEIGHTS.budgetOver);
+    assert.match(match.explanation, /₹50,000 maximum/);
+    const logged = await runs(db, requirement.id);
+    assert.deepEqual(logged.map((run) => run.trigger), ["requirement_created", "property_content_changed", "timeline_extended"]);
+    assert.equal(logged.every((run) => run.result === "completed"), true);
   });
 });

@@ -135,20 +135,62 @@ type RequirementCandidate = {
   preference_details_json: string | null;
 };
 
-const inflight = new Map<string, Promise<void>>();
+type MatchGate = {
+  /** The latest trigger that arrived while a pass was running. Several collapse into one. */
+  followUp: MatchRunTrigger | null;
+  /** Settles when this requirement has no pass left to run. */
+  done: Promise<void>;
+};
+
+const gates = new Map<string, MatchGate>();
 
 /**
- * Matches one requirement. A second call for the same requirement waits for the
- * first instead of writing a second run. Failures are recorded and not thrown.
+ * Matches one requirement against the latest saved inventory and requirement.
+ * A trigger that arrives during a pass is remembered, and the callers wait.
+ * When that pass finishes, one follow-up reads the database again. Triggers
+ * that arrive during the follow-up collapse into the next pass. Matching does
+ * not enqueue itself, so a quiet pass ends the chain. The gate is removed on
+ * success and on failure. A matching error is recorded and not thrown.
  */
 export function safeRequirementMatch(db: SqlDb, requirementId: string, trigger: MatchRunTrigger): Promise<void> {
-  const current = inflight.get(requirementId);
-  if (current) return current;
-  const run = runSafely(db, requirementId, trigger).finally(() => {
-    if (inflight.get(requirementId) === run) inflight.delete(requirementId);
+  const current = gates.get(requirementId);
+  if (current) {
+    current.followUp = trigger;
+    return current.done;
+  }
+
+  let finish = () => {};
+  const done = new Promise<void>((resolve) => {
+    finish = resolve;
   });
-  inflight.set(requirementId, run);
-  return run;
+  const gate: MatchGate = { followUp: null, done };
+  gates.set(requirementId, gate);
+  void pump(db, requirementId, trigger, gate).finally(finish);
+  return done;
+}
+
+async function pump(db: SqlDb, requirementId: string, trigger: MatchRunTrigger, gate: MatchGate): Promise<void> {
+  let next: MatchRunTrigger | null = trigger;
+  try {
+    while (next) {
+      const current = next;
+      next = null;
+      try {
+        await runSafely(db, requirementId, current);
+      } catch (error) {
+        // runSafely already records its own failure. This keeps one broken pass
+        // from skipping a follow-up that was requested while it ran.
+        console.error("requirement matching follow-up failed", { requirementId, trigger: current, error });
+      } finally {
+        // Taken synchronously after the pass, so a trigger cannot land between
+        // the read and the clear. The next pass, if any, sees committed rows.
+        next = gate.followUp;
+        gate.followUp = null;
+      }
+    }
+  } finally {
+    if (gates.get(requirementId) === gate) gates.delete(requirementId);
+  }
 }
 
 /** Refreshes every open requirement after a property change. One failure does not stop the rest. */
