@@ -66,6 +66,7 @@ export type PropertyRow = {
   first_published_at: string | null;
   archived_at: string | null;
   row_version: number;
+  plot_dimensions?: string | null;
 };
 
 export interface InventoryProperty extends Omit<Property, "status"> {
@@ -93,6 +94,7 @@ export interface InventoryProperty extends Omit<Property, "status"> {
   firstPublishedAt: string | null;
   archivedAt: string | null;
   rowVersion: number;
+  plotDimensions: string;
 }
 
 /** Public mapping: only fields of the public `Property` type, copied one by one. */
@@ -162,6 +164,7 @@ export function rowToInventory(row: PropertyRow): InventoryProperty {
     firstPublishedAt: row.first_published_at,
     archivedAt: row.archived_at,
     rowVersion: Number(row.row_version ?? 1),
+    plotDimensions: row.plot_dimensions ?? "",
   };
 }
 

@@ -14,7 +14,8 @@ export type AuditEntity =
   | "session"
   | "integration"
   | "meta_form"
-  | "meta_import";
+  | "meta_import"
+  | "match";
 
 export type FieldChanges = Record<string, [unknown, unknown]>;
 

@@ -723,6 +723,59 @@ export const MIGRATIONS: Migration[] = [
        BEGIN SELECT RAISE(ABORT, 'requirement_urgency_cycles cannot be deleted'); END`,
     ],
   },
+  {
+    // Ranked requirement/property pairs. Existing requirements are not backfilled.
+    version: 21,
+    name: "property_matches",
+    statements: [
+      `ALTER TABLE properties ADD COLUMN plot_dimensions TEXT NOT NULL DEFAULT ''`,
+      `CREATE TABLE IF NOT EXISTS matches (
+         id TEXT PRIMARY KEY,
+         requirement_id TEXT NOT NULL,
+         property_id TEXT NOT NULL,
+         score INTEGER NOT NULL,
+         locality_score INTEGER NOT NULL,
+         area_score INTEGER NOT NULL,
+         budget_score INTEGER NOT NULL,
+         explanation TEXT NOT NULL,
+         rank INTEGER NOT NULL,
+         matching_mode TEXT NOT NULL,
+         status TEXT NOT NULL,
+         decision TEXT NOT NULL DEFAULT '',
+         decided_at TEXT,
+         decision_reason TEXT NOT NULL DEFAULT '',
+         eligible INTEGER NOT NULL DEFAULT 1,
+         created_at TEXT NOT NULL,
+         updated_at TEXT NOT NULL,
+         UNIQUE (requirement_id, property_id)
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_matches_requirement ON matches (requirement_id, rank)`,
+      `CREATE INDEX IF NOT EXISTS idx_matches_property ON matches (property_id)`,
+      `CREATE TABLE IF NOT EXISTS match_runs (
+         id TEXT PRIMARY KEY,
+         requirement_id TEXT NOT NULL,
+         trigger TEXT NOT NULL,
+         result TEXT NOT NULL,
+         error TEXT NOT NULL DEFAULT '',
+         match_count INTEGER NOT NULL DEFAULT 0,
+         started_at TEXT NOT NULL,
+         finished_at TEXT NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_match_runs_requirement ON match_runs (requirement_id, started_at)`,
+    ],
+  },
+  {
+    // Lets a matching write commit only when the requirement is still the snapshot that was read.
+    version: 22,
+    name: "match_epoch",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN match_epoch INTEGER NOT NULL DEFAULT 0`,
+      `CREATE TABLE IF NOT EXISTS match_write_guard (
+         token TEXT PRIMARY KEY,
+         ok INTEGER NOT NULL CHECK (ok = 1)
+       )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

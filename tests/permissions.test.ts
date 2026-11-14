@@ -13,11 +13,13 @@ const MATRIX: Record<Role, Permission[]> = {
     "property.confirm_availability",
     "crm.view",
     "crm.edit",
+    "match.view",
+    "match.manage",
     "contact.view_phone",
     "activity.log",
     "followup.manage",
   ],
-  viewer: ["property.view", "crm.view", "analytics.view"],
+  viewer: ["property.view", "crm.view", "match.view", "analytics.view"],
 };
 
 describe("role permission matrix", () => {
