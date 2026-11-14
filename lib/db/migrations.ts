@@ -764,6 +764,18 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_match_runs_requirement ON match_runs (requirement_id, started_at)`,
     ],
   },
+  {
+    // Lets a matching write commit only when the requirement is still the snapshot that was read.
+    version: 22,
+    name: "match_epoch",
+    statements: [
+      `ALTER TABLE demand_requirements ADD COLUMN match_epoch INTEGER NOT NULL DEFAULT 0`,
+      `CREATE TABLE IF NOT EXISTS match_write_guard (
+         token TEXT PRIMARY KEY,
+         ok INTEGER NOT NULL CHECK (ok = 1)
+       )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

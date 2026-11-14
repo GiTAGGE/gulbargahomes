@@ -115,7 +115,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-11T00:00:00.000Z"), [6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     const connectionColumns = await db.prepare("PRAGMA table_info(meta_connection)").all<{ name: string }>();
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_error"));
     assert.ok(connectionColumns.results.some((column) => column.name === "user_token_scopes_json"));
@@ -201,7 +201,7 @@ describe("migrations", () => {
       .run();
     const propertiesBefore = Number((await db.prepare("SELECT COUNT(*) AS n FROM properties").first<{ n: number }>())?.n);
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16, 17, 18, 19, 20, 21]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-12T01:00:00.000Z"), [16, 17, 18, 19, 20, 21, 22]);
 
     const land = await db
       .prepare("SELECT village, answers_json, notes, verified_village, additional_phone_e164 FROM land_jv_enquiries WHERE id = 'ljv_existing'")
@@ -256,7 +256,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [19, 20, 21]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [19, 20, 21, 22]);
     const row = await db
       .prepare(
         `SELECT vegetarian, furnishing, tenant_profile, notes, bhk_min, area_min, parking_required, preference_details_json
@@ -323,7 +323,7 @@ describe("migrations", () => {
       )
       .run();
 
-    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [20, 21]);
+    assert.deepEqual(await applyMigrations(db, "2026-11-13T01:00:00.000Z"), [20, 21, 22]);
     const row = await db
       .prepare(
         `SELECT timeline, needed_by, notes, created_at, confirmed_timeline, confirmed_needed_by
@@ -354,6 +354,71 @@ describe("migrations", () => {
     assert.equal(loaded?.timeline, "Within 30 days");
     assert.equal(loaded?.neededBy, "2026-10-20T18:29:59.999Z");
     assert.equal(loaded?.createdAt, "2026-10-01T00:00:00.000Z");
+  });
+
+  it("migration 22 adds a zero match epoch on a fresh database and an existing requirement", async () => {
+    const fresh = createTestDb();
+    await applyMigrations(fresh);
+    const freshColumns = await fresh.prepare("PRAGMA table_info(demand_requirements)").all<{ name: string }>();
+    assert.ok(freshColumns.results.some((column) => column.name === "match_epoch"));
+    await fresh
+      .prepare(
+        `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+         VALUES ('con_fresh', 'GH-C0096', 'Fresh Epoch', '+919845012196', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    await fresh
+      .prepare(
+        `INSERT INTO demand_requirements (
+           id, code, contact_id, intent, notes, created_at, created_by, updated_at, updated_by
+         ) VALUES ('req_fresh', 'GH-D0096', 'con_fresh', 'Buy', 'New row', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    const freshRow = await fresh.prepare("SELECT match_epoch, notes FROM demand_requirements WHERE id = 'req_fresh'").first<{
+      match_epoch: number;
+      notes: string;
+    }>();
+    assert.equal(Number(freshRow?.match_epoch), 0);
+    assert.equal(freshRow?.notes, "New row");
+    assert.equal(Number((await fresh.prepare("SELECT COUNT(*) AS n FROM match_write_guard").first<{ n: number }>())?.n), 0);
+
+    const existing = createTestDb();
+    await existing
+      .prepare("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
+      .run();
+    for (const migration of MIGRATIONS.filter((item) => item.version < 22)) {
+      await existing.batch([
+        ...migration.statements.map((sql) => existing.prepare(sql)),
+        existing
+          .prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)")
+          .bind(migration.version, migration.name, "2026-11-13T00:00:00.000Z"),
+      ]);
+    }
+    await existing
+      .prepare(
+        `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+         VALUES ('con_epoch', 'GH-C0095', 'Before Epoch', '+919845012195', 't', 'a', 't', 'a')`,
+      )
+      .run();
+    await existing
+      .prepare(
+        `INSERT INTO demand_requirements (
+           id, code, contact_id, intent, notes, created_at, created_by, updated_at, updated_by
+         ) VALUES ('req_epoch', 'GH-D0095', 'con_epoch', 'Rent', 'Keep the note', 't', 'a', 't', 'a')`,
+      )
+      .run();
+
+    assert.deepEqual(await applyMigrations(existing, "2026-11-14T00:00:00.000Z"), [22]);
+    const row = await existing.prepare("SELECT match_epoch, notes, intent FROM demand_requirements WHERE id = 'req_epoch'").first<{
+      match_epoch: number;
+      notes: string;
+      intent: string;
+    }>();
+    assert.equal(Number(row?.match_epoch), 0);
+    assert.equal(row?.notes, "Keep the note");
+    assert.equal(row?.intent, "Rent");
+    assert.equal(Number((await existing.prepare("SELECT COUNT(*) AS n FROM match_write_guard").first<{ n: number }>())?.n), 0);
+    assert.deepEqual(await applyMigrations(existing), []);
   });
 
   it("keeps the audit log append-only", async () => {

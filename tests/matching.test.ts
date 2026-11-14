@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import { createOwnerLead, parseOwnerLeadInput } from "../lib/crm/owner-leads";
 import {
+  MATCH_ATTEMPT_LIMIT,
   listRequirementMatches,
+  matchRequirementWithoutGate,
   recordMatchDecision,
   safeRequirementMatch,
   type StoredMatch,
@@ -572,4 +574,185 @@ describe("matching runs", () => {
     assert.deepEqual(logged.map((run) => run.trigger), ["requirement_created", "property_content_changed", "timeline_extended"]);
     assert.equal(logged.every((run) => run.result === "completed"), true);
   });
+
+  it("retries a stale isolate from fresh rows and keeps the newer budget and decision", async () => {
+    const db = await setup();
+    const property = await live(db, "epoch-house");
+    const requirement = await create(db, requirementInput());
+    const original = (await listRequirementMatches(db, requirement.id, { viewDiscreet: true }))[0];
+    await recordMatchDecision(db, executive, original.id, "Shortlisted", "Keep this one", NOW);
+    const hold = holdFirstMatchRead(db);
+
+    const stale = matchRequirementWithoutGate(db, requirement.id, "property_content_changed");
+    await hold.untilHeld();
+    await db.prepare("UPDATE demand_requirements SET budget_max = ?1 WHERE id = ?2").bind(50000, requirement.id).run();
+    await matchRequirementWithoutGate(db, requirement.id, "requirement_updated");
+    hold.release();
+    await stale;
+
+    const match = byProperty(await listRequirementMatches(db, requirement.id, { viewDiscreet: true }), property);
+    assert.equal(match.id, original.id);
+    assert.equal(match.status, "Shortlisted");
+    assert.equal(match.decisionReason, "Keep this one");
+    assert.equal(match.budgetScore, MATCH_WEIGHTS.budgetOver);
+    assert.match(match.explanation, /₹50,000 maximum/);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM matches WHERE requirement_id = ?1", requirement.id), 1);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM match_write_guard"), 0);
+    const logged = await runs(db, requirement.id);
+    assert.equal(logged.filter((run) => run.trigger === "property_content_changed" && run.result === "completed").length, 1);
+    assert.equal(logged.some((run) => run.result === "failed"), false);
+  });
+
+  it("does not restore Suggested after a decision lands during the read", async () => {
+    const db = await setup();
+    const property = await live(db, "decision-house");
+    const requirement = await create(db, requirementInput());
+    const original = (await listRequirementMatches(db, requirement.id, { viewDiscreet: true }))[0];
+    assert.equal(original.status, "Suggested");
+    const hold = holdFirstMatchRead(db);
+
+    const stale = matchRequirementWithoutGate(db, requirement.id, "timeline_extended");
+    await hold.untilHeld();
+    await recordMatchDecision(db, executive, original.id, "Shortlisted", "Client confirmed the lane", NOW);
+    hold.release();
+    await stale;
+
+    const match = byProperty(await listRequirementMatches(db, requirement.id, { viewDiscreet: true }), property);
+    assert.equal(match.id, original.id);
+    assert.equal(match.status, "Shortlisted");
+    assert.equal(match.decision, "Shortlisted");
+    assert.equal(match.decisionReason, "Client confirmed the lane");
+    assert.ok(match.decidedAt);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM matches WHERE requirement_id = ?1", requirement.id), 1);
+    const logged = await runs(db, requirement.id);
+    assert.equal(logged.filter((run) => run.trigger === "timeline_extended" && run.result === "completed").length, 1);
+    assert.equal(logged.some((run) => run.result === "failed"), false);
+  });
+
+  it("claims the epoch when a run has no eligible properties and no match rows", async () => {
+    const db = await setup();
+    await live(db, "empty-house");
+    const requirement = await create(db, requirementInput({ propertyTypes: ["Plot"] }));
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM matches WHERE requirement_id = ?1", requirement.id), 0);
+    const before = await epochOf(db, requirement.id);
+    const hold = holdFirstMatchRead(db);
+
+    const stale = matchRequirementWithoutGate(db, requirement.id, "property_availability_changed");
+    await hold.untilHeld();
+    await matchRequirementWithoutGate(db, requirement.id, "property_verified");
+    hold.release();
+    await stale;
+
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM matches WHERE requirement_id = ?1", requirement.id), 0);
+    assert.equal(await epochOf(db, requirement.id), before + 2);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM match_write_guard"), 0);
+    const logged = await runs(db, requirement.id);
+    assert.equal(logged.filter((run) => run.result === "completed").length, 3);
+    assert.equal(logged.some((run) => run.result === "failed"), false);
+  });
+
+  it("records a failure after the epoch retry limit and leaves the saved match alone", async () => {
+    const db = await setup();
+    const property = await live(db, "exhaust-house");
+    const requirement = await create(db, requirementInput());
+    const original = (await listRequirementMatches(db, requirement.id, { viewDiscreet: true }))[0];
+    const before = await epochOf(db, requirement.id);
+    bumpEpochOnEveryRead(db);
+
+    await matchRequirementWithoutGate(db, requirement.id, "property_verified");
+
+    const match = byProperty(await listRequirementMatches(db, requirement.id, { viewDiscreet: true }), property);
+    assert.equal(match.id, original.id);
+    assert.equal(match.score, original.score);
+    assert.equal(match.status, "Suggested");
+    const logged = (await runs(db, requirement.id)).filter((run) => run.trigger === "property_verified");
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0].result, "failed");
+    assert.match(logged[0].error, new RegExp(`Gave up after ${MATCH_ATTEMPT_LIMIT} attempts`));
+    assert.ok((await epochOf(db, requirement.id)) > before);
+    assert.equal(await count(db, "SELECT COUNT(*) AS n FROM match_write_guard"), 0);
+  });
 });
+
+function holdFirstMatchRead(db: Awaited<ReturnType<typeof setup>>) {
+  let held = 0;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const prepare = db.prepare.bind(db);
+  db.prepare = (sql: string): SqlStatement => {
+    const statement = prepare(sql);
+    if (sql !== "SELECT * FROM matches WHERE requirement_id = ?1") return statement;
+    const paused: SqlStatement = {
+      bind(...values) {
+        const bound = statement.bind(...values);
+        const heldRead: SqlStatement = {
+          bind: (...next) => bound.bind(...next),
+          all: async () => {
+            held += 1;
+            if (held === 1) await gate;
+            return bound.all();
+          },
+          first: () => bound.first(),
+          run: () => bound.run(),
+        };
+        return heldRead;
+      },
+      all: () => statement.all(),
+      first: () => statement.first(),
+      run: () => statement.run(),
+    };
+    return paused;
+  };
+  return {
+    release,
+    async untilHeld() {
+      for (let attempt = 0; attempt < 20 && held === 0; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      assert.equal(held, 1);
+    },
+  };
+}
+
+function bumpEpochOnEveryRead(db: Awaited<ReturnType<typeof setup>>) {
+  const prepare = db.prepare.bind(db);
+  db.prepare = (sql: string): SqlStatement => {
+    const statement = prepare(sql);
+    if (!sql.includes("preference_details_json, match_epoch")) return statement;
+    const bumped: SqlStatement = {
+      bind(...values) {
+        const bound = statement.bind(...values);
+        const read: SqlStatement = {
+          bind: (...next) => bound.bind(...next),
+          all: () => bound.all(),
+          first: (async <T>() => {
+            const row = await bound.first<T & { id?: string }>();
+            if (row?.id) {
+              await prepare("UPDATE demand_requirements SET match_epoch = match_epoch + 1 WHERE id = ?1").bind(row.id).run();
+            }
+            return row;
+          }) as SqlStatement["first"],
+          run: () => bound.run(),
+        };
+        return read;
+      },
+      all: () => statement.all(),
+      first: () => statement.first(),
+      run: () => statement.run(),
+    };
+    return bumped;
+  };
+}
+
+async function count(db: Awaited<ReturnType<typeof setup>>, sql: string, id?: string) {
+  const query = db.prepare(sql);
+  const row = await (id ? query.bind(id) : query).first<{ n: number }>();
+  return Number(row?.n);
+}
+
+async function epochOf(db: Awaited<ReturnType<typeof setup>>, requirementId: string) {
+  const row = await db.prepare("SELECT match_epoch FROM demand_requirements WHERE id = ?1").bind(requirementId).first<{ match_epoch: number }>();
+  return Number(row?.match_epoch);
+}

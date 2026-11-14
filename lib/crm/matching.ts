@@ -133,7 +133,11 @@ type RequirementCandidate = {
   vegetarian: string;
   parking_required: number;
   preference_details_json: string | null;
+  match_epoch: number;
 };
+
+/** One attempt plus retries after another isolate committed a newer snapshot. */
+export const MATCH_ATTEMPT_LIMIT = 3;
 
 type MatchGate = {
   /** The latest trigger that arrived while a pass was running. Several collapse into one. */
@@ -191,6 +195,14 @@ async function pump(db: SqlDb, requirementId: string, trigger: MatchRunTrigger, 
   } finally {
     if (gates.get(requirementId) === gate) gates.delete(requirementId);
   }
+}
+
+/**
+ * Matches one requirement without the in-isolate gate.
+ * A second Worker isolate has its own gate, so tests call this to run beside another pass.
+ */
+export function matchRequirementWithoutGate(db: SqlDb, requirementId: string, trigger: MatchRunTrigger): Promise<void> {
+  return runSafely(db, requirementId, trigger);
 }
 
 /** Refreshes every open requirement after a property change. One failure does not stop the rest. */
@@ -262,6 +274,7 @@ export async function recordMatchDecision(
         `UPDATE matches SET status = ?1, decision = ?1, decided_at = ?2, decision_reason = ?3, updated_at = ?2 WHERE id = ?4`,
       )
       .bind(decision, now, reason, matchId),
+    db.prepare(`UPDATE demand_requirements SET match_epoch = match_epoch + 1 WHERE id = ?1`).bind(current.requirement_id),
     auditStatement(db, {
       actor,
       entityType: "match",
@@ -305,15 +318,25 @@ async function runRequirementMatch(
   requirementId: string,
   now: string,
 ): Promise<{ result: "completed" | "skipped"; error: string; count: number }> {
-  const requirement = await db
-    .prepare(
-      `SELECT id, status, intent, property_types_json, localities_json, locality_flexible, area_min,
-              budget_min, budget_max, bhk_min, bhk_max, furnishing, vegetarian, parking_required,
-              preference_details_json
-       FROM demand_requirements WHERE id = ?1`,
-    )
-    .bind(requirementId)
-    .first<RequirementCandidate>();
+  for (let attempt = 1; attempt <= MATCH_ATTEMPT_LIMIT; attempt += 1) {
+    try {
+      return await writeMatchAttempt(db, requirementId, now);
+    } catch (error) {
+      if (!isEpochConflict(error)) throw error;
+      if (attempt === MATCH_ATTEMPT_LIMIT) {
+        throw new Error(`Match epoch changed during the read. Gave up after ${MATCH_ATTEMPT_LIMIT} attempts.`);
+      }
+    }
+  }
+  throw new Error(`Match epoch changed during the read. Gave up after ${MATCH_ATTEMPT_LIMIT} attempts.`);
+}
+
+async function writeMatchAttempt(
+  db: SqlDb,
+  requirementId: string,
+  now: string,
+): Promise<{ result: "completed" | "skipped"; error: string; count: number }> {
+  const requirement = await readRequirement(db, requirementId);
   if (!requirement) return { result: "skipped", error: "Requirement was not found.", count: 0 };
   if (PAUSED.has(requirement.status)) {
     return { result: "skipped", error: "A closed requirement is not rematched.", count: 0 };
@@ -363,8 +386,33 @@ async function runRequirementMatch(
     statements.push(retireMatch(db, prior, reason, rank, now));
     rank += 1;
   }
-  if (statements.length > 0) await db.batch(statements);
+  const token = newId("meg");
+  await db.batch([
+    db
+      .prepare(`UPDATE demand_requirements SET match_epoch = match_epoch + 1 WHERE id = ?1 AND match_epoch = ?2`)
+      .bind(requirementId, Number(requirement.match_epoch)),
+    db.prepare(`INSERT INTO match_write_guard (token, ok) VALUES (?1, changes())`).bind(token),
+    ...statements,
+    db.prepare(`DELETE FROM match_write_guard WHERE token = ?1`).bind(token),
+  ]);
   return { result: "completed", error: "", count: eligible.length };
+}
+
+async function readRequirement(db: SqlDb, requirementId: string): Promise<RequirementCandidate | null> {
+  return db
+    .prepare(
+      `SELECT id, status, intent, property_types_json, localities_json, locality_flexible, area_min,
+              budget_min, budget_max, bhk_min, bhk_max, furnishing, vegetarian, parking_required,
+              preference_details_json, match_epoch
+       FROM demand_requirements WHERE id = ?1`,
+    )
+    .bind(requirementId)
+    .first<RequirementCandidate>();
+}
+
+function isEpochConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /CHECK constraint failed/i.test(message);
 }
 
 function updateMatch(db: SqlDb, prior: MatchRow, scored: ScoredMatch, rank: number, now: string, eligible: boolean): SqlStatement {
