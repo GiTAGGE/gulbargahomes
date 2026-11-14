@@ -478,6 +478,101 @@ describe("operations desk", () => {
     assert.deepEqual(paged.rows, [3]);
     assert.equal(paged.pages, 2);
   });
+
+  it("keeps an older overdue requirement after more than 500 newer open rows", async () => {
+      const db = await setup();
+      const fillers = 501;
+      for (let index = 0; index < fillers; index += 1) {
+        const n = String(index).padStart(4, "0");
+        const phone = `+91${9100000000 + index}`;
+        await db
+          .prepare(
+            `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'a', ?5, 'a')`,
+          )
+          .bind(`con_fill_${n}`, `GH-CF${n}`, `Recent ${n}`, phone, NOW)
+          .run();
+        await db
+          .prepare(
+            `INSERT INTO demand_requirements (
+               id, code, contact_id, intent, property_types_json, localities_json, timeline, status,
+               quality_review, created_at, created_by, updated_at, updated_by
+             ) VALUES (?1, ?2, ?3, 'Rent', '["House"]', '["Sai Nagar"]', 'Exploring', 'Contacted', '', ?4, 'a', ?4, 'a')`,
+          )
+          .bind(`req_fill_${n}`, `GH-DF${n}`, `con_fill_${n}`, NOW)
+          .run();
+      }
+      await db
+        .prepare(
+          `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+           VALUES ('con_old_critical', 'GH-COLD', 'Older Critical', '+919100009999', ?1, 'a', ?1, 'a')`,
+        )
+        .bind(EARLY)
+        .run();
+      await db
+        .prepare(
+          `INSERT INTO demand_requirements (
+             id, code, contact_id, intent, property_types_json, localities_json, timeline, status,
+             quality_review, confirmed_timeline, created_at, created_by, updated_at, updated_by
+           ) VALUES (
+             'req_old_critical', 'GH-DOLD', 'con_old_critical', 'Rent', '["House"]', '["Sai Nagar"]',
+             'Immediate', 'Contacted', 'genuine', 'Immediate', ?1, 'a', ?1, 'a'
+           )`,
+        )
+        .bind(EARLY)
+        .run();
+      await db
+        .prepare(
+          `INSERT INTO contacts (id, code, name, phone_e164, created_at, created_by, updated_at, updated_by)
+           VALUES ('con_lost', 'GH-CLOST', 'Closed Lost', '+919100008888', ?1, 'a', ?1, 'a'),
+                  ('con_paused', 'GH-CPAUS', 'Paused One', '+919100007777', ?1, 'a', ?1, 'a')`,
+        )
+        .bind(EARLY)
+        .run();
+      await db
+        .prepare(
+          `INSERT INTO demand_requirements (
+             id, code, contact_id, intent, timeline, status, created_at, created_by, updated_at, updated_by
+           ) VALUES
+             ('req_lost', 'GH-DLOST', 'con_lost', 'Rent', 'Immediate', 'Lost', ?1, 'a', ?1, 'a'),
+             ('req_paused', 'GH-DPAUS', 'con_paused', 'Rent', 'Immediate', 'Postponed', ?1, 'a', ?1, 'a')`,
+        )
+        .bind(EARLY)
+        .run();
+
+      const first = await operationsDesk(db, staff, { now: new Date(NOW), queue: "all", page: 1 });
+      assert.equal(first.total, fillers + 1);
+      assert.equal(first.counts.all, fillers + 1);
+      assert.equal(first.counts.critical, 1);
+      assert.equal(first.counts.review, fillers);
+      assert.equal(first.rows.length, 25);
+      assert.equal(first.pages, Math.ceil((fillers + 1) / 25));
+      assert.equal(first.rows[0].id, "req_old_critical");
+      assert.equal(first.rows[0].reasons.includes("critical"), true);
+      assert.equal(first.rows[0].reasons.includes("overdue"), true);
+      assert.equal(first.rows[1].id, "req_fill_0000");
+      assert.equal(first.rows.some((item) => item.id === "req_lost" || item.id === "req_paused"), false);
+
+      const second = await operationsDesk(db, staff, { now: new Date(NOW), queue: "all", page: 2 });
+      assert.equal(second.total, fillers + 1);
+      assert.equal(second.counts.critical, 1);
+      assert.equal(second.counts.review, fillers);
+      assert.equal(second.rows.length, 25);
+      assert.equal(second.rows[0].id, "req_fill_0024");
+      assert.equal(second.rows.at(-1)?.id, "req_fill_0048");
+      assert.equal(second.rows.some((item) => item.id === "req_old_critical"), false);
+
+      const critical = await operationsDesk(db, staff, { now: new Date(NOW), queue: "critical", page: 1 });
+      assert.equal(critical.total, 1);
+      assert.equal(critical.rows.length, 1);
+      assert.equal(critical.rows[0].id, "req_old_critical");
+      assert.equal(critical.counts.all, fillers + 1);
+
+      const hidden = await operationsDesk(db, viewerAccess, { now: new Date(NOW), queue: "critical", page: 1 });
+      assert.equal(hidden.rows[0].contactPhone, maskPhone("+919100009999"));
+      assert.equal(JSON.stringify(hidden).includes("req_lost"), false);
+      assert.equal(JSON.stringify(hidden).includes("req_paused"), false);
+  });
 });
 
 describe("plot dimensions", () => {

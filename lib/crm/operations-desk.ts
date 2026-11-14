@@ -83,6 +83,9 @@ const CUSTOMER_SQL = `(${MEANINGFUL_ACTIVITY_SQL} AND a.body NOT LIKE '${STAFF_C
 
 const BAND_RANK: Record<string, number> = { Critical: 0, High: 1, Normal: 2, Low: 3, Paused: 4, Closed: 5 };
 
+/** How many open requirements one database read loads. The desk keeps reading until none remain. */
+const OPEN_REQUIREMENT_PAGE = 200;
+
 export type DeskAccess = {
   viewPhone: boolean;
   viewDiscreet: boolean;
@@ -151,6 +154,21 @@ function compares(row: DeskRow, other: DeskRow): number {
   return rank(row) - rank(other) || row.createdAt.localeCompare(other.createdAt) || row.id.localeCompare(other.id);
 }
 
+/** Every open requirement, read in pages so one query stays bounded and none are dropped for age. */
+async function loadOpenRequirements(db: SqlDb, now: Date): Promise<Requirement[]> {
+  const open: Requirement[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await listRequirements(db, { status: "open", limit: OPEN_REQUIREMENT_PAGE, offset }, now);
+    for (const item of page) {
+      if (!isPausedStatus(item.status)) open.push(item);
+    }
+    if (page.length < OPEN_REQUIREMENT_PAGE) break;
+    offset += page.length;
+  }
+  return open;
+}
+
 async function rowsFor<T>(db: SqlDb, sql: string, ids: string[]): Promise<T[]> {
   const collected: T[] = [];
   for (let index = 0; index < ids.length; index += 40) {
@@ -204,9 +222,7 @@ export async function operationsDesk(
 ): Promise<DeskPage> {
   const now = options.now ?? new Date();
   const queue = queueById(options.queue);
-  const open = (await listRequirements(db, { status: "open", limit: 500 }, now)).filter(
-    (item) => !isPausedStatus(item.status),
-  );
+  const open = await loadOpenRequirements(db, now);
   const ids = open.map((item) => item.id);
   const [timelines, contacts, matches, runs] = await Promise.all([
     loadTimelineViews(db, open, now),
